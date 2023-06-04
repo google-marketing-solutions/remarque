@@ -1,0 +1,25 @@
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+google-cloud-storage
+google-cloud-bigquery
+google-cloud-scheduler
+# for sampling
+numpy
+pandas
+pandas_gbq
+scipy
+scikit-learn
+matplotlib
+seaborn
+# for server:
+flask
+flask-cors
+gunicorn
+smart_open
+smart_open[gcs]
+google-ads-api-report-fetcher>=1.4
+pyyaml
+python-dotenv
+#pycountry
+country_converter

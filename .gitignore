@@ -1,0 +1,19 @@
+__pycache__
+.work
+.venv
+node_modules
+
+*.local
+google-ads.yaml
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+
+
+# Quasar core related directories
+.quasar
+/dist
+
+# Log files
+npm-debug.log*
