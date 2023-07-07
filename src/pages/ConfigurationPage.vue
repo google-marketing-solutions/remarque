@@ -92,7 +92,7 @@ export default defineComponent({
     const $q = useQuasar();
 
     const onGA4Connect = async () => {
-      $q.loading.show({ message: 'Running sampling for audiences...' });
+      $q.loading.show({ message: 'Testing GA4 data access...' });
       const loading = () => $q.loading.hide();
       try {
         let res = await postApi('setup/connect_ga4', {
@@ -110,7 +110,7 @@ export default defineComponent({
       }
     };
     const onSetup = async () => {
-      $q.loading.show({ message: 'Running sampling for audiences...' });
+      $q.loading.show({ message: 'Initializing application...' });
       const loading = () => $q.loading.hide();
       try {
         let res = await postApi('setup', {

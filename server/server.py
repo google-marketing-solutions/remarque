@@ -20,7 +20,7 @@ import json
 import os
 import argparse
 import decimal
-from datetime import datetime
+from datetime import datetime, date
 from pprint import pprint
 import traceback
 from flask import Flask, request, jsonify, abort, send_from_directory, Response
@@ -180,10 +180,12 @@ def setup_connect_ga4():
   target.ga4_dataset = params.get('ga4_dataset')
   target.ga4_table = params.get('ga4_table')
   ga_table = context.data_gateway.get_ga4_table_name(context.target, True)
-  query = f"SELECT DISTINCT _TABLE_SUFFIX as table FROM `{ga_table}` ORDER BY 1 DESC"
+  query = f"SELECT DISTINCT _TABLE_SUFFIX as table FROM `{ga_table}` ORDER BY 1 DESC LIMIT 10"
   try:
     response = context.data_gateway.execute_query(query)
     tables = [r["table"] for r in response]
+    # save config to the same location where it was read from
+    save_config(context.config, args)
     return jsonify({"results": tables})
   except BaseException as e:
     target.ga4_project = ga4_project
@@ -365,6 +367,8 @@ def update_customer_match_audiences():
       "test_user_count": test_user_count,
       "control_user_count": control_user_count
     }
+    if new_user_count == 0:
+      logger.warning(f'Audience segment for {audience_name} for {datetime.now().strftime("%Y-%m-%d")} contains no new users')
     log.append(AudienceLog(
       audience.name,
       datetime.now(),
@@ -429,18 +433,27 @@ def get_audiences_status():
 @app.route("/api/audiences/conversions", methods=["GET"])
 def get_user_conversions():
   context = create_context()
+
+  date_start = request.args.get('date_start')
+  date_start = date.fromisoformat(date_start) if date_start else None
+  date_end = request.args.get('date_end')
+  date_end = date.fromisoformat(date_end) if date_end else None
+
   audiences = context.data_gateway.get_audiences(context.target)
   audience_name = request.args.get('audience')
   results = {}
   for audience in audiences:
     if audience_name and audience.name != audience_name:
       continue
-    result = context.data_gateway.get_user_conversions(context.target, audience)
+    result, date_start, date_end = context.data_gateway.get_user_conversions(context.target, audience, date_start, date_end)
     results[audience.name] = result
     if audience_name and audience.name == audience_name:
       break
-  return jsonify({"results": results})
-
+  return jsonify({
+      "results": results,
+      "date_start": date_start.strftime("%Y-%m-%d"),
+      "date_end": date_end.strftime("%Y-%m-%d")
+    })
 
 
 @app.route('/', defaults={'path': ''})

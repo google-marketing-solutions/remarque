@@ -1,10 +1,13 @@
 <template>
   <q-page class="items-center justify-evenly" padding>
-    <h2>Google Ads</h2>
+    <div class="row">
+      <div class="text-h2">Google Ads</div>
+    </div>
+    <div class="row" style="margin-top: 20px">
+      <q-btn label="Run sampling" @click="onSampling" :fab="true" color="primary"></q-btn>
+      <q-btn label="Upload audiences" @click="onAudiencesUpload" :fab="true" color="primary"></q-btn>
+    </div>
 
-    <q-btn label="Run sampling" @click="onSampling" :fab="true" color="primary"></q-btn>
-
-    <q-btn label="Upload audiences" @click="onAudiencesUpload" :fab="true" color="primary"></q-btn>
 
     <div class="q-mt-md">
       <q-card class="card" flat bordered>
@@ -34,13 +37,13 @@
             </div>
             <div class="col-1"></div>
             <div class="col-4">
-              <q-input outlined v-model="store.schedule_timezone" label="Timezone" placeholder="" :hide-bottom-space=true
+              <q-select outlined v-model="store.schedule_timezone" label="Timezone" :hide-bottom-space=true
+                :options="data.timeZonesSelect" use-input @filter="onTimezoneFilter" input-debounce="0"
                 hint="Name of a timezone from tz database, e.g. Europe/Moscow, America/Los_Angeles, UTC">
-                <!-- TODO: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones-->
                 <template v-slot:append>
                   <q-icon name="language" />
                 </template>
-              </q-input>
+              </q-select>
             </div>
           </div>
         </q-card-section>
@@ -79,7 +82,12 @@
                   <q-btn dense round flat color="grey" @click="onOpenChart(props)" icon="query_stats"></q-btn>
                 </q-td>
               </template>
-
+              <template v-slot:body-cell-active="props">
+                <q-td :props="props">
+                  <q-chip :color="props.row.active ? 'green' : 'red'" text-color="white" dense class="text-weight-bolder"
+                    square>{{ props.row.active ? 'Y' : 'N' }}</q-chip>
+                </q-td>
+              </template>
             </q-table>
           </div>
         </q-card-section>
@@ -93,10 +101,46 @@
         </q-card-section>
 
         <q-card-section v-if="data.selectedAudience.length">
-          <apexchart v-if="data.chart.series.length" style="width:100%" type="line" :options="data.chart.options"
+          <apexchart v-if="data.chart.series.length" style="width:100%" :options="data.chart.options"
             :series="data.chart.series"></apexchart>
           <q-banner class="bg-grey-2">
-            <!-- TODO: input for date range -->
+            <div class="row">
+
+              <div class="col-1 q-pa-md" style="width:250px">
+                <q-input filled v-model="data.conversions_from" mask="####-##-##" label="Start date" clearable>
+                  <template v-slot:append>
+                    <q-icon name="event" class="cursor-pointer">
+                      <q-popup-proxy ref="qStartProxy" cover transition-show="scale" transition-hide="scale">
+                        <q-date v-model="data.conversions_from" mask="YYYY-MM-DD" :no-unset="true"
+                          @update:model-value="$refs.qStartProxy.hide()">
+                        </q-date>
+                      </q-popup-proxy>
+                    </q-icon>
+                  </template>
+                </q-input>
+              </div>
+              <div class="col-1 q-pa-md" style="width:250px">
+                <q-input filled v-model="data.conversions_to" mask="####-##-##" label="End date" clearable>
+                  <template v-slot:append>
+                    <q-icon name="event" class="cursor-pointer">
+                      <q-popup-proxy ref="qEndProxy" cover transition-show="scale" transition-hide="scale">
+                        <q-date v-model="data.conversions_to" mask="YYYY-MM-DD" today-btn :no-unset="true"
+                          @update:model-value="$refs.qEndProxy.hide()">
+                        </q-date>
+                      </q-popup-proxy>
+                    </q-icon>
+                  </template>
+                </q-input>
+              </div>
+              <div class="col-4">
+                <q-banner class="bg-grey-3">
+                  <template v-slot:avatar>
+                    If you don't specify the start date then the day of first upload to Google Ads will be used.<br>
+                    If you don't specify the end date then yesterday will be used.
+                  </template>
+                </q-banner>
+              </div>
+            </div>
             <q-btn label="Load conversions" @click="onLoadConversions" color="primary" icon="query_stats"></q-btn>
           </q-banner>
         </q-card-section>
@@ -123,6 +167,7 @@ import { useQuasar } from 'quasar';
 import { AudienceInfo, configurationStore } from 'stores/configuration';
 import { getApi, postApi } from 'boot/axios';
 import { formatArray, formatDate } from '../helpers/utils';
+import { timeZones } from '../helpers/timezones';
 
 interface AudienceLog {
   //status: any;
@@ -135,14 +180,20 @@ interface AudienceLog {
   job_failure: any;
 }
 interface Conversions {
+  data: ConversionsData[];
+  start_date: string;
+  end_date: string;
+}
+interface ConversionsData {
   date: string;
   cum_test_regs: number;
   cum_control_regs: number;
 }
 interface AudienceWithLog extends AudienceInfo {
   log?: AudienceLog[];
-  conversions?: Conversions[];
+  conversions?: Conversions;
 }
+
 export default defineComponent({
   name: 'GoogleAdsPage',
   components: {},
@@ -150,11 +201,13 @@ export default defineComponent({
     const store = configurationStore();
     const $q = useQuasar();
     const data = ref({
+      timeZonesSelect: timeZones,
       audiences: [] as AudienceWithLog[], //store.audiences,
       audiences_data: {},
       audience_log: [],
       selectedAudience: [] as AudienceWithLog[],
       audiences_columns: [
+        { name: 'active', label: 'Active', field: 'active', type: 'boolean' },
         { name: 'name', label: 'Name', field: 'name', sortable: true },
         { name: 'app_id', label: 'App id', field: 'app_id', sortable: true },
         { name: 'countries', label: 'Countries', field: 'countries', sortable: true, format: formatArray },
@@ -177,20 +230,36 @@ export default defineComponent({
       chart: {
         options: {
           chart: {
-            height: 350,
+            height: 100,
             type: 'line',
           },
+          stroke: {
+            curve: 'straight'
+          },
+          title: {
+            text: 'Conversions',
+            align: 'left'
+          },
+          grid: {
+            row: {
+              colors: ['#f3f3f3', 'transparent'],
+              opacity: 0.5
+            },
+          },
+          labels: [],
           xaxis: {
-            categories: [] as string[]
+            type: 'category',
           }
         },
-        series: [] as any
+        series: [] as any,
       },
       resultDialog: {
         show: false,
         header: '',
         message: '',
-      }
+      },
+      conversions_from: undefined,
+      conversions_to: undefined
     });
 
     const onSampling = async () => {
@@ -273,6 +342,11 @@ export default defineComponent({
         });
       }
     };
+    const onTimezoneFilter = (val: string, doneFn: (callbackFn: () => void) => void, abortFn: () => void) => {
+      doneFn(() => {
+        data.value.timeZonesSelect = timeZones.filter(r => r.toLowerCase().includes(val?.toLowerCase()));
+      });
+    }
     const onScheduleLoad = async () => {
       $q.loading.show({ message: 'Fetching Cloud Scheduler job...' });
       const loading = () => $q.loading.hide();
@@ -317,10 +391,14 @@ export default defineComponent({
       if (newValue && newValue.length) {
         let newActiveAudience = newValue[0];
         data.value.audience_log = newActiveAudience.log;
-        if (newActiveAudience.conversions) {
-          updateConversionsChart(newActiveAudience.conversions);
+        if (newActiveAudience.conversions?.data) {
+          updateConversionsChart(newActiveAudience.conversions.data);
+          data.value.conversions_from = newActiveAudience.conversions.start_date;
+          data.value.conversions_to = newActiveAudience.conversions.end_date;
         } else {
           data.value.chart.series = [];
+          data.value.conversions_from = undefined;
+          data.value.conversions_to = undefined;
         }
       }
     });
@@ -339,6 +417,7 @@ export default defineComponent({
         Object.keys(result).map(name => {
           const audience = result[name];
           audiences.push({
+            'active': audience.active,
             'name': audience.name,
             'app_id': audience.app_id,
             'countries': audience.countries,
@@ -365,17 +444,26 @@ export default defineComponent({
     const onLoadConversions = async () => {
       if (data.value.selectedAudience && data.value.selectedAudience.length) {
         const audience = data.value.selectedAudience[0];
-        audience.conversions = await loadConversions(audience.name);
-        updateConversionsChart(audience.conversions);
+        let date_start = <string | undefined>data.value.conversions_from;
+        let date_end = <string | undefined>data.value.conversions_to;
+        audience.conversions = await loadConversions(audience.name, date_start, date_end);
+        updateConversionsChart(audience.conversions?.data);
       }
     };
-    const loadConversions = async (audienceName: string) => {
-      $q.loading.show({ message: 'Fetching audience conversion history...' });
+    const loadConversions = async (audienceName: string, date_start: string | undefined, date_end: string | undefined): Promise<Conversions | undefined> => {
+      data.value.chart.series = [];
+      $q.loading.show({ message: 'Fetching the audience conversion history...' });
       const loading = () => $q.loading.hide();
       try {
-        let res = await getApi('audiences/conversions', { audience: audienceName }, loading);
+        let res = await getApi('audiences/conversions', { audience: audienceName, date_start, date_end }, loading);
         //$q.notify({ message: 'Sampling completed', icon: 'success', timeout: 1000 });
         const all_conversions = res.data.results;
+        if (res.data.date_start) {
+          data.value.conversions_from = res.data.date_start;
+        }
+        if (res.data.date_end) {
+          data.value.conversions_to = res.data.date_end;
+        }
         let conversions;
         if (all_conversions) {
           conversions = all_conversions[audienceName]
@@ -387,9 +475,9 @@ export default defineComponent({
           });
           return;
         }
-        // we exepect an object with fields: date, cum_test_regs, cum_control_regs
+        // we expect an object with fields: date, cum_test_regs, cum_control_regs
         console.log(conversions);
-        return conversions;
+        return { data: conversions, start_date: res.data.date_start, end_date: res.data.date_end };
       }
       catch (e: any) {
         $q.dialog({
@@ -398,35 +486,34 @@ export default defineComponent({
         });
       }
     };
-    const updateConversionsChart = (conversions: Conversions[] | undefined) => {
+    const updateConversionsChart = (conversions: ConversionsData[] | undefined) => {
       if (!conversions || !conversions.length) {
-        data.value.chart.series = [];
         return;
       }
-      const labels = [] as string[];
-      const test_data = [] as number[];
-      const control_data = [] as number[];
+
+      const test_data = [] as any[];
+      const control_data = [] as any[];
       for (const item of conversions) {
-        labels.push(formatDate(new Date(item.date)));
-        test_data.push(item.cum_test_regs);
-        control_data.push(item.cum_control_regs);
+        const label = formatDate(new Date(item.date));
+        test_data.push({ x: label, y: item.cum_test_regs });
+        control_data.push({ x: label, y: item.cum_control_regs });
       }
-      data.value.chart.options.xaxis.categories = labels;
       data.value.chart.series = [
-        { name: 'test', data: test_data },
+        { name: 'treatment', data: test_data },
         { name: 'control', data: control_data },
       ]
     };
     const onOpenChart = async (props: any) => {
       const audience = props.row;
-      audience.conversions = await loadConversions(audience.name);
-      updateConversionsChart(audience.conversions);
+      audience.conversions = await loadConversions(audience.name, undefined, undefined);
+      updateConversionsChart(audience.conversions?.data);
     }
     return {
       store,
       data,
       onSampling,
       onAudiencesUpload,
+      onTimezoneFilter,
       onScheduleLoad,
       onScheduleSave,
       onFetchAudiencesStatus,

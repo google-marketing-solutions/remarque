@@ -113,8 +113,8 @@
                 lazy-rules :rules="[val => val && val.length > 0 || 'Please enter a name']" />
 
               <q-input filled v-model="audience.app_id" label="App id *" lazy-rules :rules="[
-                  val => val !== null && val !== '' || 'Please enter app_id'
-                ]" />
+                val => val !== null && val !== '' || 'Please enter app_id'
+              ]" />
 
               <q-select filled v-model="audience.countries" :options="audience.allCountriesSelect" use-input use-chips
                 multiple @filter="onAudienceFilterCountries" input-debounce="0" label="Countries"
@@ -140,7 +140,6 @@
                     placeholder="" hint="days ago" />
                   <q-toggle class="col-3 q-gutter-md1" v-model="audience.active" label="Active" />
                 </div>
-
               </div>
             </div>
           </div>
@@ -161,6 +160,13 @@
                 <q-btn dense round flat color="grey" @click="onAudienceListDelete(props)" icon="delete"></q-btn>
               </q-td>
             </template>
+            <template v-slot:body-cell-active="props">
+              <q-td :props="props">
+                <q-chip :color="props.row.active ? 'green' : 'red'" text-color="white" dense class="text-weight-bolder"
+                  square>{{ props.row.active ? 'Y' : 'N' }}</q-chip>
+              </q-td>
+            </template>
+
           </q-table>
         </div>
       </q-card-section>
@@ -231,7 +237,7 @@ export default defineComponent({
     let audience = ref({
       name: '',
       id: '',
-      active: false,
+      active: true,
       app_id: '',
       countries: [] as string[],
       allCountries: [] as string[],
@@ -239,7 +245,7 @@ export default defineComponent({
       allEvents: [] as string[],
       allEventsSelect: [] as string[],
       events_include: ['first_open'] as string[],
-      events_exclude: ['remove'] as string[],
+      events_exclude: [] as string[],
       days_ago_start: undefined,//store.days_ago_start,
       days_ago_end: undefined, //store.days_ago_end,
       user_list: ''
@@ -390,11 +396,12 @@ export default defineComponent({
       audience.value.name = '';
       audience.value.app_id = '';
       audience.value.countries = [];
-      audience.value.events_include = ['first_open'] as string[],
-        audience.value.events_exclude = ['remove'] as string[],
-        audience.value.days_ago_start = undefined, //store.days_ago_start;
-        audience.value.days_ago_end = undefined,//store.days_ago_end;
-        audienceForm.value.resetValidation();
+      audience.value.events_include = ['first_open'] as string[];
+      audience.value.events_exclude = [] as string[];
+      audience.value.days_ago_start = undefined;
+      audience.value.days_ago_end = undefined;
+      audience.value.active = true;
+      audienceForm.value.resetValidation();
     }
     const onAudienceFilterCountries = (val: string, doneFn: (callbackFn: () => void) => void, abortFn: () => void) => {
       doneFn(() => {

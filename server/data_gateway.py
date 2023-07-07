@@ -360,11 +360,12 @@ WHEN NOT MATCHED THEN
     countries = ",".join([f"'{c}'" for c in audience.countries])
     events_include = audience.events_include or []
     events_exclude = audience.events_exclude or []
-    all_events = [] + events_include + events_exclude
-    if not 'first_open' in all_events:
-      all_events = ['first_open'] + all_events
     if not 'first_open' in events_include:
       events_include = ['first_open'] + events_include
+    if not 'app_remove' in events_exclude:
+      events_exclude = ['app_remove'] + events_exclude
+
+    all_events = events_include + events_exclude
     if not 'session_start' in all_events:
       all_events = ['session_start'] + all_events
 
@@ -494,7 +495,7 @@ FROM `{audience_table_name}`
       except BaseException as e:
         logger.error(f"An error occurred while inserting failed user ids into {table_name_failed} table: {e}")
         raise
-      # now join failed users from
+      # now join failed users from the newly created _failed table with the segment table
       query = f"""
 UPDATE `{table_name}` t1
 SET status = IF(t2.failed IS NULL, 1, 0)
@@ -507,6 +508,8 @@ FROM (
 WHERE t1.user = t2.user
       """
       self.execute_query(query)
+
+    # load test and control user counts
     query = f"SELECT COUNT(1) as count FROM `{table_name}`"
     test_user_count = self.execute_query(query)[0]["count"]
     control_table_name = self._get_user_segment_table_full_name(target, audience.table_name, 'control', suffix)
@@ -515,6 +518,7 @@ WHERE t1.user = t2.user
 
     # load new user count
     table_name_prev = self._get_user_segment_table_full_name(target, audience.table_name, 'test', "*")
+    suffix = datetime.now().strftime("%Y%m%d") if suffix is None else suffix
     query = f"""SELECT count(DISTINCT t.user) as user_count FROM `{table_name}` t
 WHERE NOT EXISTS (
   SELECT * FROM `{table_name_prev}` t0
@@ -580,8 +584,8 @@ ORDER BY name, date
       query = f.read()
 
     # NOTE: all events that we ignored for sampling (we picked users for whom those events didn't happen)
-    # now are our conversions, but except "remove"
-    conversion_events = [item for item in audience.events_exclude if item != 'remove']
+    # now are our conversions, but except "app_remove"
+    conversion_events = [item for item in audience.events_exclude if item != 'app_remove']
     events_list = ", ".join([f"'{event}'" for event in conversion_events])
     ga_table = self.get_ga4_table_name(target, True)
     user_table = target.bq_dataset_id + '.' + audience.table_name
@@ -595,6 +599,6 @@ ORDER BY name, date
       "date_start": date_start.strftime("%Y-%m-%d"),
       "date_end": date_end.strftime("%Y-%m-%d")
     })
-    result = self.execute_query(query)
     # expect columns: date, cum_test_regs, cum_control_regs
-    return result
+    result = self.execute_query(query)
+    return result, date_start, date_end
