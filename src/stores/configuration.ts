@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia';
 import { getApi } from 'boot/axios';
 
+export enum AudienceMode {
+  off = 'off',
+  test = 'test',
+  prod = 'prod',
+}
 export interface AudienceInfo {
   name: string;
   app_id: string;
@@ -11,7 +16,7 @@ export interface AudienceInfo {
   days_ago_end: number;
   user_list: string;
   user_count?: number;
-  active: boolean;
+  mode: AudienceMode
 }
 export enum States {
   Initial,

@@ -13,7 +13,7 @@
               <template v-slot:avatar>
                 <q-icon name="info" color="primary" />
               </template>
-              Define time window and load events from Google Analytics. Then choose an app, you'll see available events
+              Define time window and load events from Google Analytics. Then choose an app id, you'll see available events
               and countries,
               which you can use for defining audiences below.
             </q-banner>
@@ -120,17 +120,29 @@
                 multiple @filter="onAudienceFilterCountries" input-debounce="0" label="Countries"
                 hint="Countries to include in the audience. To see available countries load your GA4 statistics"
                 new-value-mode="add-unique" />
+
+              <div class="col-3 q-mt-md q-gutter-md1">
+                <label class="q-mt-md" style="margin-left: 12px; margin-right: 12px;">Mode</label>
+                <q-btn-toggle class="" v-model="audience.mode" no-wrap outline
+                  :toggle-color="audience.mode == 'off' ? 'red' : audience.mode == 'test' ? 'blue' : 'green'" :options="[
+                    { label: 'Off', value: 'off' },
+                    { label: 'Testing', value: 'test' },
+                    { label: 'Always-on', value: 'prod' }
+                  ]" />
+              </div>
             </div>
             <div class="col q-gutter-md">
               <div>
                 <q-select filled v-model="audience.events_include" :options="audience.allEventsSelect"
                   @filter="onAudienceFilterEvents" use-input use-chips multiple input-debounce="0"
-                  label="Events to include" hint="GA4 events that happened for users" new-value-mode="add-unique" />
+                  label="Events to include" hint="GA4 events that happened for users (first_open always included)"
+                  new-value-mode="add-unique" />
               </div>
               <div>
                 <q-select filled v-model="audience.events_exclude" :options="audience.allEventsSelect"
                   @filter="onAudienceFilterEvents" use-input use-chips multiple input-debounce="0"
-                  label="Events to exclude" hint="GA4 events that did NOT happen for users" new-value-mode="add-unique" />
+                  label="Events to exclude" hint="GA4 events that did NOT happen for users (app_remove always included)"
+                  new-value-mode="add-unique" />
               </div>
               <div class="">
                 <div class="row q-col-gutter-md">
@@ -138,7 +150,6 @@
                     placeholder="" hint="days ago" />
                   <q-input class="col-3 q-gutter-md1" outlined v-model="audience.days_ago_end" label="Period end"
                     placeholder="" hint="days ago" />
-                  <q-toggle class="col-3 q-gutter-md1" v-model="audience.active" label="Active" />
                 </div>
               </div>
             </div>
@@ -160,10 +171,10 @@
                 <q-btn dense round flat color="grey" @click="onAudienceListDelete(props)" icon="delete"></q-btn>
               </q-td>
             </template>
-            <template v-slot:body-cell-active="props">
+            <template v-slot:body-cell-mode="props">
               <q-td :props="props">
-                <q-chip :color="props.row.active ? 'green' : 'red'" text-color="white" dense class="text-weight-bolder"
-                  square>{{ props.row.active ? 'Y' : 'N' }}</q-chip>
+                <q-chip :color="props.row.mode === 'off' ? 'red' : 'green'" text-color="white" dense class="text-weight-bolder"
+                  square>{{ props.row.mode === 'off' ? 'Off' : props.row.mode === 'test' ? 'Test ': 'Prod' }}</q-chip>
               </q-td>
             </template>
 
@@ -226,7 +237,7 @@ export default defineComponent({
         { name: 'events_exclude', label: 'Exclude events', field: 'events_exclude', sortable: true, format: formatArray },
         { name: 'days_ago_start', label: 'Start', field: 'days_ago_start' },
         { name: 'days_ago_end', label: 'End', field: 'days_ago_end' },
-        { name: 'active', label: 'Active', field: 'active' },
+        { name: 'mode', label: 'Mode', field: 'mode' },
         { name: 'actions', label: 'Actions', field: '', align: 'center' },
       ],
       loading: false,
@@ -237,7 +248,7 @@ export default defineComponent({
     let audience = ref({
       name: '',
       id: '',
-      active: true,
+      mode: 'off',
       app_id: '',
       countries: [] as string[],
       allCountries: [] as string[],
@@ -349,7 +360,7 @@ export default defineComponent({
         days_ago_start: audience.value.days_ago_start || store.days_ago_start || 0,
         days_ago_end: audience.value.days_ago_end || store.days_ago_end || 0,
         user_list: audience.value.user_list,
-        active: audience.value.active,
+        mode: audience.value.mode,
       }
       if (idx >= 0) {
         // updating
@@ -400,7 +411,7 @@ export default defineComponent({
       audience.value.events_exclude = [] as string[];
       audience.value.days_ago_start = undefined;
       audience.value.days_ago_end = undefined;
-      audience.value.active = true;
+      audience.value.mode = 'off';
       audienceForm.value.resetValidation();
     }
     const onAudienceFilterCountries = (val: string, doneFn: (callbackFn: () => void) => void, abortFn: () => void) => {
@@ -433,7 +444,7 @@ export default defineComponent({
           events_exclude: row.events_exclude,
           days_ago_start: row.days_ago_start,
           days_ago_end: row.days_ago_end,
-          active: row.active,
+          mode: row.mode,
           // NOTE: we're not sending id, user_list
         }
       });

@@ -35,7 +35,7 @@ from utils import format_duration
 
 AudienceLog = namedtuple(
   'AudienceLog',
-  ['name', 'date', 'job', 'user_count', 'new_user_count', 'test_user_count', 'control_user_count']
+  ['name', 'date', 'job', 'user_count', 'new_user_count', 'new_control_user_count', 'test_user_count', 'control_user_count', 'total_user_count', 'total_control_user_count']
   )
 
 class DataGateway:
@@ -78,8 +78,11 @@ class DataGateway:
       bigquery.SchemaField(name="job", field_type="STRING", mode="REQUIRED", description="Google Ads offline job resource name"),
       bigquery.SchemaField(name="user_count", field_type="INT64", mode="REQUIRED"),
       bigquery.SchemaField(name="new_user_count", field_type="INT64", mode="REQUIRED"),
+      bigquery.SchemaField(name="new_control_user_count", field_type="INT64", mode="REQUIRED"),
       bigquery.SchemaField(name="test_user_count", field_type="INT64", mode="REQUIRED"),
       bigquery.SchemaField(name="control_user_count", field_type="INT64", mode="REQUIRED"),
+      bigquery.SchemaField(name="total_user_count", field_type="INT64", mode="REQUIRED"),
+      bigquery.SchemaField(name="total_control_user_count", field_type="INT64", mode="REQUIRED"),
     ]
     self._ensure_table(table_name, schema)
 
@@ -481,7 +484,8 @@ FROM `{audience_table_name}`
       query = f"""UPDATE `{table_name}` SET status = 1 WHERE true"""
       self.execute_query(query)
     else:
-      table_name_failed = table_name + '_failed'
+      # NOTE: create a table for failed users, but its name shoud not be one that will be caught by wildcard mask {name}_test_*
+      table_name_failed = self._get_user_segment_table_full_name(target, audience.table_name, 'testfailed', suffix)
       schema = [
         bigquery.SchemaField('user', 'INTEGER', mode='REQUIRED')
       ]
@@ -524,7 +528,18 @@ WHERE NOT EXISTS (
 )
     """
     res = self.execute_query(query)
-    return res[0]["user_count"], test_user_count, control_user_count
+    new_test_user_count = res[0]["user_count"]
+
+    control_table_name_prev = self._get_user_segment_table_full_name(target, audience.table_name, 'control', "*")
+    query = f"""SELECT count(DISTINCT t.user) as user_count FROM `{control_table_name}` t
+WHERE NOT EXISTS (
+  SELECT * FROM `{control_table_name_prev}` t0
+  WHERE t0._TABLE_SUFFIX != '{suffix}' AND t.user=t0.user
+)
+    """
+    res = self.execute_query(query)
+    new_control_user_count = res[0]["user_count"]
+    return test_user_count, control_user_count, new_test_user_count, new_control_user_count
 
 
   def update_audiences_log(self, target: ConfigTarget, result: list[AudienceLog]):
@@ -537,7 +552,7 @@ WHERE NOT EXISTS (
 
   def get_audiences_log(self, target: ConfigTarget) -> dict[str, list[AudienceLog]]:
     table_name = f"{target.bq_dataset_id}.audiences_log"
-    query = f"""SELECT name, date, job, user_count, new_user_count, test_user_count, control_user_count
+    query = f"""SELECT name, date, job, user_count, new_user_count, new_control_user_count, test_user_count, control_user_count, total_user_count, total_control_user_count
 FROM `{table_name}`
 ORDER BY name, date
     """
@@ -553,8 +568,11 @@ ORDER BY name, date
           item["job"],
           item["user_count"],
           item["new_user_count"],
+          item["new_control_user_count"],
           item["test_user_count"],
           item["control_user_count"],
+          item["total_user_count"],
+          item["total_control_user_count"]
           )
         log_items.append(log_item)
       result[name] = log_items
@@ -595,8 +613,10 @@ ORDER BY name, date
       "test_users_table": user_table + "_test_*",
       "control_users_table": user_table + "_control_*",
       "date_start": date_start.strftime("%Y-%m-%d"),
-      "date_end": date_end.strftime("%Y-%m-%d")
+      "date_end": date_end.strftime("%Y-%m-%d"),
+      "audiences_log": target.bq_dataset_id + ".audiences_log",
+      "audience_name": audience.name
     })
-    # expect columns: date, cum_test_regs, cum_control_regs
+    # expect columns: date, cum_test_regs, cum_control_regs, total_user_count, total_control_user_count
     result = self.execute_query(query)
     return result, date_start, date_end

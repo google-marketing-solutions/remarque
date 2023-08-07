@@ -82,10 +82,11 @@
                   <q-btn dense round flat color="grey" @click="onOpenChart(props)" icon="query_stats"></q-btn>
                 </q-td>
               </template>
-              <template v-slot:body-cell-active="props">
+              <template v-slot:body-cell-mode="props">
                 <q-td :props="props">
-                  <q-chip :color="props.row.active ? 'green' : 'red'" text-color="white" dense class="text-weight-bolder"
-                    square>{{ props.row.active ? 'Y' : 'N' }}</q-chip>
+                  <q-chip :color="props.row.mode === 'off' ? 'red' : 'green'" text-color="white" dense
+                    class="text-weight-bolder" square>{{ props.row.mode === 'off' ? 'Off' : props.row.mode === 'test' ?
+                      'Test ' : 'Prod' }}</q-chip>
                 </q-td>
               </template>
             </q-table>
@@ -103,7 +104,6 @@
         <q-card-section v-if="data.selectedAudience.length">
           <q-banner class="bg-grey-2">
             <div class="row">
-
               <div class="col-1 q-pa-md" style="width:250px">
                 <q-input filled v-model="data.conversions_from" mask="####-##-##" label="Start date" clearable>
                   <template v-slot:append>
@@ -138,6 +138,12 @@
                   </template>
                 </q-banner>
               </div>
+              <div class="col-3">
+                <q-banner class="bg-grey-3">
+                  p-val: <q-badge>{{ data.pvalFormatted }}</q-badge>
+                  <br>If pval &lt;=0.05, then results are statistically significant
+                </q-banner>
+              </div>
             </div>
             <q-btn label="Load conversions" @click="onLoadConversions" color="primary" icon="query_stats"></q-btn>
           </q-banner>
@@ -162,7 +168,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, watch } from 'vue';
+import { computed, defineComponent, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { AudienceInfo, configurationStore } from 'stores/configuration';
 import { getApi, postApi } from 'boot/axios';
@@ -175,7 +181,11 @@ interface AudienceLog {
   test_user_count: number;
   control_user_count: number;
   uploaded_user_count: number;
-  new_user_count: number;
+  new_test_user_count: number;
+  new_control_user_count: number;
+  total_test_user_count: number;
+  total_control_user_count: number;
+
   job_status: any;
   job_failure: any;
 }
@@ -183,6 +193,7 @@ interface Conversions {
   data: ConversionsData[];
   start_date: string;
   end_date: string;
+  pval: number;
 }
 interface ConversionsData {
   date: string;
@@ -207,7 +218,7 @@ export default defineComponent({
       audience_log: [],
       selectedAudience: [] as AudienceWithLog[],
       audiences_columns: [
-        { name: 'active', label: 'Active', field: 'active', type: 'boolean' },
+        { name: 'mode', label: 'Mode', field: 'mode' },
         { name: 'name', label: 'Name', field: 'name', sortable: true },
         { name: 'app_id', label: 'App id', field: 'app_id', sortable: true },
         { name: 'countries', label: 'Countries', field: 'countries', sortable: true, format: formatArray },
@@ -220,10 +231,13 @@ export default defineComponent({
       audience_status_columns: [
         //{ name: 'status', label: 'Status', field: 'status', sortable: true },
         { name: 'date', label: 'Date', field: 'date', sortable: true },
-        { name: 'test_user_count', label: 'Test User count', field: 'test_user_count', sortable: true },
-        { name: 'control_user_count', label: 'Control User Count', field: 'control_user_count', sortable: true },
-        { name: 'uploaded_user_count', label: 'Uploaded User Count', field: 'user_count', sortable: true },
-        { name: 'new_user_count', label: 'New User count', field: 'new_user_count', sortable: true },
+        { name: 'test_user_count', label: 'Test Users', field: 'test_user_count', sortable: true },
+        { name: 'control_user_count', label: 'Control Users', field: 'control_user_count', sortable: true },
+        { name: 'uploaded_user_count', label: 'Uploaded Users', field: 'user_count', sortable: true },
+        { name: 'new_test_user_count', label: 'New Test Users', field: 'new_test_user_count', sortable: true },
+        { name: 'new_control_user_count', label: 'New Control Users', field: 'new_control_user_count', sortable: true },
+        { name: 'total_test_user_count', label: 'Total Test Users', field: 'total_test_user_count', sortable: true },
+        { name: 'total_control_user_count', label: 'Total Control Users', field: 'total_control_user_count', sortable: true },
         { name: 'job_status', label: 'Job Status', field: 'job_status', sortable: true },
         { name: 'job_failure', label: 'Job Failure', field: 'job_failure', sortable: true },
       ],
@@ -258,8 +272,12 @@ export default defineComponent({
         header: '',
         message: '',
       },
-      conversions_from: undefined,
-      conversions_to: undefined
+      conversions_from: <string | undefined>undefined,
+      conversions_to: <string | undefined>undefined,
+      pval: <number | undefined>undefined,
+      pvalFormatted: computed(() => {
+        return data.value.pval ? data.value.pval.toFixed(5) : '-'
+      })
     });
 
     const onSampling = async () => {
@@ -311,7 +329,7 @@ export default defineComponent({
               "control_user_count": 5806,
               "failed_user_count": 0,
               "job_resource_name": "customers/xxx/offlineUserDataJobs/yyy",
-              "new_user_count": 0,
+              "new_test_user_count": 0,
               "test_user_count": 10856,
               "uploaded_user_count": 10856
             }
@@ -327,7 +345,10 @@ export default defineComponent({
               <li>Control user count: ${result.control_user_count}</li>
               <li>Test user count: ${result.test_user_count}</li>
               <li>Uploaded user count: ${result.uploaded_user_count}</li>
-              <li>New user count: ${result.new_user_count}</li>
+              <li>New test user count: ${result.new_test_user_count}</li>
+              <li>New control user count: ${result.new_control_user_count}</li>
+              <li>Total test user count: ${result.total_test_user_count}</li>
+              <li>Total control user count: ${result.total_control_user_count}</li>
               </ul></div>`;
           }
           data.value.resultDialog.header = 'Audience uploading to Google Ads completed';
@@ -391,15 +412,7 @@ export default defineComponent({
       if (newValue && newValue.length) {
         let newActiveAudience = newValue[0];
         data.value.audience_log = newActiveAudience.log;
-        if (newActiveAudience.conversions?.data) {
-          updateConversionsChart(newActiveAudience.conversions.data);
-          data.value.conversions_from = newActiveAudience.conversions.start_date;
-          data.value.conversions_to = newActiveAudience.conversions.end_date;
-        } else {
-          data.value.chart.series = [];
-          data.value.conversions_from = undefined;
-          data.value.conversions_to = undefined;
-        }
+        updateConversionsChart(newActiveAudience.conversions);
       }
     });
 
@@ -417,7 +430,7 @@ export default defineComponent({
         Object.keys(result).map(name => {
           const audience = result[name];
           audiences.push({
-            'active': audience.active,
+            'mode': audience.mode,
             'name': audience.name,
             'app_id': audience.app_id,
             'countries': audience.countries,
@@ -441,29 +454,24 @@ export default defineComponent({
         });
       }
     };
+
     const onLoadConversions = async () => {
       if (data.value.selectedAudience && data.value.selectedAudience.length) {
         const audience = data.value.selectedAudience[0];
         let date_start = <string | undefined>data.value.conversions_from;
         let date_end = <string | undefined>data.value.conversions_to;
         audience.conversions = await loadConversions(audience.name, date_start, date_end);
-        updateConversionsChart(audience.conversions?.data);
+        updateConversionsChart(audience.conversions);
       }
     };
+
     const loadConversions = async (audienceName: string, date_start: string | undefined, date_end: string | undefined): Promise<Conversions | undefined> => {
       data.value.chart.series = [];
       $q.loading.show({ message: 'Fetching the audience conversion history...' });
       const loading = () => $q.loading.hide();
       try {
         let res = await getApi('audiences/conversions', { audience: audienceName, date_start, date_end }, loading);
-        //$q.notify({ message: 'Sampling completed', icon: 'success', timeout: 1000 });
         const all_conversions = res.data.results;
-        if (res.data.date_start) {
-          data.value.conversions_from = res.data.date_start;
-        }
-        if (res.data.date_end) {
-          data.value.conversions_to = res.data.date_end;
-        }
         let conversions;
         if (all_conversions) {
           conversions = all_conversions[audienceName]
@@ -477,7 +485,7 @@ export default defineComponent({
         }
         // we expect an object with fields: date, cum_test_regs, cum_control_regs
         console.log(conversions);
-        return { data: conversions, start_date: res.data.date_start, end_date: res.data.date_end };
+        return { data: conversions, start_date: res.data.date_start, end_date: res.data.date_end, pval: res.data.pval };
       }
       catch (e: any) {
         $q.dialog({
@@ -486,14 +494,22 @@ export default defineComponent({
         });
       }
     };
-    const updateConversionsChart = (conversions: ConversionsData[] | undefined) => {
-      if (!conversions || !conversions.length) {
+
+    const updateConversionsChart = (conversions?: Conversions) => {
+      if (!conversions || !conversions.data || !conversions.data.length) {
+        data.value.chart.series = [];
+        data.value.conversions_from = undefined;
+        data.value.conversions_to = undefined;
+        data.value.pval = undefined;
         return;
       }
+      data.value.conversions_from = conversions.start_date;
+      data.value.conversions_to = conversions.end_date;
+      data.value.pval = conversions.pval;
 
       const test_data = [] as any[];
       const control_data = [] as any[];
-      for (const item of conversions) {
+      for (const item of conversions.data) {
         const label = formatDate(new Date(item.date));
         test_data.push({ x: label, y: item.cum_test_regs });
         control_data.push({ x: label, y: item.cum_control_regs });
@@ -503,11 +519,13 @@ export default defineComponent({
         { name: 'control', data: control_data },
       ]
     };
+
     const onOpenChart = async (props: any) => {
       const audience = props.row;
       audience.conversions = await loadConversions(audience.name, undefined, undefined);
-      updateConversionsChart(audience.conversions?.data);
+      updateConversionsChart(audience.conversions);
     }
+
     return {
       store,
       data,

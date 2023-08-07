@@ -133,7 +133,7 @@ class AdsGateway:
     def _create_and_run_offline_user_data_job(self,
                                               user_list_resource_name: str,
                                               users: list[str],
-                                              overwrite: True):
+                                              overwrite):
         """ Creates a offline user data job operation for an audience list and runs it.
 
             Args:
@@ -152,6 +152,7 @@ class AdsGateway:
         offline_user_data_job.type_ = self.googleads_client.enums.OfflineUserDataJobTypeEnum.CUSTOMER_MATCH_USER_LIST
         offline_user_data_job.customer_match_user_list_metadata.user_list = user_list_resource_name
 
+        logger.debug(f"Creating create_offline_user_data_job for user list '{user_list_resource_name}'")
         # Issues a request to create an offline user data job.
         create_offline_user_data_job_response = offline_user_data_job_service.create_offline_user_data_job(
             customer_id=self.customer_id, job=offline_user_data_job
@@ -171,6 +172,7 @@ class AdsGateway:
         #print(request.operations)
 
         # Issues a request to add the operations to the offline user data job.
+        logger.debug(f"Sending add_offline_user_data_job_operations request with {len(users)} users and overwrite={overwrite}")
         response = offline_user_data_job_service.add_offline_user_data_job_operations(
             request=request
         )
@@ -206,9 +208,9 @@ class AdsGateway:
             logger.info('Partical failures occured during adding the following user ids to OfflineUserDataJob:')
             logger.info(failed_user_ids)
 
-        # Issues a request to run the offline user data job for executing all
-        # added operations.
+        # Issues a request to run the offline user data job for executing all added operations.
         if users:
+            logger.debug("Sending run_offline_user_data_job request to start uploading users")
             offline_user_data_job_service.run_offline_user_data_job(
                 resource_name=offline_user_data_job_resource_name
             )

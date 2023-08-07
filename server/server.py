@@ -27,6 +27,7 @@ from flask import Flask, request, jsonify, abort, send_from_directory, Response
 from flask.json.provider import DefaultJSONProvider
 from flask_cors import CORS
 from gaarf.api_clients import GoogleAdsApiClient
+import statsmodels.stats.proportion as proportion
 
 from env import IS_GAE
 from auth import get_credentials
@@ -235,6 +236,14 @@ def update_audiences():
   return jsonify({"results": results})
 
 
+@app.route("/api/audiences/user_counts", methods=["POST"])
+def calculate_users_for_audiences():
+  context = create_context()
+  audiences = context.data_gateway.get_audiences(context.target)
+  results = context.data_gateway.calculate_users_for_audiences(context.target, audiences)
+  return jsonify({"results": results})
+
+
 @app.route("/api/process", methods=["POST"])
 def process():
   # it's a method for automated execution (via Cloud Scheduler)
@@ -281,13 +290,18 @@ def run_sampling() -> Response:
   result = {}
   logger.debug(f"Loaded {len(audiences)} audiences")
   for audience in audiences:
-    if not audience.active:
-      logger.debug(f"Skipping non-active audience {audience.name}")
+    # TODO: support 'prod' mode
+    if audience.mode != 'test':
       continue
     logger.debug(f"Running sampling for '{audience.name}' audience")
-    df = context.data_gateway.sample_audience_users(context.target, audience)
+    df = context.data_gateway.fetch_audience_users(context.target, audience)
     logger.info(f"Created a user segment of audience '{audience.name}' with {len(df)} users")
+    if len(df) == 0:
+      logger.warning("User segment of audience '{audience.name}' contains no users")
+
     # if the segment is empty there's no point in sampling
+    # TODO: if audience.mode == 'prod':
+    #
     if len(df) > 0:
       users_test, users_control = do_sampling(df)
       context.data_gateway.save_sampled_users(context.target, audience, users_test, users_control)
@@ -342,41 +356,70 @@ def update_customer_match_audiences():
   if need_updating:
     context.data_gateway.update_audiences(context.target, audiences)
 
+  audiences_log = context.data_gateway.get_audiences_log(context.target)
   # upload audiences users to Google Ads as customer match user lists
   logger.debug(f"Uploading audiences users to Google Ads as customer match userlists")
   result = {}
   log = []
   for audience in audiences:
-    if not audience.active:
-      logger.debug(f"Skipping non-active audience {audience.name}")
+    if audience.mode == 'off':
       continue
 
     audience_name = audience.name
     user_list_res_name = audience.user_list
     # load of users for 'today' table (audience_{listname}_test_yyyyMMdd)
-    users = context.data_gateway.load_audience_segment(context.target, audience, 'test')
-    job_resource_name, failed_users, uploaded_users = \
-        ads_gateway.upload_customer_match_audience(user_list_res_name, users, overwrite=True)
-    new_user_count, test_user_count, control_user_count = \
-        context.data_gateway.update_audience_segment_status(context.target, audience, None, failed_users)
+    users = context.data_gateway.load_audience_segment(context.target, audience, audience.mode)
+    logger.warn(f"Audience '{audience.name}' segment has no users")
+    # upload users to Google Ads: note we overwrite users for prod and increament for test modes
+    if len(users) > 0:
+      job_resource_name, failed_users, uploaded_users = \
+          ads_gateway.upload_customer_match_audience(user_list_res_name, users, overwrite=audience.mode == 'prod')
+      # update audience status in our tables, plus calculate some statistics
+      test_user_count, control_user_count, new_test_user_count, new_control_user_count = \
+          context.data_gateway.update_audience_segment_status(context.target, audience, None, failed_users)
+    else:
+      job_resource_name = None
+      failed_users = []
+      uploaded_users = []
+      test_user_count = 0
+      control_user_count = 0
+      new_test_user_count = 0
+      new_control_user_count = 0
+
+    total_test_user_count = 0
+    total_control_user_count = 0
+    # get total_user_count from the previous log entry if it exists and add new_user_count
+    audience_log = audiences_log.get(audience_name, None)
+    if not audience_log:
+      total_test_user_count = new_test_user_count
+      total_control_user_count = new_control_user_count
+    else:
+      total_test_user_count = audience_log[-1].total_user_count + new_test_user_count
+      total_control_user_count = audience_log[-1].total_control_user_count + new_control_user_count
+
+
     result[audience_name] = {
       "job_resource_name": job_resource_name,
       "uploaded_user_count": len(uploaded_users),
-      "new_user_count": new_user_count,
+      "new_test_user_count": new_test_user_count,
+      "new_control_user_count": new_control_user_count,
       "failed_user_count": len(failed_users) if failed_users else 0,
       "test_user_count": test_user_count,
-      "control_user_count": control_user_count
+      "control_user_count": control_user_count,
+      "total_test_user_count": total_test_user_count,
+      "total_control_user_count": total_control_user_count
     }
-    if new_user_count == 0:
+    if new_test_user_count == 0:
       logger.warning(f'Audience segment for {audience_name} for {datetime.now().strftime("%Y-%m-%d")} contains no new users')
     log.append(AudienceLog(
       audience.name,
       datetime.now(),
       job_resource_name,
       len(uploaded_users),
-      new_user_count,
-      test_user_count,
-      control_user_count)
+      new_test_user_count, new_control_user_count,
+      test_user_count, control_user_count,
+      total_test_user_count, total_control_user_count
+      )
     )
 
   context.data_gateway.update_audiences_log(context.target, log)
@@ -415,9 +458,12 @@ def get_audiences_status():
           "date": log_item.date,
           "job": log_item.job,
           "user_count": log_item.user_count,
-          "new_user_count": log_item.new_user_count,
+          "new_test_user_count": log_item.new_user_count,
+          "new_control_user_count": log_item.new_control_user_count,
           "test_user_count": log_item.test_user_count,
-          "control_user_count": log_item.control_user_count
+          "control_user_count": log_item.control_user_count,
+          "total_test_user_count": log_item.total_user_count,
+          "total_control_user_count": log_item.total_control_user_count,
         }
         job_status = next(((j[1], j[2]) for j in jobs_statuses if j[0] == log_item.job), None)
         if not job_status is None:
@@ -427,6 +473,7 @@ def get_audiences_status():
         log_item_dict['job_status'] = status
         log_item_dict['job_failure'] = failure_reason
         audience_dict['log'].append(log_item_dict)
+
   return jsonify({"result": result})
 
 
@@ -442,17 +489,31 @@ def get_user_conversions():
   audiences = context.data_gateway.get_audiences(context.target)
   audience_name = request.args.get('audience')
   results = {}
+  pval = None
+  chi = None
   for audience in audiences:
     if audience_name and audience.name != audience_name:
       continue
     result, date_start, date_end = context.data_gateway.get_user_conversions(context.target, audience, date_start, date_end)
+    # the result is a list of columns: date, cum_test_regs, cum_control_regs, total_user_count, total_control_user_count
     results[audience.name] = result
+
+    array_conversions = [ [i["cum_test_regs"], i["cum_control_regs"]] for i in result]
+    array_users = [ [i["total_user_count"], i["total_control_user_count"]] for i in result]
+
+    logger.debug(f"Calculating pval for\nconversions: {array_conversions}\nnumber of users: {array_users}")
+    chi, pval, res = proportion.proportions_chisquare(array_conversions, array_users)
+    logger.debug(f"Calculated pval for\nconversions: {array_conversions}\nnumber of users: {array_users}")
+
     if audience_name and audience.name == audience_name:
       break
+
   return jsonify({
       "results": results,
       "date_start": date_start.strftime("%Y-%m-%d"),
-      "date_end": date_end.strftime("%Y-%m-%d")
+      "date_end": date_end.strftime("%Y-%m-%d"),
+      "pval": pval,
+      "chi": chi
     })
 
 

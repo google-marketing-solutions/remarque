@@ -26,7 +26,7 @@ PROJECT_ID=$(gcloud config get-value project 2> /dev/null)
 PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format="csv(projectNumber)" | tail -n 1)
 SERVICE_ACCOUNT=$PROJECT_ID@appspot.gserviceaccount.com
 
-GCS_BUCKET=gs://${PROJECT_ID}/remarque
+echo "Service account: $SERVICE_ACCOUNT"
 
 check_billing() {
   BILLING_ENABLED=$(gcloud beta billing projects describe $PROJECT_ID --format="csv(billingEnabled)" | tail -n 1)
@@ -38,10 +38,20 @@ check_billing() {
 }
 
 enable_apis() {
+  local GAE_REGION=$(git config -f $SETTING_FILE gae.region)
   echo "Enabling APIs"
   # App Engine Admin API
   echo -e "${COLOR}\tApp Engine Admin API...${NC}"
   gcloud services enable appengine.googleapis.com
+  gcloud services enable iamcredentials.googleapis.com
+  gcloud services enable googleads.googleapis.com
+  gcloud services enable cloudscheduler.googleapis.com
+
+  gcloud services enable iap.googleapis.com
+  gcloud services enable cloudresourcemanager.googleapis.com
+  # NOTE: despite other GCP services GAE supports only two regions: europe-west and us-central
+  gcloud app create --region $GAE_REGION
+
 #  gcloud services enable cloudresourcemanager.googleapis.com
 #  gcloud services enable cloudbuild.googleapis.com
 }
@@ -52,13 +62,17 @@ set_iam_permissions() {
   gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$SERVICE_ACCOUNT --role=roles/bigquery.admin
   gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$SERVICE_ACCOUNT --role=roles/cloudscheduler.admin
   gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$SERVICE_ACCOUNT --role=roles/storage.admin
-#appengine.applications.get
 }
 
 update_git_commit() {
   echo -e "${COLOR}Updating last GIT commit in app.yaml...${NC}"
   GIT_COMMIT=$(git rev-parse HEAD)
   sed -i'.original' -e "s/GIT_COMMIT\s*:\s*.*$/GIT_COMMIT: '$GIT_COMMIT'/" app.yaml
+  # TODO: use it in code 
+  #  commit = os.getenv('GIT_COMMIT') or ''
+
+  #TODO:
+  #CONFIG: gs://$PROJECT_ID/remarque/config.json
 }
 
 
@@ -82,7 +96,8 @@ deploy_app() {
 }
 
 create_iap() {
-  USER_EMAIL=$(gcloud config get-value account 2> /dev/null)
+  local USER_EMAIL=$(gcloud config get-value account 2> /dev/null)
+  local PROJECT_TITLE=Remarque
 
   # create IAP
   IAP_BRAND=$(gcloud iap oauth-brands list --format='value(name)' 2>/dev/null)
@@ -154,6 +169,7 @@ deploy_all() {
   update_git_commit
   deploy_files
   deploy_app
+  # NOTE: crerate_iap will fail if the current project isn't in a Cloud Org
   create_iap
 }
 
