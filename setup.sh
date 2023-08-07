@@ -51,7 +51,7 @@ set_iam_permissions() {
   gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$SERVICE_ACCOUNT --role=roles/appengine.appAdmin
   gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$SERVICE_ACCOUNT --role=roles/bigquery.admin
   gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$SERVICE_ACCOUNT --role=roles/cloudscheduler.admin
-
+  gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$SERVICE_ACCOUNT --role=roles/storage.admin
 #appengine.applications.get
 }
 
@@ -61,18 +61,14 @@ update_git_commit() {
   sed -i'.original' -e "s/GIT_COMMIT\s*:\s*.*$/GIT_COMMIT: '$GIT_COMMIT'/" app.yaml
 }
 
-create_gcs_bucket() {
-  if ! gsutil ls $GCS_BUCKET > /dev/null 2> /dev/null; then
-    gsutil mb -b on $GCS_BUCKET
-    #gsutil mb -l $LOCATION -b on $GCS_BUCKET
-    echo "Bucket $GCS_BUCKET created"
-  else
-    echo "Bucket $GCS_BUCKET already exists"
-  fi
-}
 
 deploy_files() {
   echo -e "${COLOR}Deploying files to GCS...${NC}"
+  if ! gsutil ls gs://${PROJECT_ID} > /dev/null 2> /dev/null; then
+    gsutil mb -b on gs://${PROJECT_ID}
+  fi
+
+  GCS_BUCKET=gs://${PROJECT_ID}/remarque
   gsutil cp app.yaml $GCS_BUCKET/
   gsutil cp config.json $GCS_BUCKET/
   echo -e "${COLOR}Files were deployed to ${GCS_BUCKET}${NC}"
@@ -156,7 +152,6 @@ deploy_all() {
   enable_apis
   set_iam_permissions
   update_git_commit
-  create_gcs_bucket
   deploy_files
   deploy_app
   create_iap

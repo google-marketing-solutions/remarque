@@ -31,6 +31,7 @@ from collections import namedtuple
 from logger import logger
 from config import Config, ConfigTarget, Audience
 from bigquery_utils import CloudBigQueryUtils
+from utils import format_duration
 
 AudienceLog = namedtuple(
   'AudienceLog',
@@ -65,7 +66,7 @@ class DataGateway:
        bigquery.SchemaField(name="days_ago_end", field_type="INT64", mode="REQUIRED"),
        bigquery.SchemaField(name="user_list", field_type="STRING"),
        bigquery.SchemaField(name="created", field_type="TIMESTAMP"),
-       bigquery.SchemaField(name="active", field_type="BOOLEAN"),
+       bigquery.SchemaField(name="mode", field_type="STRING"),
     ]
     table_name = f"{target.bq_dataset_id}.audiences"
     self._ensure_table(table_name, schema)
@@ -134,7 +135,8 @@ class DataGateway:
 
 
   def execute_query(self, query: str) -> list[dict]:
-    logger.debug(f'Executing SQL script: {query}')
+    ts_start = datetime.now()
+    logger.debug(f'Executing SQL query: {query}')
     results = self.bq_client.query(query).result()
     # TODO: check exception: e.errors[0].reason == 'invalidQuery'
     fields = [field.name for field in results.schema]
@@ -146,6 +148,8 @@ class DataGateway:
             row_dict[fields[i]] = value
         data_list.append(row_dict)
 
+    elapsed = datetime.now() - ts_start
+    logger.debug(f'Query executed successfully (elapsed {format_duration(elapsed)})')
     return data_list
 
 
@@ -232,7 +236,7 @@ ORDER BY 1, 3 DESC
   def get_audiences(self, target: ConfigTarget) -> list[Audience]:
     query = f"""
 SELECT
-  name, app_id, table_name, countries, events_include, events_exclude, days_ago_start, days_ago_end, user_list, created, active
+  name, app_id, table_name, countries, events_include, events_exclude, days_ago_start, days_ago_end, user_list, created, mode
 FROM `{target.bq_dataset_id}.audiences`"""
     rows = self.execute_query(query)
     audiences = []
@@ -248,7 +252,7 @@ FROM `{target.bq_dataset_id}.audiences`"""
       audience.days_ago_end = row['days_ago_end']
       audience.user_list = row['user_list']
       audience.created = row['created']
-      audience.active = row['active']
+      audience.mode = row['mode']
       audiences.append(audience)
     return audiences
 
@@ -299,7 +303,7 @@ FROM `{target.bq_dataset_id}.audiences`"""
   {i.events_include} events_include, {i.events_exclude} events_exclude,
   {i.days_ago_start} days_ago_start, {i.days_ago_end} days_ago_end,
   {"'" + i.user_list + "'" if i.user_list is not None else "CAST(NULL as STRING)"} user_list,
-  {"True" if i.active else "False"} active
+  {"'" + i.mode + "'"} mode
 """)
     sql_selects = "\nUNION ALL\n".join(selects)
     query = f"""
@@ -319,10 +323,10 @@ WHEN MATCHED THEN
       when s.user_list IS NULL THEN t.user_list
       ELSE s.user_list
     END,
-    t.active = s.active
+    t.mode = s.mode
 WHEN NOT MATCHED THEN
-  INSERT (name, app_id, table_name, countries, events_include, events_exclude, days_ago_start, days_ago_end, created, active)
-  VALUES (s.name, s.app_id, s.table_name, s.countries, s.events_include, s.events_exclude, s.days_ago_start, s.days_ago_end, CURRENT_TIMESTAMP(), s.active)
+  INSERT (name, app_id, table_name, countries, events_include, events_exclude, days_ago_start, days_ago_end, created, mode)
+  VALUES (s.name, s.app_id, s.table_name, s.countries, s.events_include, s.events_exclude, s.days_ago_start, s.days_ago_end, CURRENT_TIMESTAMP(), s.mode)
 """
     logger.debug(query)
     self.bq_client.query(query).result()
@@ -347,9 +351,12 @@ WHEN NOT MATCHED THEN
     self.bq_client.delete_table(table_name, not_found_ok=True)
 
 
-  def sample_audience_users(self, target: ConfigTarget, audience: Audience, suffix: str = None):
-    """Takes audience object and do sampling of users,
-       i.e. split captured users segment onto test and control groups
+  def calculate_users_for_audiences(self, target: ConfigTarget, audience: Audience):
+    pass
+
+
+  def fetch_audience_users(self, target: ConfigTarget, audience: Audience, suffix: str = None):
+    """Segment an audience - takes a audience desrciption and fetches the users from GA4 events according to the conditions.
     """
     days_ago_start = audience.days_ago_start
     days_ago_end = audience.days_ago_end
@@ -394,17 +401,11 @@ WHEN NOT MATCHED THEN
       "all_events_list": all_events_list,
       "SEARCH_CONDITIONS": search_condition
     })
-    #logger.debug(query)
     # TODO: we can add a column is_test into prepare.sql and update it after sampling,
     # but before doing it make sure do_sampling function correctly handles additional columns (hint: it doesn't)!
-    #self.bq_client.query(query).result()
     self.execute_query(query)
 
     df = self.load_sampled_users(destination_table)
-    if len(df) == 0:
-      logger.warning("User segment contains no users")
-    else:
-      logger.info(f"User segment contains {len(df)} users")
     return df
 
 
@@ -420,7 +421,7 @@ SELECT
 FROM `{audience_table_name}`
 """
     #users = self.execute_query(query)
-    logger.debug(query)
+    logger.debug(f'Executing SQL query: {query}')
     df = pd.read_gbq(
         query=query,
         project_id=self.config.project_id,
@@ -445,9 +446,7 @@ FROM `{audience_table_name}`
                          suffix: str = None):
     """Save sampled users from two DataFrames into two new tables (_test and _control)"""
     project_id = self.config.project_id
-    bq_dataset_id = target.bq_dataset_id
-    suffix = datetime.now().strftime("%Y%m%d") if suffix is None else suffix
-    # TODO: we might want to udpate original rows in audience_table
+    # TODO: we might want to update original rows in audience_table
     # to flip is_test field to true/false basing on existence in
     # either users_test or users_control dataframes
     test_table_name = self._get_user_segment_table_full_name(target, audience.table_name, 'test', suffix)
@@ -460,10 +459,9 @@ FROM `{audience_table_name}`
     logger.info(f'Sampled users for audience {audience.name} saved to {test_table_name}/{control_table_name} tables')
 
 
-  def load_audience_segment(self, target: ConfigTarget, audience: Audience, suffix: str = None) -> list[str]:
+  def load_audience_segment(self, target: ConfigTarget, audience: Audience, group_name: Literal['test'] | Literal['control'] = 'test', suffix: str = None) -> list[str]:
     """Loads test users of a given audience for a particular segment (by default - today)"""
-    #suffix = datetime.now().strftime("%Y%m%d") if suffix is None else suffix
-    table_name = self._get_user_segment_table_full_name(target, audience.table_name, 'test', suffix)
+    table_name = self._get_user_segment_table_full_name(target, audience.table_name, group_name, suffix)
     query = f"""SELECT user FROM `{table_name}`"""
     rows = self.execute_query(query)
     users = [row['user'] for row in rows]

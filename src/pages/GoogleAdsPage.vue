@@ -101,8 +101,6 @@
         </q-card-section>
 
         <q-card-section v-if="data.selectedAudience.length">
-          <apexchart v-if="data.chart.series.length" style="width:100%" :options="data.chart.options"
-            :series="data.chart.series"></apexchart>
           <q-banner class="bg-grey-2">
             <div class="row">
 
@@ -143,6 +141,8 @@
             </div>
             <q-btn label="Load conversions" @click="onLoadConversions" color="primary" icon="query_stats"></q-btn>
           </q-banner>
+          <apexchart v-if="data.chart.series.length" style="width:100%" :options="data.chart.options"
+            :series="data.chart.series"></apexchart>
         </q-card-section>
       </q-card>
     </div>

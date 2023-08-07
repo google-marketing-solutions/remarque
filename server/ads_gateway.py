@@ -18,7 +18,6 @@ from enum import Enum
 from google.ads.googleads.errors import GoogleAdsException
 #from google.ads.googleads.client import GoogleAdsClient  # type: ignore
 import smart_open
-from yaml.loader import SafeLoader
 
 from gaarf.api_clients import GoogleAdsApiClient
 from gaarf.query_executor import AdsReportFetcher
@@ -53,7 +52,7 @@ class AdsGateway:
 
     def create_customer_match_user_lists(self, audiences: list[Audience])-> dict[str,str]:
         """ Identifies which audience lists need to be created in Google Ads and
-            and creates new Customer Match user lists with the Google Ads API for them.
+            and creates new Customer Match user lists for them.
 
         Args:
             audiences: list of audiences
@@ -70,8 +69,7 @@ class AdsGateway:
         lists_to_add = []
         result = {}
         for audience in audiences:
-          if not audience.active:
-            logger.debug(f"Skipping non-active audience {audience.name}")
+          if audience.mode == 'off':
             continue
 
           # Check if the list name is already in existing_lists

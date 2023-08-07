@@ -311,19 +311,18 @@ def process_df(df: pd.DataFrame, frac_test=.5, max_test_share=30):
 
   encoded_ids, encoded_data = stratify(data=encoded.labels.values, classes=list(map(str,all_classes)), ratios=[frac_test, 1 - frac_test], one_hot=False)
 
-  for i in range(max_test_share):
-    logger.debug(f'fraction test: {i}')
-    frac_test += (i+1) / 100
-    new_encoded_ids, new_encoded_data = stratify(data=encoded.labels.values, classes=list(map(str,all_classes)), ratios=[frac_test, 1 - frac_test], one_hot=False)
-    test = encoded.loc[new_encoded_ids[0], cols]
-    control = encoded.loc[new_encoded_ids[1], cols]
-
-    stat_df = get_diff_columns(test, control, show_all = False, kde=True, show_plots=False)
-    p_val = (sum(stat_df['p_gt'].values < .1) + sum(stat_df['p_lt'].values < .1) + sum(stat_df['p_neq'].values < .1))
-    if p_val > 0:
-      logger.debug(f'P-val sum of 3: {p_val}')
-      break
-    encoded_ids, encoded_data = new_encoded_ids, new_encoded_data
+  # for i in range(max_test_share):
+  #   logger.debug(f'fraction test: {i}')
+  #   frac_test += (i+1) / 100
+  #   new_encoded_ids, new_encoded_data = stratify(data=encoded.labels.values, classes=list(map(str,all_classes)), ratios=[frac_test, 1 - frac_test], one_hot=False)
+  #   test = encoded.loc[new_encoded_ids[0], cols]
+  #   control = encoded.loc[new_encoded_ids[1], cols]
+  #   stat_df = get_diff_columns(test, control, show_all = False, kde=True, show_plots=False)
+  #   p_val = (sum(stat_df['p_gt'].values < .1) + sum(stat_df['p_lt'].values < .1) + sum(stat_df['p_neq'].values < .1))
+  #   if p_val > 0:
+  #     logger.debug(f'P-val sum of 3: {p_val}')
+  #     break
+  #   encoded_ids, encoded_data = new_encoded_ids, new_encoded_data
 
   # split DF onto two DF with test and control users
   test_ids = encoded_ids[0]

@@ -14,6 +14,7 @@
  limitations under the License.
  """
 
+from typing import Any, Dict, List, Tuple, Literal
 import argparse
 import os
 import json
@@ -38,7 +39,7 @@ class Audience:
   days_ago_end = 0
   user_list = ''
   created = None
-  active = False
+  mode: Literal['off']|Literal['test']|Literal['prod'] = 'off'
 
   def __init__(self) -> None:
     self.countries = []
@@ -58,7 +59,7 @@ class Audience:
       "days_ago_end": self.days_ago_end,
       "user_list": self.user_list,
       "created": self.created,
-      "active": self.active,
+      "mode": self.mode,
     }
     return res
 
@@ -83,7 +84,7 @@ class Audience:
     self.days_ago_end = dict.get("days_ago_end", None)
     self.user_list = dict.get("user_list", None)
     self.created = dict.get("created", None)
-    self.active = dict.get("active", False)
+    self.mode = dict.get("mode", 'off')
     return self
 
 

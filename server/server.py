@@ -354,7 +354,7 @@ def update_customer_match_audiences():
     audience_name = audience.name
     user_list_res_name = audience.user_list
     # load of users for 'today' table (audience_{listname}_test_yyyyMMdd)
-    users = context.data_gateway.load_audience_segment(context.target, audience)
+    users = context.data_gateway.load_audience_segment(context.target, audience, 'test')
     job_resource_name, failed_users, uploaded_users = \
         ads_gateway.upload_customer_match_audience(user_list_res_name, users, overwrite=True)
     new_user_count, test_user_count, control_user_count = \
