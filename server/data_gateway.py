@@ -120,6 +120,7 @@ class DataGateway:
           table = self.bq_client.update_table(table, ["schema"])
           logger.info(f'Table {table_name} schema updated')
         except Exception as e:
+          logger.error(e)
           if getattr(e, "errors", None) and e.errors[0]:
             if e.errors[0].get("debugInfo", None) and e.errors[0]["debugInfo"].startswith("[SCHEMA_INCOMPATIBLE]"):
               logger.info(f'Table {table_name} schema is incompatible and the table has to be recreated')
@@ -131,8 +132,6 @@ class DataGateway:
 
     except NotFound:
       logger.debug(f"Initialize: Creating '{table_name}' table")
-      #self.bq_client.create_table(table_name,)
-
       table = bigquery.Table(table_ref, schema=expected_schema)
       self.bq_client.create_table(table)
 
@@ -466,8 +465,12 @@ FROM `{audience_table_name}`
     """Loads test users of a given audience for a particular segment (by default - today)"""
     table_name = self._get_user_segment_table_full_name(target, audience.table_name, group_name, suffix)
     query = f"""SELECT user FROM `{table_name}`"""
-    rows = self.execute_query(query)
-    users = [row['user'] for row in rows]
+    try:
+      rows = self.execute_query(query)
+      users = [row['user'] for row in rows]
+    except NotFound:
+      logger.debug(f"Table '{table_name}' not found (audience segment is empty)")
+      users = []
     return users
 
 
@@ -487,13 +490,15 @@ FROM `{audience_table_name}`
       # NOTE: create a table for failed users, but its name shoud not be one that will be caught by wildcard mask {name}_test_*
       table_name_failed = self._get_user_segment_table_full_name(target, audience.table_name, 'testfailed', suffix)
       schema = [
-        bigquery.SchemaField('user', 'INTEGER', mode='REQUIRED')
+        bigquery.SchemaField('user', 'STRING', mode='REQUIRED')
       ]
-      table_ref = self.bq_client.dataset(target.bq_dataset_id).table(table_name_failed)
+      table_ref = bigquery.TableReference.from_string(table_name_failed, self.config.project_id)
+      #table_ref = self.bq_client.dataset(target.bq_dataset_id).table(table_name_failed)
       table = bigquery.Table(table_ref, schema=schema)
-      table = self.bq_client.create_table(table)
+      table = self.bq_client.create_table(table, exists_ok=True)
+      rows_to_insert = [{'user': user_id} for user_id in failed_users]
       try:
-        self.bq_client.insert_rows(table, table_name_failed)
+        self.bq_client.insert_rows(table, rows_to_insert)
       except BaseException as e:
         logger.error(f"An error occurred while inserting failed user ids into {table_name_failed} table: {e}")
         raise

@@ -159,6 +159,14 @@ def setup():
   #bq_dataset_location = context.config.bq_dataset_location or 'europe'
 
   context.data_gateway.initialize(target)
+
+  target.ads_client_id = params.get('ads_client_id', None)
+  target.ads_client_secret = params.get('ads_client_secret', None)
+  target.ads_customer_id = params.get('ads_customer_id', None)
+  target.ads_developer_token = params.get('ads_developer_token', None)
+  target.ads_login_customer_id = params.get('ads_login_customer_id', None)
+  target.ads_refresh_token = params.get('ads_refresh_token', None)
+
   # save config to the same location where it was read from
   save_config(context.config, args)
   return jsonify({})
@@ -304,10 +312,15 @@ def run_sampling() -> Response:
     #
     if len(df) > 0:
       users_test, users_control = do_sampling(df)
-      context.data_gateway.save_sampled_users(context.target, audience, users_test, users_control)
+    else:
+      # create empty tables for test and control users so other queries wouldn't fail
+      users_control = []
+      users_control = []
+
+    context.data_gateway.save_sampled_users(context.target, audience, users_test, users_control)
     result[audience.name] = {
-      "test_count": len(users_test) if len(df) > 0 else 0,
-      "control_count": len(users_control) if len(df) > 0 else 0,
+      "test_count": len(users_test),
+      "control_count": len(users_control),
     }
   return jsonify({"result": result})
 
@@ -373,7 +386,7 @@ def update_customer_match_audiences():
     # upload users to Google Ads: note we overwrite users for prod and increament for test modes
     if len(users) > 0:
       job_resource_name, failed_users, uploaded_users = \
-          ads_gateway.upload_customer_match_audience(user_list_res_name, users, overwrite=audience.mode == 'prod')
+          ads_gateway.upload_customer_match_audience(user_list_res_name, users, True)
       # update audience status in our tables, plus calculate some statistics
       test_user_count, control_user_count, new_test_user_count, new_control_user_count = \
           context.data_gateway.update_audience_segment_status(context.target, audience, None, failed_users)

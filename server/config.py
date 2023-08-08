@@ -267,4 +267,6 @@ def get_config(args: argparse.Namespace) -> Config:
 def save_config(config: Config, args: argparse.Namespace):
   config_file_name = get_config_url(args)
   with smart_open.open(config_file_name, 'w') as f:
-    f.write(json.dumps(config.to_dict()))
+    config_dict =config.to_dict()
+    del config_dict['project_id']
+    f.write(json.dumps(config_dict))

@@ -118,7 +118,13 @@ export default defineComponent({
           ga4_dataset: store.ga4_dataset,
           ga4_table: store.ga4_table,
           bq_dataset_id: store.bq_dataset_id,
-          bq_dataset_location: store.bq_dataset_location
+          bq_dataset_location: store.bq_dataset_location,
+          ads_client_id: store.ads_client_id,
+          ads_client_secret: store.ads_client_secret,
+          ads_customer_id: store.ads_customer_id,
+          ads_developer_token: store.ads_developer_token,
+          ads_login_customer_id: store.ads_login_customer_id,
+          ads_refresh_token: store.ads_refresh_token,
         }, loading);
         $q.dialog({
           title: 'Succeeded',

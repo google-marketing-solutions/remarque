@@ -352,8 +352,8 @@ export default defineComponent({
     const saveAudience = () => {
       let idx = data.value.audiences.findIndex(val => val.name === audience.value.name);
       const obj = {
-        name: audience.value.name,
-        app_id: audience.value.app_id,
+        name: audience.value.name?.trim(),
+        app_id: audience.value.app_id?.trim(),
         countries: audience.value.countries,
         events_include: audience.value.events_include,
         events_exclude: audience.value.events_exclude,
