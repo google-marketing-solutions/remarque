@@ -452,12 +452,25 @@ FROM `{audience_table_name}`
     # to flip is_test field to true/false basing on existence in
     # either users_test or users_control dataframes
     test_table_name = self._get_user_segment_table_full_name(target, audience.table_name, 'test', suffix)
-    # add 'status' column (empty for all rows)
-    users_test = users_test.assign(status=None).astype({"status": 'Int64'})
-    pandas_gbq.to_gbq(users_test, test_table_name, project_id, if_exists='replace')
+    if len(users_test) == 0:
+      schema = [
+        bigquery.SchemaField(name="user", field_type="STRING"),
+        bigquery.SchemaField(name="status", field_type="INT64"),
+      ]
+      self._ensure_table(test_table_name, schema)
+    else:
+      # add 'status' column (empty for all rows)
+      users_test = users_test.assign(status=None).astype({"status": 'Int64'})
+      pandas_gbq.to_gbq(users_test, test_table_name, project_id, if_exists='replace')
 
     control_table_name = self._get_user_segment_table_full_name(target, audience.table_name, 'control', suffix)
-    pandas_gbq.to_gbq(users_control, control_table_name, project_id, if_exists='replace')
+    if len(users_control) == 0:
+      schema = [
+        bigquery.SchemaField(name="user", field_type="STRING"),
+      ]
+      self._ensure_table(control_table_name, schema)
+    else:
+      pandas_gbq.to_gbq(users_control, control_table_name, project_id, if_exists='replace')
     logger.info(f'Sampled users for audience {audience.name} saved to {test_table_name}/{control_table_name} tables')
 
 
@@ -493,7 +506,6 @@ FROM `{audience_table_name}`
         bigquery.SchemaField('user', 'STRING', mode='REQUIRED')
       ]
       table_ref = bigquery.TableReference.from_string(table_name_failed, self.config.project_id)
-      #table_ref = self.bq_client.dataset(target.bq_dataset_id).table(table_name_failed)
       table = bigquery.Table(table_ref, schema=schema)
       table = self.bq_client.create_table(table, exists_ok=True)
       rows_to_insert = [{'user': user_id} for user_id in failed_users]

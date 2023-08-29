@@ -18,6 +18,7 @@ from typing import Any, Callable
 from google import oauth2
 import json
 import os
+import math
 import argparse
 import decimal
 from datetime import datetime, date
@@ -27,6 +28,7 @@ from flask import Flask, request, jsonify, abort, send_from_directory, Response
 from flask.json.provider import DefaultJSONProvider
 from flask_cors import CORS
 from gaarf.api_clients import GoogleAdsApiClient
+import pandas as pd
 import statsmodels.stats.proportion as proportion
 
 from env import IS_GAE
@@ -200,8 +202,9 @@ def setup_connect_ga4():
     target.ga4_project = ga4_project
     target.ga4_dataset = ga4_dataset
     target.ga4_table = ga4_table
+    sa = f"{context.config.project_id}@appspot.gserviceaccount.com"
     return jsonify({"error": {
-      "message": "Incorrect GA4 table name"
+      "message": f"Incorrect GA4 table name or the application's service account ({sa}) doesn't have access permission to the BigQuery dataset. Original error: {e}"
     }}), 400
 
 
@@ -314,8 +317,8 @@ def run_sampling() -> Response:
       users_test, users_control = do_sampling(df)
     else:
       # create empty tables for test and control users so other queries wouldn't fail
-      users_control = []
-      users_control = []
+      users_test = pd.DataFrame(columns=['user'])
+      users_control = pd.DataFrame(columns=['user'])
 
     context.data_gateway.save_sampled_users(context.target, audience, users_test, users_control)
     result[audience.name] = {
@@ -448,8 +451,11 @@ def get_audiences_status():
 
   audiences = context.data_gateway.get_audiences(context.target)
   audiences_log = context.data_gateway.get_audiences_log(context.target)
-  jobs_status = ads_gateway.get_userlist_jobs_status()
-  logger.debug(jobs_status)
+  user_lists = [i.user_list for i in audiences if i.user_list]
+  jobs_status = ads_gateway.get_userlist_jobs_status(user_lists)
+  logger.debug(f"Loaded {len(jobs_status)} offline jobs, showing first 20:")
+  if logger.isEnabledFor(logger.level):
+    logger.debug(jobs_status[:20])
   # resource_name, status, failure_reason, user_list
 
   # now we'll join all three info sources (audiences, audiences_logs, jobs_status)
@@ -501,6 +507,7 @@ def get_user_conversions():
 
   audiences = context.data_gateway.get_audiences(context.target)
   audience_name = request.args.get('audience')
+  logger.info(f"Calculating conversions graph for '{audience_name}' audience and {date_start}-{date_end} timeframe")
   results = {}
   pval = None
   chi = None
@@ -509,24 +516,26 @@ def get_user_conversions():
       continue
     result, date_start, date_end = context.data_gateway.get_user_conversions(context.target, audience, date_start, date_end)
     # the result is a list of columns: date, cum_test_regs, cum_control_regs, total_user_count, total_control_user_count
-    results[audience.name] = result
 
     array_conversions = [ [i["cum_test_regs"], i["cum_control_regs"]] for i in result]
     array_users = [ [i["total_user_count"], i["total_control_user_count"]] for i in result]
 
     logger.debug(f"Calculating pval for\nconversions: {array_conversions}\nnumber of users: {array_users}")
     chi, pval, res = proportion.proportions_chisquare(array_conversions, array_users)
-    logger.debug(f"Calculated pval for\nconversions: {array_conversions}\nnumber of users: {array_users}")
+    logger.debug(f"Calculated pval: {pval}, chi: {chi}")
 
+    results[audience.name] = {
+      "conversions": result,
+      "date_start": date_start.strftime("%Y-%m-%d"),
+      "date_end": date_end.strftime("%Y-%m-%d"),
+      "pval": pval if not math.isnan(pval) and not math.isfinite(pval) else None,
+      "chi": chi if not math.isnan(chi) and not math.isinf(chi) else None,
+    }
     if audience_name and audience.name == audience_name:
       break
 
   return jsonify({
-      "results": results,
-      "date_start": date_start.strftime("%Y-%m-%d"),
-      "date_end": date_end.strftime("%Y-%m-%d"),
-      "pval": pval,
-      "chi": chi
+      "results": results
     })
 
 

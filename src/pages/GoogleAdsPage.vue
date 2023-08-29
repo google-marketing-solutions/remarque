@@ -471,21 +471,22 @@ export default defineComponent({
       const loading = () => $q.loading.hide();
       try {
         let res = await getApi('audiences/conversions', { audience: audienceName, date_start, date_end }, loading);
-        const all_conversions = res.data.results;
-        let conversions;
-        if (all_conversions) {
-          conversions = all_conversions[audienceName]
+        const results = res.data.results;
+        let result;
+        if (results) {
+          result = results[audienceName]
         }
-        if (!conversions) {
+        if (!result) {
           $q.dialog({
             title: audienceName,
             message: 'The audience has no conversions',
           });
           return;
         }
-        // we expect an object with fields: date, cum_test_regs, cum_control_regs
-        console.log(conversions);
-        return { data: conversions, start_date: res.data.date_start, end_date: res.data.date_end, pval: res.data.pval };
+        // 'result' object for a particular audience is expected to be: conversions, date_start, date_end, pval, chi
+        // 'result.conversions' is an array of objects with fields: date, cum_test_regs, cum_control_regs
+        console.log(result);
+        return { data: result.conversions, start_date: result.date_start, end_date: result.date_end, pval: result.pval };
       }
       catch (e: any) {
         $q.dialog({

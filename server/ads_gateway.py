@@ -15,6 +15,7 @@
  """
 
 from enum import Enum
+from typing import Union
 from google.ads.googleads.errors import GoogleAdsException
 #from google.ads.googleads.client import GoogleAdsClient  # type: ignore
 import smart_open
@@ -254,14 +255,17 @@ class AdsGateway:
         return operations
 
 
-    def get_userlist_jobs_status(self, userlist_resource_name = None) -> list[dict]:
+    def get_userlist_jobs_status(self, userlist: Union[str,list] = None) -> list[dict]:
       """Returns a list of jobs statuses with the columns:
           * resource_name
           * status
           * failure_reason
           * user_list
+        Args:
+          userlist - a list of user lists resource names or a resource name of a user list,
+                     or None to load all user lists
       """
-      report = self.report_fetcher.fetch(OfflineJobQuery(userlist_resource_name))
+      report = self.report_fetcher.fetch(OfflineJobQuery(userlist))
       jobs = []
       for item in report:
           job_dict = {
@@ -271,5 +275,6 @@ class AdsGateway:
               "user_list": item.user_list
           }
           jobs.append(job_dict)
+      logger.debug(f"Loaded {len(jobs)} jobs")
       return jobs
 

@@ -85,11 +85,13 @@ SELECT
   SUM(control_regs) OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cum_control_regs,
   coalesce(t.total_user_count,
     LAST_VALUE(t.total_user_count IGNORE NULLS)
-    OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)
+    OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
+    0
   ) AS total_user_count,
   coalesce(t.total_control_user_count,
     LAST_VALUE(t.total_control_user_count IGNORE NULLS)
-    OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)
+    OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
+    0
   ) AS total_control_user_count
 FROM grouped_conversions c
   LEFT JOIN total_counts t ON c.date = t.day

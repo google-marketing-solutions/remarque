@@ -14,6 +14,7 @@
  limitations under the License.
  """
 
+from typing import Union
 from gaarf.base_query import BaseQuery
 
 class UserListQuery(BaseQuery):
@@ -36,7 +37,7 @@ class OfflineJobQuery(BaseQuery):
     * failure_reason
     * user_list
   """
-  def __init__(self, list_resource_name: str):
+  def __init__(self, list_name: Union[str,list]):
     self.query_text = f"""
 SELECT
 offline_user_data_job.resource_name AS resource_name,
@@ -44,9 +45,12 @@ offline_user_data_job.status AS status,
 offline_user_data_job.failure_reason AS failure_reason,
 offline_user_data_job.customer_match_user_list_metadata.user_list AS user_list
 FROM offline_user_data_job"""
-    if list_resource_name:
-      condition = f"offline_user_data_job.customer_match_user_list_metadata.user_list = '{list_resource_name}'"
+    if list_name and isinstance(list_name, str):
+      condition = f"offline_user_data_job.customer_match_user_list_metadata.user_list = '{list_name}'"
     # otherwise return all jobs for customer match lists
+    elif list_name and isinstance(list_name, list):
+      parts = [f"'{i}'" for i in list_name]
+      condition = f"offline_user_data_job.customer_match_user_list_metadata.user_list IN ({','.join(parts)})"
     else:
       condition = "offline_user_data_job.type = CUSTOMER_MATCH_USER_LIST"
     self.query_text = self.query_text + '\nWHERE\n' + condition

@@ -84,7 +84,7 @@ deploy_files() {
 
   GCS_BUCKET=gs://${PROJECT_ID}/remarque
   gsutil cp app.yaml $GCS_BUCKET/
-  gsutil cp config.json $GCS_BUCKET/
+  #gsutil cp config.json $GCS_BUCKET/
   echo -e "${COLOR}Files were deployed to ${GCS_BUCKET}${NC}"
 }
 
