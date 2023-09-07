@@ -157,6 +157,8 @@
           <div class="q-pa-md">
             <q-btn label="Update" @click="onAudienceFormSave" color="primary" />
             <q-btn label="Reset" type="reset" color="primary" flat class="q-ml-sm" />
+            <q-btn label="Preview" @click="onAudiencePreview" flat class="q-ml-sm" />
+            <q-btn label="Get Query" @click="onAudienceGetQuery" flat class="q-ml-sm" />
           </div>
         </q-form>
       </q-card-section>
@@ -173,8 +175,9 @@
             </template>
             <template v-slot:body-cell-mode="props">
               <q-td :props="props">
-                <q-chip :color="props.row.mode === 'off' ? 'red' : 'green'" text-color="white" dense class="text-weight-bolder"
-                  square>{{ props.row.mode === 'off' ? 'Off' : props.row.mode === 'test' ? 'Test ': 'Prod' }}</q-chip>
+                <q-chip :color="props.row.mode === 'off' ? 'red' : 'green'" text-color="white" dense
+                  class="text-weight-bolder" square>{{ props.row.mode === 'off' ? 'Off' : props.row.mode === 'test' ?
+                    'Test ' : 'Prod' }}</q-chip>
               </q-td>
             </template>
 
@@ -194,11 +197,15 @@
 .period-card {
   padding: 0px 10px;
 }
+
+.text-pre {
+  white-space: pre-wrap;
+}
 </style>
 
 <script lang="ts">
 import { defineComponent, ref, watch, computed } from 'vue';
-import { configurationStore } from 'stores/configuration';
+import { AudienceInfo, AudienceMode, configurationStore } from 'stores/configuration';
 import { getApi, postApi } from 'boot/axios';
 import { QForm, useQuasar } from 'quasar';
 import { formatArray } from '../helpers/utils';
@@ -257,8 +264,8 @@ export default defineComponent({
       allEventsSelect: [] as string[],
       events_include: ['first_open'] as string[],
       events_exclude: [] as string[],
-      days_ago_start: undefined,//store.days_ago_start,
-      days_ago_end: undefined, //store.days_ago_end,
+      days_ago_start: undefined,
+      days_ago_end: undefined,
       user_list: ''
     });
     const audienceForm = ref(null as unknown as QForm);
@@ -347,10 +354,7 @@ export default defineComponent({
         return row['country'].toLowerCase().includes(term.toLowerCase());
       })
     }
-
-    // Audiences
-    const saveAudience = () => {
-      let idx = data.value.audiences.findIndex(val => val.name === audience.value.name);
+    function getAudienceFromForm(): AudienceInfo {
       const obj = {
         name: audience.value.name?.trim(),
         app_id: audience.value.app_id?.trim(),
@@ -360,18 +364,11 @@ export default defineComponent({
         days_ago_start: audience.value.days_ago_start || store.days_ago_start || 0,
         days_ago_end: audience.value.days_ago_end || store.days_ago_end || 0,
         user_list: audience.value.user_list,
-        mode: audience.value.mode,
+        mode: <AudienceMode>audience.value.mode,
       }
-      if (idx >= 0) {
-        // updating
-        Object.assign(store.audiences[idx], obj);
-      } else {
-        // creating new
-        store.audiences.push(obj);
-      }
-      // clear the form
-      onAudienceFormReset();
+      return obj;
     }
+    // Audiences
     const onAudienceFormSave = () => {
       audienceForm.value.validate().then(success => {
         audience.value.name = audience.value.name.trim().replaceAll(' ', '_');
@@ -399,9 +396,21 @@ export default defineComponent({
             saveAudience();
           }
           // TODO: check events
-          //saveAudience();
         }
       });
+    }
+    const saveAudience = () => {
+      let idx = data.value.audiences.findIndex(val => val.name === audience.value.name);
+      const obj = getAudienceFromForm();
+      if (idx >= 0) {
+        // updating
+        Object.assign(store.audiences[idx], obj);
+      } else {
+        // creating new
+        store.audiences.push(obj);
+      }
+      // clear the form
+      onAudienceFormReset();
     }
     const onAudienceFormReset = () => {
       audience.value.name = '';
@@ -424,6 +433,51 @@ export default defineComponent({
         audience.value.allEventsSelect = audience.value.allEvents.filter(r => r.toLowerCase().includes(val?.toLowerCase()));
       });
     }
+    const onAudiencePreview = async () => {
+      $q.loading.show({ message: 'Getting a preview of the audience...' });
+      const loading = () => $q.loading.hide();
+      const obj = getAudienceFromForm();
+      //$q.notify({ message: 'Audiences successfully updated', icon: 'success', timeout: 1000 });
+      try {
+        let res = await postApi('audiences/preview', { audience: obj }, loading);
+        console.log(res.data);
+        $q.dialog({
+          title: 'Audience preview',
+          message: `The audience with current conditions returned ${res.data.users_count} users`
+        });
+      }
+      catch (e: any) {
+        $q.dialog({
+          title: 'Error',
+          message: e.message,
+        });
+      }
+
+    };
+    const onAudienceGetQuery = async () => {
+      const loading = () => $q.loading.hide();
+      const obj = getAudienceFromForm();
+      try {
+        let res = await postApi('audiences/get_query', { audience: obj }, loading);
+        console.log(res.data.query);
+        $q.dialog({
+          title: 'SQL Query for the audience',
+          message: res.data.query,
+          ok: {
+            push: true
+          },
+          class: 'text-pre',
+          fullWidth: true
+        });
+      }
+      catch (e: any) {
+        $q.dialog({
+          title: 'Error',
+          message: e.message,
+        });
+      }
+    };
+
     const onAudienceListEdit = (props: any) => {
       Object.assign(audience.value, props.row);
     }
@@ -493,6 +547,8 @@ export default defineComponent({
       audience,
       onAudienceFormSave,
       onAudienceFormReset,
+      onAudiencePreview,
+      onAudienceGetQuery,
       onAudienceFilterCountries,
       onAudienceFilterEvents,
       onAudienceListEdit,

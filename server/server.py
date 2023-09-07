@@ -247,12 +247,30 @@ def update_audiences():
   return jsonify({"results": results})
 
 
-@app.route("/api/audiences/user_counts", methods=["POST"])
+@app.route("/api/audiences/preview", methods=["POST"])
 def calculate_users_for_audiences():
   context = create_context()
-  audiences = context.data_gateway.get_audiences(context.target)
-  results = context.data_gateway.calculate_users_for_audiences(context.target, audiences)
-  return jsonify({"results": results})
+  pprint(request.args)
+  params = request.get_json(force=True)
+  audience_raw = params["audience"]
+  logger.info("Previewing audience")
+  logger.debug(audience_raw)
+  audience = Audience.from_dict(audience_raw)
+  df = context.data_gateway.fetch_audience_users(context.target, audience)
+  # NOTE: we can return all users data if needed
+  return jsonify({"users_count": len(df)})
+
+
+@app.route("/api/audiences/get_query", methods=["POST"])
+def get_query_for_audience() -> Response:
+  context = create_context()
+  params = request.get_json(force=True)
+  audience_raw = params["audience"]
+  logger.info("Previewing audience")
+  logger.debug(audience_raw)
+  audience = Audience.from_dict(audience_raw)
+  query = context.data_gateway.get_audience_sampling_query(context.target, audience)
+  return jsonify({"query": query})
 
 
 @app.route("/api/process", methods=["POST"])

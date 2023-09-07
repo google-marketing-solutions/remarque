@@ -41,7 +41,7 @@ async function postApi(url: string, params: any, loading?: () => void) {
     if (e.response && e.response.data) {
       const debugInfo = e.response.data.error?.debugInfo;
       e = new Error(e.response.data.error?.message || e.response.data.error);
-      console.log(debugInfo);
+      console.error(debugInfo);
       e.debugInfo = debugInfo;
     }
     throw e;
@@ -58,7 +58,7 @@ async function getApi(url: string, params?: any, loading?: () => void) {
     if (e.response && e.response.data) {
       const debugInfo = e.response.data.error?.debugInfo;
       e = new Error(e.response.data.error?.message || e.response.data.error);
-      console.log(debugInfo);
+      console.error(debugInfo);
       e.debugInfo = debugInfo;
     }
     throw e;

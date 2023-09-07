@@ -46,6 +46,10 @@ class Audience:
     self.events_include = []
     self.events_exclude = []
 
+  def ensure_table_name(self):
+    if not self.table_name:
+      self.table_name = 'audience_' + self.name
+
   def to_dict(self) -> dict:
     res = {
       "name": self.name,

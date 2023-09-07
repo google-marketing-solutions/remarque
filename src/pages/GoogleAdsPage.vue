@@ -508,13 +508,18 @@ export default defineComponent({
       data.value.conversions_to = conversions.end_date;
       data.value.pval = conversions.pval;
 
-      const test_data = [] as any[];
-      const control_data = [] as any[];
+      let graph_data = {} as Record<string, any>;
+      // TODO: should we limit graph with on X axis back only N days from the end date?
       for (const item of conversions.data) {
         const label = formatDate(new Date(item.date));
-        test_data.push({ x: label, y: item.cum_test_regs });
-        control_data.push({ x: label, y: item.cum_control_regs });
+        // NOTE: dates should not repeat otherwise there will be no graph
+        graph_data[label] = {
+          test: item.cum_test_regs,
+          control: item.cum_control_regs
+        };
       }
+      const test_data = Object.entries(graph_data).map(item => { return { x: item[0], y: item[1].test }; });
+      const control_data = Object.entries(graph_data).map(item => { return { x: item[0], y: item[1].control }; });
       data.value.chart.series = [
         { name: 'treatment', data: test_data },
         { name: 'control', data: control_data },

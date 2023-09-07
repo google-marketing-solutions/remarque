@@ -1,4 +1,3 @@
-CREATE OR REPLACE TABLE `{destination_table}` AS
 WITH
   commonData AS (
     SELECT

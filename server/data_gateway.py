@@ -293,8 +293,7 @@ FROM `{target.bq_dataset_id}.audiences`"""
     for i in to_create + to_update:
       name = i.name
       # TODO: 1) validate name 2) generate table name
-      if not i.table_name:
-        i.table_name = 'audience_' + i.name
+      i.ensure_table_name()
 
     selects = []
     for i in to_create + to_update:
@@ -353,13 +352,7 @@ WHEN NOT MATCHED THEN
     self.bq_client.delete_table(table_name, not_found_ok=True)
 
 
-  def calculate_users_for_audiences(self, target: ConfigTarget, audience: Audience):
-    pass
-
-
-  def fetch_audience_users(self, target: ConfigTarget, audience: Audience, suffix: str = None):
-    """Segment an audience - takes a audience desrciption and fetches the users from GA4 events according to the conditions.
-    """
+  def get_audience_sampling_query(self, target: ConfigTarget, audience: Audience):
     days_ago_start = audience.days_ago_start
     days_ago_end = audience.days_ago_end
     day_start = (datetime.now() - timedelta(days=days_ago_start)).strftime("%Y%m%d")
@@ -386,15 +379,12 @@ WHEN NOT MATCHED THEN
 
     script_path = os.path.realpath(__file__)
     script_dir = os.path.dirname(script_path)
+    # TODO: support custom queries for audiences
     filename = os.path.join(script_dir, 'prepare.sql')
     with open(filename) as f:
       query = f.read()
 
-    # create table
-    suffix = datetime.now().strftime("%Y%m%d") if suffix is None else suffix
-    destination_table = target.bq_dataset_id + '.' + audience.table_name + "_" + suffix
     query = query.format(**{
-      "destination_table": destination_table,
       "source_table": self.get_ga4_table_name(target, True),
       "day_start": day_start,
       "day_end": day_end,
@@ -403,6 +393,18 @@ WHEN NOT MATCHED THEN
       "all_events_list": all_events_list,
       "SEARCH_CONDITIONS": search_condition
     })
+    return query
+
+
+  def fetch_audience_users(self, target: ConfigTarget, audience: Audience, suffix: str = None):
+    """Segment an audience - takes a audience desrciption and fetches the users from GA4 events according to the conditions.
+    """
+    suffix = datetime.now().strftime("%Y%m%d") if suffix is None else suffix
+    audience.ensure_table_name()
+    destination_table = target.bq_dataset_id + '.' + audience.table_name + "_" + suffix
+    query = self.get_audience_sampling_query(target, audience)
+    query = f"CREATE OR REPLACE TABLE `{destination_table}` AS\n" + query
+
     # TODO: we can add a column is_test into prepare.sql and update it after sampling,
     # but before doing it make sure do_sampling function correctly handles additional columns (hint: it doesn't)!
     self.execute_query(query)
