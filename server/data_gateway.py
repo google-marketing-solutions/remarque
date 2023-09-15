@@ -15,7 +15,7 @@
  """
 
 import os
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Tuple, Literal
 from google.auth import credentials
 from google.cloud import bigquery
@@ -32,6 +32,8 @@ from logger import logger
 from config import Config, ConfigTarget, Audience
 from bigquery_utils import CloudBigQueryUtils
 from utils import format_duration
+
+TABLE_USER_NORMALIZED = 'users_normalized'
 
 AudienceLog = namedtuple(
   'AudienceLog',
@@ -67,6 +69,7 @@ class DataGateway:
        bigquery.SchemaField(name="user_list", field_type="STRING"),
        bigquery.SchemaField(name="created", field_type="TIMESTAMP"),
        bigquery.SchemaField(name="mode", field_type="STRING"),
+       bigquery.SchemaField(name="query", field_type="STRING", mode="NULLABLE"),
     ]
     table_name = f"{target.bq_dataset_id}.audiences"
     self._ensure_table(table_name, schema)
@@ -138,7 +141,9 @@ class DataGateway:
 
   def execute_query(self, query: str) -> list[dict]:
     ts_start = datetime.now()
-    logger.debug(f'Executing SQL query: {query}')
+    lines = [f"{i}: {line.strip()}" for i, line in enumerate(query.strip().split('\n'), start=1)]
+    query_logged = "\n".join(lines)
+    logger.debug(f'Executing SQL query: \n{query_logged}')
     results = self.bq_client.query(query).result()
     # TODO: check exception: e.errors[0].reason == 'invalidQuery'
     fields = [field.name for field in results.schema]
@@ -238,8 +243,10 @@ ORDER BY 1, 3 DESC
   def get_audiences(self, target: ConfigTarget) -> list[Audience]:
     query = f"""
 SELECT
-  name, app_id, table_name, countries, events_include, events_exclude, days_ago_start, days_ago_end, user_list, created, mode
-FROM `{target.bq_dataset_id}.audiences`"""
+  name, app_id, table_name, countries, events_include, events_exclude, days_ago_start, days_ago_end, user_list, created, mode, query
+FROM `{target.bq_dataset_id}.audiences`
+ORDER BY created
+"""
     rows = self.execute_query(query)
     audiences = []
     for row in rows:
@@ -255,6 +262,7 @@ FROM `{target.bq_dataset_id}.audiences`"""
       audience.user_list = row['user_list']
       audience.created = row['created']
       audience.mode = row['mode']
+      audience.query = row['query']
       audiences.append(audience)
     return audiences
 
@@ -263,7 +271,6 @@ FROM `{target.bq_dataset_id}.audiences`"""
     table_name = f"{target.bq_dataset_id}.audiences"
     audiences = audiences or []
     audiences_old = self.get_audiences(target)
-    #rows = list(self.bq_client.list_rows(table_name))
     logger.debug("Current audiences:")
     logger.debug(audiences_old)
     to_remove: list[Audience] = []
@@ -296,15 +303,20 @@ FROM `{target.bq_dataset_id}.audiences`"""
       i.ensure_table_name()
 
     selects = []
+    query_params = []
+    idx = 0
     for i in to_create + to_update:
+      idx += 1
+      query_params.append(bigquery.ScalarQueryParameter("query" + str(idx), "STRING", i.query))
       selects.append(
         f"""SELECT '{i.name}' name, '{i.app_id}' app_id,
-  {"'" + i.table_name + "'" if i.table_name is not None else "NULL"} table_name,
+  {"'" + i.table_name + "'"} table_name,
   {i.countries} countries,
   {i.events_include} events_include, {i.events_exclude} events_exclude,
   {i.days_ago_start} days_ago_start, {i.days_ago_end} days_ago_end,
   {"'" + i.user_list + "'" if i.user_list is not None else "CAST(NULL as STRING)"} user_list,
-  {"'" + i.mode + "'"} mode
+  {"'" + i.mode + "'"} mode,
+  @query{idx} query
 """)
     sql_selects = "\nUNION ALL\n".join(selects)
     query = f"""
@@ -324,13 +336,16 @@ WHEN MATCHED THEN
       when s.user_list IS NULL THEN t.user_list
       ELSE s.user_list
     END,
-    t.mode = s.mode
+    t.mode = s.mode,
+    t.query = s.query
 WHEN NOT MATCHED THEN
-  INSERT (name, app_id, table_name, countries, events_include, events_exclude, days_ago_start, days_ago_end, created, mode)
-  VALUES (s.name, s.app_id, s.table_name, s.countries, s.events_include, s.events_exclude, s.days_ago_start, s.days_ago_end, CURRENT_TIMESTAMP(), s.mode)
+  INSERT (name, app_id, table_name, countries, events_include, events_exclude, days_ago_start, days_ago_end, created, mode, query)
+  VALUES (s.name, s.app_id, s.table_name, s.countries, s.events_include, s.events_exclude, s.days_ago_start, s.days_ago_end, CURRENT_TIMESTAMP(), s.mode, s.query)
 """
     logger.debug(query)
-    self.bq_client.query(query).result()
+    job_config = bigquery.QueryJobConfig()
+    job_config.query_parameters = query_params
+    self.bq_client.query(query, job_config=job_config).result()
 
     # delete removed audiences
     sql_names_to_delete = ",".join([ "'" + item.name + "'" for item in to_remove])
@@ -352,6 +367,15 @@ WHEN NOT MATCHED THEN
     self.bq_client.delete_table(table_name, not_found_ok=True)
 
 
+  def _read_file(self, filename):
+    script_path = os.path.realpath(__file__)
+    script_dir = os.path.dirname(script_path)
+    filename = os.path.join(script_dir, filename)
+    with open(filename) as f:
+      query = f.read()
+    return query
+
+
   def get_audience_sampling_query(self, target: ConfigTarget, audience: Audience):
     days_ago_start = audience.days_ago_start
     days_ago_end = audience.days_ago_end
@@ -362,8 +386,8 @@ WHEN NOT MATCHED THEN
     countries = ",".join([f"'{c}'" for c in audience.countries])
     events_include = audience.events_include or []
     events_exclude = audience.events_exclude or []
-    if not 'first_open' in events_include:
-      events_include = ['first_open'] + events_include
+    # if not 'first_open' in events_include:
+    #   events_include = ['first_open'] + events_include
     if not 'app_remove' in events_exclude:
       events_exclude = ['app_remove'] + events_exclude
 
@@ -373,16 +397,14 @@ WHEN NOT MATCHED THEN
 
     all_events_list = ", ".join([f"'{event}'" for event in all_events])
     search_condition = \
-      " AND ".join([f"'{event}' IN UNNEST(i.events)" for event in events_include]) + \
+      " AND ".join([f"'{event}' IN UNNEST(events)" for event in events_include]) + \
       " AND " + \
-      " AND ".join([f"'{event}' NOT IN UNNEST(i.events)" for event in events_exclude])
+      " AND ".join([f"'{event}' NOT IN UNNEST(events)" for event in events_exclude])
 
-    script_path = os.path.realpath(__file__)
-    script_dir = os.path.dirname(script_path)
-    # TODO: support custom queries for audiences
-    filename = os.path.join(script_dir, 'prepare.sql')
-    with open(filename) as f:
-      query = f.read()
+    if audience.query:
+      query = audience.query
+    else:
+      query = self._read_file('prepare.sql')
 
     query = query.format(**{
       "source_table": self.get_ga4_table_name(target, True),
@@ -390,10 +412,38 @@ WHEN NOT MATCHED THEN
       "day_end": day_end,
       "app_id": audience.app_id,
       "countries": countries,
+      "all_users_table": target.bq_dataset_id + "." + TABLE_USER_NORMALIZED,
       "all_events_list": all_events_list,
       "SEARCH_CONDITIONS": search_condition
     })
     return query
+
+
+  def _create_users_normalized_table(self, target: ConfigTarget):
+    query = self._read_file('prepare_users.sql')
+    query = query.format(**{
+      "source_table": self.get_ga4_table_name(target, True),
+    })
+    destination_table = target.bq_dataset_id + '.' + TABLE_USER_NORMALIZED
+    query = f"CREATE OR REPLACE TABLE `{destination_table}` AS\n" + query
+    self.execute_query(query)
+    #now we should have `users_normalized` table
+
+
+  def ensure_user_normalized(self, target: ConfigTarget):
+    to_create = False
+    creation_time = self.bq_utils.get_table_creation_time(target.bq_dataset_id, TABLE_USER_NORMALIZED)
+    if creation_time:
+      logger.info(f"user_normalized table exists, creation time: {creation_time}")
+      if creation_time.date() != datetime.now(timezone.utc).date():
+        # table was created not today
+        logger.debug(f"Table user_normalized needs to be recreated")
+        to_create = True
+    else:
+      to_create = True
+    if to_create:
+      logger.info(f"Recreating user_normalized table")
+      self._create_users_normalized_table(target)
 
 
   def fetch_audience_users(self, target: ConfigTarget, audience: Audience, suffix: str = None):

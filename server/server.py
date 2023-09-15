@@ -314,7 +314,13 @@ def update_schedule():
 
 @app.route("/api/sampling/run", methods=["GET", "POST"])
 def run_sampling() -> Response:
+  """
+  Samples audiences. For each audience it does the following:
+    - fetch users according to the audience definition
+    - do sampling, i.e. split users onto test and control groups
+  """
   context = create_context()
+  context.data_gateway.ensure_user_normalized(context.target)
   audiences = context.data_gateway.get_audiences(context.target)
   result = {}
   logger.debug(f"Loaded {len(audiences)} audiences")

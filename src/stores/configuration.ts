@@ -16,7 +16,8 @@ export interface AudienceInfo {
   days_ago_end: number;
   user_list: string;
   user_count?: number;
-  mode: AudienceMode
+  mode: AudienceMode;
+  query: string;
 }
 export enum States {
   Initial,

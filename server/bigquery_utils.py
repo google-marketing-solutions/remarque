@@ -73,3 +73,12 @@ class CloudBigQueryUtils:
       return self.client.get_dataset(fully_qualified_dataset_id)
     except exceptions.NotFound:
       pass
+
+
+  def get_table_creation_time(self, dataset_id, table_id):
+    try:
+      table = self.client.get_table(f"{self.project_id}.{dataset_id}.{table_id}")
+    except exceptions.NotFound:
+      return None
+    creation_time = table.created
+    return creation_time

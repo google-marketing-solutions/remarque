@@ -40,6 +40,7 @@ class Audience:
   user_list = ''
   created = None
   mode: Literal['off']|Literal['test']|Literal['prod'] = 'off'
+  query = ''
 
   def __init__(self) -> None:
     self.countries = []
@@ -64,6 +65,7 @@ class Audience:
       "user_list": self.user_list,
       "created": self.created,
       "mode": self.mode,
+      "query": self.query,
     }
     return res
 
@@ -89,6 +91,7 @@ class Audience:
     self.user_list = dict.get("user_list", None)
     self.created = dict.get("created", None)
     self.mode = dict.get("mode", 'off')
+    self.query = dict.get("query", None)
     return self
 
 

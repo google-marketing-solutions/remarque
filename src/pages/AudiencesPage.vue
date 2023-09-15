@@ -92,8 +92,8 @@
     <q-card class="q-mt-md audiences-card" flat bordered>
       <q-card-section>
         <div class="text-h6">Audiences</div>
-        <div>
-          <q-banner class="bg-grey-3">
+        <div class="row" style="width: 100%">
+          <q-banner class="col-12 bg-grey-3">
             <template v-slot:avatar>
               <q-icon name="warning" color="warning" />
             </template>
@@ -121,7 +121,7 @@
                 hint="Countries to include in the audience. To see available countries load your GA4 statistics"
                 new-value-mode="add-unique" />
 
-              <div class="col-3 q-mt-md q-gutter-md1">
+              <div>
                 <label class="q-mt-md" style="margin-left: 12px; margin-right: 12px;">Mode</label>
                 <q-btn-toggle class="" v-model="audience.mode" no-wrap outline
                   :toggle-color="audience.mode == 'off' ? 'red' : audience.mode == 'test' ? 'blue' : 'green'" :options="[
@@ -135,8 +135,7 @@
               <div>
                 <q-select filled v-model="audience.events_include" :options="audience.allEventsSelect"
                   @filter="onAudienceFilterEvents" use-input use-chips multiple input-debounce="0"
-                  label="Events to include" hint="GA4 events that happened for users (first_open always included)"
-                  new-value-mode="add-unique" />
+                  label="Events to include" hint="GA4 events that happened for users" new-value-mode="add-unique" />
               </div>
               <div>
                 <q-select filled v-model="audience.events_exclude" :options="audience.allEventsSelect"
@@ -150,6 +149,11 @@
                     placeholder="" hint="days ago" />
                   <q-input class="col-3 q-gutter-md1" outlined v-model="audience.days_ago_end" label="Period end"
                     placeholder="" hint="days ago" />
+                </div>
+              </div>
+              <div class="row">
+                <div class="col" style="display: inline; margin-left: 50px; text-align: right;" alaign="right">
+                  <q-btn @click="data.showEditQueryDialog = true">Customize Query</q-btn>
                 </div>
               </div>
             </div>
@@ -180,7 +184,11 @@
                     'Test ' : 'Prod' }}</q-chip>
               </q-td>
             </template>
-
+            <template v-slot:body-cell-query="props">
+              <q-td :props="props">
+                <q-icon name="check" color="red" size="sm" v-if="props.row.query" />
+              </q-td>
+            </template>
           </q-table>
         </div>
       </q-card-section>
@@ -191,6 +199,51 @@
       </q-card-actions>
     </q-card>
   </q-page>
+
+  <q-dialog v-model="data.showEditQueryDialog">
+    <q-card style="width: 1200px; max-width: 80%" class="q-px-sm q-pb-md">
+      <q-card-section>
+        <div class="text-h6">Customize audience query</div>
+      </q-card-section>
+      <q-card-section>
+        <div class="text-body1">A query to customize user audience. It will be executed to fetch user ids and
+          attributes. It will be used as a subquery for <code>CREATE OR REPLACE TABLE `destination_table` AS</code>,
+          where destination_table is the name of audience table (audience_{name})<br>
+          <q-expansion-item label="Details">
+            Query must return the following columns:<br>
+            <ul>
+              <li><code>user</code> - user id, i.e. device.advertising_id</li>
+              <li><code>brand</code> - device.mobile_brand_name</li>
+              <li><code>osv</code> - device.operating_system_version</li>
+              <li><code>days_since_install</code> - number of days between today and last first_open event</li>
+              <li><code>src</code> - traffic_source.source + "_" + traffic_source.medium</li>
+              <li><code>n_sessions</code> - number of session_start events for the period</li>
+            </ul>
+
+            Inside your query your can use macros in this format:
+            <code>{macro}</code>.<br>
+            The following macros are available:
+            <ul>
+              <li><code>source_table</code> - full name of a GA4 table</li>
+              <li><code>day_start</code> - start date of time window as yyyymmdd</li>
+              <li><code>day_end</code> - end date of time windiw as yyyymmdd</li>
+              <li><code>app_id</code> - app id from the audience definition</li>
+              <li><code>countries</code> - a list of countries from the audience definition</li>
+              <li><code>all_users_table</code> - fullyqualified name of the users_normalized table</li>
+              <li><code>all_events_list</code> - list of all events names from the audience definition</li>
+            </ul>
+          </q-expansion-item>
+        </div>
+      </q-card-section>
+      <q-card-section>
+        <q-input filled type="textarea" v-model="audience.query" autogrow />
+      </q-card-section>
+      <q-separator />
+      <q-card-actions align="right">
+        <q-btn label="Close" color="primary" @click="data.showEditQueryDialog = false" />
+      </q-card-actions>
+    </q-card>
+  </q-dialog>
 </template>
 
 <style>
@@ -207,7 +260,7 @@
 import { defineComponent, ref, watch, computed } from 'vue';
 import { AudienceInfo, AudienceMode, configurationStore } from 'stores/configuration';
 import { getApi, postApi } from 'boot/axios';
-import { QForm, useQuasar } from 'quasar';
+import { useQuasar, QForm, QInput, QDialog, QBtn } from 'quasar';
 import { formatArray } from '../helpers/utils';
 
 export default defineComponent({
@@ -218,6 +271,7 @@ export default defineComponent({
     const $q = useQuasar();
 
     const data = ref({
+      showEditQueryDialog: false,
       selectedAppId: [] as string[],
       selectedCountries: [] as any[],
       app_ids: [] as any[],
@@ -239,6 +293,7 @@ export default defineComponent({
         { name: 'name', label: 'Name', field: 'name', sortable: true },
         // { name: 'id', label: 'Id', field: 'id', sortable: true },
         { name: 'app_id', label: 'App id', field: 'app_id', sortable: true },
+        { name: 'query', label: 'Custom query', field: 'query' },
         { name: 'countries', label: 'Countries', field: 'countries', sortable: true, format: formatArray },
         { name: 'events_include', label: 'Include events', field: 'events_include', sortable: true, format: formatArray },
         { name: 'events_exclude', label: 'Exclude events', field: 'events_exclude', sortable: true, format: formatArray },
@@ -262,11 +317,12 @@ export default defineComponent({
       allCountriesSelect: [] as string[],
       allEvents: [] as string[],
       allEventsSelect: [] as string[],
-      events_include: ['first_open'] as string[],
+      events_include: [] as string[],
       events_exclude: [] as string[],
       days_ago_start: undefined,
       days_ago_end: undefined,
-      user_list: ''
+      user_list: '',
+      query: ''
     });
     const audienceForm = ref(null as unknown as QForm);
 
@@ -365,6 +421,7 @@ export default defineComponent({
         days_ago_end: audience.value.days_ago_end || store.days_ago_end || 0,
         user_list: audience.value.user_list,
         mode: <AudienceMode>audience.value.mode,
+        query: audience.value.query,
       }
       return obj;
     }
@@ -416,11 +473,12 @@ export default defineComponent({
       audience.value.name = '';
       audience.value.app_id = '';
       audience.value.countries = [];
-      audience.value.events_include = ['first_open'] as string[];
+      audience.value.events_include = [] as string[];
       audience.value.events_exclude = [] as string[];
       audience.value.days_ago_start = undefined;
       audience.value.days_ago_end = undefined;
       audience.value.mode = 'off';
+      audience.value.query = '';
       audienceForm.value.resetValidation();
     }
     const onAudienceFilterCountries = (val: string, doneFn: (callbackFn: () => void) => void, abortFn: () => void) => {
@@ -452,7 +510,6 @@ export default defineComponent({
           message: e.message,
         });
       }
-
     };
     const onAudienceGetQuery = async () => {
       const loading = () => $q.loading.hide();
@@ -499,6 +556,7 @@ export default defineComponent({
           days_ago_start: row.days_ago_start,
           days_ago_end: row.days_ago_end,
           mode: row.mode,
+          query: row.query,
           // NOTE: we're not sending id, user_list
         }
       });
