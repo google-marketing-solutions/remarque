@@ -182,6 +182,7 @@ FROM
   `{ga_table}`
 WHERE
     device.category = 'mobile'
+    AND app_info.id IS NOT NULL
     AND device.operating_system = 'Android'
     AND device.advertising_id IS NOT NULL
     AND device.advertising_id NOT IN ('', '00000000-0000-0000-0000-000000000000')
@@ -210,6 +211,7 @@ FROM
   `{ga_table}`
 WHERE
     device.category = 'mobile'
+    AND app_info.id IS NOT NULL
     AND device.operating_system = 'Android'
     AND device.advertising_id IS NOT NULL
     AND device.advertising_id NOT IN ('', '00000000-0000-0000-0000-000000000000')
@@ -377,8 +379,8 @@ WHEN NOT MATCHED THEN
 
 
   def get_audience_sampling_query(self, target: ConfigTarget, audience: Audience):
-    days_ago_start = audience.days_ago_start
-    days_ago_end = audience.days_ago_end
+    days_ago_start = int(audience.days_ago_start)
+    days_ago_end = int(audience.days_ago_end)
     day_start = (datetime.now() - timedelta(days=days_ago_start)).strftime("%Y%m%d")
     day_end = (datetime.now() - timedelta(days=days_ago_end)).strftime("%Y%m%d")
     logger.debug(f"Creating user segment for time window: {day_start} - {day_end}")
@@ -396,26 +398,38 @@ WHEN NOT MATCHED THEN
       all_events = ['session_start'] + all_events
 
     all_events_list = ", ".join([f"'{event}'" for event in all_events])
-    search_condition = \
-      " AND ".join([f"'{event}' IN UNNEST(events)" for event in events_include]) + \
-      " AND " + \
-      " AND ".join([f"'{event}' NOT IN UNNEST(events)" for event in events_exclude])
+    search_condition = ""
+    if events_include:
+      search_condition += " AND ".join([f"'{event}' IN UNNEST(events)" for event in events_include])
+    if search_condition:
+      search_condition += " AND "
+    if events_exclude:
+      search_condition += " AND ".join([f"'{event}' NOT IN UNNEST(events)" for event in events_exclude])
+    # search_condition = \
+    #   " AND ".join([f"'{event}' IN UNNEST(events)" for event in events_include]) + \
+    #   " AND " + \
+    #   " AND ".join([f"'{event}' NOT IN UNNEST(events)" for event in events_exclude])
 
     if audience.query:
       query = audience.query
+      logger.debug(f"Using customer audience query:\n{query}")
     else:
       query = self._read_file('prepare.sql')
 
-    query = query.format(**{
-      "source_table": self.get_ga4_table_name(target, True),
-      "day_start": day_start,
+    try:
+      query = query.format(**{
+        "source_table": self.get_ga4_table_name(target, True),
+        "day_start": day_start,
       "day_end": day_end,
       "app_id": audience.app_id,
       "countries": countries,
       "all_users_table": target.bq_dataset_id + "." + TABLE_USER_NORMALIZED,
-      "all_events_list": all_events_list,
-      "SEARCH_CONDITIONS": search_condition
-    })
+        "all_events_list": all_events_list,
+        "SEARCH_CONDITIONS": search_condition
+      })
+    except KeyError as e:
+      raise Exception(f"An error occured during substituting macros into audience query, unknown macro {e} was used")
+
     return query
 
 
@@ -457,6 +471,7 @@ WHEN NOT MATCHED THEN
 
     # TODO: we can add a column is_test into prepare.sql and update it after sampling,
     # but before doing it make sure do_sampling function correctly handles additional columns (hint: it doesn't)!
+    # TODO: parse error with line:column and add query with numbered lines into exception for easier diagnosis
     self.execute_query(query)
 
     df = self.load_sampled_users(destination_table)

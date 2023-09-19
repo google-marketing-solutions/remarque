@@ -26,6 +26,10 @@ import smart_open as smart_open
 from logger import logger
 from env import GAE_LOCATION
 
+class AppNotInitializedError(Exception):
+  def __init__(self) -> None:
+    super().__init__("Application is not initialized, please go to Configuration page and run setup")
+
 
 class Audience:
   name = ''
@@ -218,12 +222,20 @@ def get_config_url(args: argparse.Namespace):
   return config_file_name
 
 
-def get_config(args: argparse.Namespace) -> Config:
+def get_config(args: argparse.Namespace, fail_ok = False) -> Config:
   """ Read config file and merge settings from it, command line args and env vars."""
   config_file_name = get_config_url(args)
   logger.info('Using config file %s', config_file_name)
-  with smart_open.open(config_file_name, "rb") as f:
-    content = f.read()
+  try:
+    with smart_open.open(config_file_name, "rb") as f:
+      content = f.read()
+  except (FileNotFoundError, google.cloud.exceptions.NotFound) as e:
+    logger.error(f'Config file {config_file_name} was not found: {e}')
+    if fail_ok:
+      logger.warning('Config file was not found but proceeding due to fail_ok=True flag')
+      content = "{}"
+    else:
+      raise AppNotInitializedError()
 
   cfg_dict: dict = json.loads(content)
   config = Config()

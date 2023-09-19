@@ -91,15 +91,15 @@ def _get_credentials():
   return credentials
 
 
-def _get_config() -> Config:
+def _get_config(*, fail_ok = False) -> Config:
   # it can throw FileNotFoundError if config is missing
-  config = get_config(args)
+  config = get_config(args, fail_ok)
   return config
 
 
-def create_context(target_name: str = None) -> Context:
+def create_context(target_name: str = None, *, fail_ok = False) -> Context:
   credentials = _get_credentials()
-  config = _get_config()
+  config = _get_config(fail_ok=fail_ok)
   target_name = _get_req_arg_str('target') if target_name == None else target_name
   if not target_name and len(config.targets) == 1:
     target = config.targets[0]
@@ -137,7 +137,7 @@ def get_configuration():
 
 @app.route("/api/setup", methods=["POST"])
 def setup():
-  context = create_context()
+  context = create_context(fail_ok=True)
   params = request.get_json(force=True)
   name = params.get('name')
   context.config.bq_dataset_location = params.get('bq_dataset_location', None)

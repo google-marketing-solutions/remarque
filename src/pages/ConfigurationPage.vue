@@ -27,21 +27,22 @@
     </div>
 
     <div class="row q-pa-md">
-      <q-card class="col-4 card" flat bordered>
+      <q-card class="col-7 card" flat bordered>
         <q-card-section>
           <div class="text-h6">BigQuery</div>
           <div class="text-subtitle2">BQ dataset where all intermediate data will be kept</div>
         </q-card-section>
 
-        <q-input outlined v-model="store.bq_dataset_id" label="Dataset id" placeholder="BigQuery dataset id" hint="" />
+        <q-input outlined v-model="store.bq_dataset_id" label="Dataset id" placeholder="BigQuery dataset id"
+          hint="by default - 'remarque'" />
 
         <q-input outlined v-model="store.bq_dataset_location" label="Dataset location"
-          placeholder="BigQuery dataset location (us or eu)" hint="" />
+          placeholder="BigQuery dataset location (us or eu)" hint="by default - 'europe'" />
       </q-card>
     </div>
 
     <div class="row q-pa-md">
-      <q-card class="col-6 card" flat bordered>
+      <q-card class="col-7 card" flat bordered>
         <q-card-section>
           <div class="text-h6">Google Ads</div>
           <div class="text-subtitle2"></div>
