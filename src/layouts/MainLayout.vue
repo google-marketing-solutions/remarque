@@ -2,15 +2,18 @@
   <q-layout view="hHh Lpr lFf">
     <q-header elevated>
       <q-toolbar>
-        <q-btn
-          flat
-          dense
-          round
-          icon="menu"
-          aria-label="Menu"
-          @click="toggleLeftDrawer"
-        />
+        <q-btn flat dense round icon="menu" aria-label="Menu" @click="toggleLeftDrawer" />
         <q-toolbar-title> Remarque </q-toolbar-title>
+        <q-btn-dropdown stretch flat :label="store.activeTarget" v-if="store.targets?.length > 1">
+          <q-list>
+            <q-item v-for="t in store.targets" :key="`${t.name}`" clickable v-close-popup tabindex="0"
+              @click="store.activateTarget(t.name)" :active="store.activeTarget == t.name">
+              <q-item-section>
+                <q-item-label>{{ t.name }}</q-item-label>
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </q-btn-dropdown>
       </q-toolbar>
     </q-header>
 
@@ -28,6 +31,8 @@
 
 <script lang="ts">
 import { defineComponent, ref } from 'vue';
+
+import { configurationStore } from 'stores/configuration';
 import SideMenu from 'components/SideMenu.vue';
 
 export default defineComponent({
@@ -39,9 +44,11 @@ export default defineComponent({
 
   setup() {
     const leftDrawerOpen = ref(false);
+    const store = configurationStore();
 
     return {
       leftDrawerOpen,
+      store,
       toggleLeftDrawer() {
         leftDrawerOpen.value = !leftDrawerOpen.value;
       },

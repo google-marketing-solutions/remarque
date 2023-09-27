@@ -19,8 +19,9 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Tuple, Literal
 from google.auth import credentials
 from google.cloud import bigquery
+from google.api_core import exceptions
+from google.cloud.bigquery.dataset import Dataset
 #from google.cloud.exceptions import NotFound  # type: ignore
-from google.api_core.exceptions import NotFound # type: ignore
 import numpy as np
 import pandas as pd
 import pandas_gbq
@@ -44,19 +45,73 @@ class DataGateway:
   """Object for loading and udpating data in Database
   (which is BigQuery but it should be hidden from consumers)"""
 
-  def __init__(self, config: Config, credentials: credentials.Credentials) -> None:
+  def __init__(self, config: Config, credentials: credentials.Credentials, target: ConfigTarget,) -> None:
     self.config = config
-    logger.debug(f'DataGateway.init: project_id={config.project_id}, bq_location={config.bq_dataset_location}')
+    logger.debug(f'DataGateway.init: project_id={config.project_id}, bq_location={target.bq_dataset_location if target else None}')
     self.bq_client = bigquery.Client(project=config.project_id,
                                     credentials=credentials,
-                                    location=config.bq_dataset_location)
+                                    location=target.bq_dataset_location if target else None)
     self.bq_client.default_project = config.project_id
     self.bq_utils = CloudBigQueryUtils(self.bq_client)
     self.credentials = credentials
 
+  def _recreate_dataset(self, dataset_id, dataset_location, backup_existing_tables=True):
+    # Construct a BigQuery client object.
+    fully_qualified_dataset_id = f'{self.config.project_id}.{dataset_id}'
+    to_create = False
+    if dataset_location == 'europe':
+      dataset_location = 'eu'
+    ds_backup = None
+    try:
+      ds: Dataset = self.bq_client.get_dataset(fully_qualified_dataset_id)
+      if ds.location and dataset_location and ds.location.lower() != dataset_location.lower() or \
+         not ds.location and dataset_location or \
+         ds.location and not dataset_location:
+        # the current dataset's location and desired one are different, we need to recreate the dataset
+        logger.info(
+            f'Existing dataset needs to be recreated due to different locations (current: {ds.location}, needed: {dataset_location}).')
+        # but before doing so let's copy everything aside
+        if backup_existing_tables:
+          logger.debug(f"Backuping up existing tables in the {dataset_id}")
+          # we'll create a backup dataset in the same location as the current one
+          ds_backup = bigquery.Dataset(fully_qualified_dataset_id + '_backup_' + datetime.now().strftime("%Y%m%d_%H%M"))
+          ds_backup.location = ds.location
+          ds_backup = self.bq_client.create_dataset(ds_backup, True)
+          i=0
+          for t in self.bq_client.list_tables(ds):
+            self.bq_client.copy_table(ds.dataset_id + '.' + t.table_id, ds_backup.dataset_id + '.' + t.table_id, location=ds.location)
+            i+=1
+          logger.debug(f"{i} tables were copied to {ds_backup.dataset_id}")
+        self.bq_client.delete_dataset(ds, True)
+        logger.debug(f"Dataset {ds.dataset_id} deleted")
+        to_create = True
+      else:
+        logger.info(f'Dataset {fully_qualified_dataset_id} already exists in {dataset_location}.')
+    except exceptions.NotFound as e:
+      logger.warn(e)
+      logger.info(f'Dataset {fully_qualified_dataset_id} is not found in {dataset_location}.')
+      to_create = True
+    if to_create:
+      dataset = bigquery.Dataset(fully_qualified_dataset_id)
+      dataset.location = dataset_location
+      ds = self.bq_client.create_dataset(dataset)
+      logger.info(f'Dataset {fully_qualified_dataset_id} created in {dataset_location}.')
+      # copy tables from backup dataset back
+      # NOTE: looks like copying won't work between locations anyway
+      # if ds_backup:
+      #   logger.debug(f'Copying tables from backup dataset {ds_backup.dataset_id} back to {ds.dataset_id}')
+      #   for t in self.bq_client.list_tables(ds_backup):
+      #     self.bq_client.copy_table(ds_backup.dataset_id + '.' + t.table_id, ds.dataset_id + '.' + t.table_id)
 
-  def initialize(self, target: ConfigTarget):
-    ds = self.bq_utils.create_dataset_if_not_exists(target.bq_dataset_id, self.config.bq_dataset_location)
+    return ds
+
+
+  def initialize(self, bq_dataset_id: str, bq_dataset_location: str):
+    self.bq_client = bigquery.Client(project=self.config.project_id,
+                                    credentials=self.credentials,
+                                    location=bq_dataset_location)
+
+    ds = self._recreate_dataset(bq_dataset_id, bq_dataset_location, True)
     schema = [
        bigquery.SchemaField(name="name", field_type="STRING", mode="REQUIRED"),
        bigquery.SchemaField(name="app_id", field_type="STRING", mode="REQUIRED"),
@@ -71,10 +126,10 @@ class DataGateway:
        bigquery.SchemaField(name="mode", field_type="STRING"),
        bigquery.SchemaField(name="query", field_type="STRING", mode="NULLABLE"),
     ]
-    table_name = f"{target.bq_dataset_id}.audiences"
+    table_name = f"{bq_dataset_id}.audiences"
     self._ensure_table(table_name, schema)
 
-    table_name = f"{target.bq_dataset_id}.audiences_log"
+    table_name = f"{bq_dataset_id}.audiences_log"
     schema = [
       bigquery.SchemaField(name="name", field_type="STRING", mode="REQUIRED", description="Audience name from audiences table"),
       bigquery.SchemaField(name="date", field_type="TIMESTAMP", mode="REQUIRED", description="Date when segment was uploaded to Google Ads"),
@@ -133,7 +188,7 @@ class DataGateway:
               return
           raise
 
-    except NotFound:
+    except exceptions.NotFound:
       logger.debug(f"Initialize: Creating '{table_name}' table")
       table = bigquery.Table(table_ref, schema=expected_schema)
       self.bq_client.create_table(table)
@@ -420,10 +475,10 @@ WHEN NOT MATCHED THEN
       query = query.format(**{
         "source_table": self.get_ga4_table_name(target, True),
         "day_start": day_start,
-      "day_end": day_end,
-      "app_id": audience.app_id,
-      "countries": countries,
-      "all_users_table": target.bq_dataset_id + "." + TABLE_USER_NORMALIZED,
+        "day_end": day_end,
+        "app_id": audience.app_id,
+        "countries": countries,
+        "all_users_table": target.bq_dataset_id + "." + TABLE_USER_NORMALIZED,
         "all_events_list": all_events_list,
         "SEARCH_CONDITIONS": search_condition
       })
@@ -548,7 +603,7 @@ FROM `{audience_table_name}`
     try:
       rows = self.execute_query(query)
       users = [row['user'] for row in rows]
-    except NotFound:
+    except exceptions.NotFound:
       logger.debug(f"Table '{table_name}' not found (audience segment is empty)")
       users = []
     return users

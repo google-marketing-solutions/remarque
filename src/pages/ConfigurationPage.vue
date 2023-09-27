@@ -1,28 +1,38 @@
 <template>
   <q-page class="items-center justify-evenly" padding>
+    <div class="q-pa-md q-gutter-sm" v-if="data.notInitialized">
+      <q-banner inline-actions rounded class="bg-red text-white">
+        The application has not been initialized. Please fill all fields here and run Setup action below.
+      </q-banner>
+    </div>
     <div class="row">
       <div class="text-h2">Configuration</div>
     </div>
 
     <div class="row q-pa-md">
-      <q-card class="col-5 card" flat bordered>
+      <q-input class="col-7 q-mb-md" outlined v-model="store.name" label="Name" placeholder="Configuration name"
+        hint="Configuration name can be empty if it's only one" :hide-bottom-space=true />
+      <q-btn label="New" @click="onNewTarget" :fab="true" class="q-ml-md" v-if="!store.is_new" />
+      <q-btn label="Delete" @click="onDeleteTarget" :fab="true" class="q-ml-md" v-if="!store.is_new" />
+
+      <q-card class="col-7 card" flat bordered>
         <q-card-section>
           <div class="text-h6">GA4 BigQuery Table</div>
           <div class="text-subtitle2">events_* tables with app events</div>
         </q-card-section>
 
-        <q-input outlined v-model="store.ga4_project" label="Project id" placeholder="BigQuery project id" hint=""
-          :hide-bottom-space=true />
+        <q-input class="q-mb-md" outlined v-model="store.ga4_project" label="Project id" placeholder="BigQuery project id"
+          hint="Leave empty for using the current GCP project" :hide-bottom-space=true />
 
-        <q-input outlined v-model="store.ga4_dataset" label="Dataset id" placeholder="BigQuery dataset id"
+        <q-input class="q-mb-md" outlined v-model="store.ga4_dataset" label="Dataset id" placeholder="BigQuery dataset id"
           hint="Usually analytics_XXX where XXX GA property id" :hide-bottom-space=true />
 
-        <q-input outlined v-model="store.ga4_table" label="Table id" placeholder="BigQuery table id"
-          hint="Usually events (do not include _* part)" :hide-bottom-space=true />
+        <q-input class="q-mb-md" outlined v-model="store.ga4_table" label="Table id" placeholder="BigQuery table id"
+          hint="By default 'events' if empty (do not include _* part)" :hide-bottom-space=true />
 
         <q-space />
 
-        <q-btn label="Connect" @click="onGA4Connect" class="q-mt-md"></q-btn>
+        <q-btn label="Check" @click="onGA4Connect" class="q-mt-md"></q-btn>
       </q-card>
     </div>
 
@@ -30,14 +40,22 @@
       <q-card class="col-7 card" flat bordered>
         <q-card-section>
           <div class="text-h6">BigQuery</div>
-          <div class="text-subtitle2">BQ dataset where all intermediate data will be kept</div>
+          <div class="text-subtitle2">BQ dataset where all application data will be kept</div>
         </q-card-section>
+        <q-banner inline-actions rounded class="bg-grey-3 q-mb-md">
+          <template v-slot:avatar>
+            <q-icon name="info" color="primary" />
+          </template>
+
+          Please note that the dataset will be created in the save location (us or eu) where your GA4 dataset is
+          located.
+        </q-banner>
 
         <q-input outlined v-model="store.bq_dataset_id" label="Dataset id" placeholder="BigQuery dataset id"
           hint="by default - 'remarque'" />
 
-        <q-input outlined v-model="store.bq_dataset_location" label="Dataset location"
-          placeholder="BigQuery dataset location (us or eu)" hint="by default - 'europe'" />
+        <q-input outlined v-model="store.bq_dataset_location" label="Dataset location" readonly class="q-mt-md"
+          placeholder="BigQuery dataset location (us or eu)" />
       </q-card>
     </div>
 
@@ -66,7 +84,8 @@
     </div>
 
     <q-btn label="Setup" @click="onSetup" :fab="true" color="negative"></q-btn>
-    <q-btn label="Reload" @click="onReload" :fab="true" class="q-ml-md"></q-btn>
+    <q-btn label="Reload" @click="onReload" :fab="true" class="q-ml-md" v-if="!store.is_new"></q-btn>
+    <q-btn label="Cancel" @click="onCancel" :fab="true" class="q-ml-md" v-if="store.is_new"></q-btn>
   </q-page>
 </template>
 
@@ -80,10 +99,11 @@
 </style>
 
 <script lang="ts">
-import { configurationStore } from 'stores/configuration';
 import { useQuasar } from 'quasar';
+import { onBeforeRouteLeave, useRouter, useRoute } from 'vue-router'
 import { postApi } from 'boot/axios';
-import { defineComponent } from 'vue';
+import { States, configurationStore } from 'stores/configuration';
+import { defineComponent, ref } from 'vue';
 
 export default defineComponent({
   name: 'DatasourcePage',
@@ -91,6 +111,8 @@ export default defineComponent({
   setup: () => {
     const store = configurationStore();
     const $q = useQuasar();
+    const router = useRouter();
+    const route = useRoute();
 
     const onGA4Connect = async () => {
       $q.loading.show({ message: 'Testing GA4 data access...' });
@@ -101,7 +123,7 @@ export default defineComponent({
           ga4_dataset: store.ga4_dataset,
           ga4_table: store.ga4_table,
         }, loading);
-        $q.notify({ message: 'GA4 data source connected', icon: 'success', timeout: 1000 });
+        $q.dialog({ ok: true, message: 'Successfully connected' });
       }
       catch (e: any) {
         $q.dialog({
@@ -110,16 +132,55 @@ export default defineComponent({
         });
       }
     };
+    const onNewTarget = () => {
+      store.initTarget({})
+      store.name = '';
+      store.name_org = '';
+      store.is_new = true;
+      store.activeTarget = '';
+    };
+    const onDeleteTarget = async () => {
+      // we should be able to delete the default target (store.activeTarget)
+      if (!store.activeTarget || store.activeTarget === 'default') {
+        console.error('Trying to delete the default target (which is not allowed)');
+        return;
+      }
+      $q.dialog({
+        title: 'Confirm',
+        message: 'Are you sure you want to delete the configuration',
+        cancel: true,
+        persistent: true
+      }).onOk(async () => {
+        // remove on the server
+        $q.loading.show({ message: 'Saving...' });
+        const loading = () => $q.loading.hide();
+        await postApi('setup/delete?target=' + store.activeTarget, {}, loading);
+        // now remove locally
+        let index = store.targets.findIndex(t => t.name === store.activeTarget);
+        if (index >= 0) {
+          store.targets.splice(index, 1)
+        }
+        store.activateTarget(store.targets.length ? store.targets[0].name : '');
+      });
+    };
+    const onCancel = () => {
+      let target = store.targets[0];
+      store.initTarget(target);
+      store.is_new = false;
+      store.activeTarget = target.name;
+    };
     const onSetup = async () => {
       $q.loading.show({ message: 'Initializing application...' });
       const loading = () => $q.loading.hide();
       try {
         let res = await postApi('setup', {
+          name: store.name,
+          name_org: store.name_org,
+          is_new: store.is_new,
           ga4_project: store.ga4_project,
           ga4_dataset: store.ga4_dataset,
           ga4_table: store.ga4_table,
           bq_dataset_id: store.bq_dataset_id,
-          bq_dataset_location: store.bq_dataset_location,
           ads_client_id: store.ads_client_id,
           ads_client_secret: store.ads_client_secret,
           ads_customer_id: store.ads_customer_id,
@@ -127,6 +188,9 @@ export default defineComponent({
           ads_login_customer_id: store.ads_login_customer_id,
           ads_refresh_token: store.ads_refresh_token,
         }, loading);
+        store.targets = res.data.targets;
+        store.is_new = false;
+        store.activateTarget(store.name);
         $q.dialog({
           title: 'Succeeded',
           message: 'Application successfully initialized',
@@ -152,12 +216,32 @@ export default defineComponent({
         });
       }
     };
+    let data = ref({ notInitialized: false });
+    store.$subscribe((mutation, state) => {
+      if (state.state === States.NotInitialized) {
+        data.value.notInitialized = true;
+      }
+    });
+    onBeforeRouteLeave((to, from) => {
+      if (store.is_new) {
+        const answer = window.confirm(
+          'Do you really want to leave? you have unsaved changes!'
+        )
+        // cancel the navigation and stay on the same page
+        if (!answer) return false
+        store.switchConfiguration(store.activeTarget);
+      }
+    });
     return {
       store,
+      data: data,
       onGA4Connect,
       onSetup,
-      onReload
+      onReload,
+      onCancel,
+      onDeleteTarget,
+      onNewTarget,
     };
-  },
+  }
 });
 </script>

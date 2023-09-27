@@ -2,7 +2,6 @@ import { RouteRecordRaw } from 'vue-router';
 import MainLayout from 'layouts/MainLayout.vue';
 import IndexPage from 'pages/IndexPage.vue';
 import ConfigurationPage from 'pages/ConfigurationPage.vue';
-import DatasourcePage from 'pages/DatasourcePage.vue';
 import AudiencesPage from 'pages/AudiencesPage.vue';
 import GoogleAdsPage from 'pages/GoogleAdsPage.vue';
 
@@ -18,14 +17,17 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'configuration',
         component: ConfigurationPage,
+        meta: { title: 'Configuration' },
       },
       {
         path: 'audiences',
         component: AudiencesPage,
+        meta: { title: 'Audiences' },
       },
       {
         path: 'google-ads',
         component: GoogleAdsPage,
+        meta: { title: 'Google Ads' },
       },
     ],
   },

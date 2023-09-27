@@ -35,7 +35,7 @@ from env import IS_GAE
 from auth import get_credentials
 from logger import logger
 from context import Context
-from config import Config, ConfigTarget, Audience, parse_arguments, get_config, save_config
+from config import Config, ConfigTarget, Audience, parse_arguments, get_config, save_config, AppNotInitializedError
 from sampling import do_sampling
 from ads_gateway import AdsGateway
 from data_gateway import AudienceLog
@@ -101,37 +101,54 @@ def create_context(target_name: str = None, *, fail_ok = False) -> Context:
   credentials = _get_credentials()
   config = _get_config(fail_ok=fail_ok)
   target_name = _get_req_arg_str('target') if target_name == None else target_name
-  if not target_name and len(config.targets) == 1:
-    target = config.targets[0]
+  if not target_name:
+    if not config.targets:
+      target = None
+    elif len(config.targets) == 1:
+      # target is not provided, but there's onluy one
+      target = config.targets[0]
+    elif len(config.targets) > 1:
+      # take a default one
+      target = next(filter(lambda t: not t.name or t.name == 'default', config.targets), None)
+      if not target:
+        # otherwise just the first one
+        target = config.targets[0]
   elif target_name:
     target = next(filter(lambda t: t.name == target_name, config.targets), None)
   else:
     target = None
+  logger.debug(f"Created context for target: {target}")
   context = Context(config, target, credentials)
   return context
 
 
 @app.route("/api/configuration", methods=["GET"])
 def get_configuration():
-  context = create_context()
-  result = {
-    "project_id": context.config.project_id,
-    "bq_dataset_location": context.config.bq_dataset_location,
-    "name": context.target.name,
-    "ga4_project": context.target.ga4_project,
-    "ga4_dataset": context.target.ga4_dataset,
-    "ga4_table": context.target.ga4_table,
-    "bq_dataset_id": context.target.bq_dataset_id,
-    "ads_customer_id": context.target.ads_customer_id,
-    "ads_developer_token": context.target.ads_developer_token,
-    "ads_client_id": context.target.ads_client_id,
-    "ads_client_secret": context.target.ads_client_secret,
-    "ads_refresh_token": context.target.ads_refresh_token,
-    "ads_login_customer_id": context.target.ads_login_customer_id,
-    #"scheduled": context.target.scheduled,
-    #"schedule": context.target.schedule,
-    #"schedule_timezone": context.target.schedule_timezone,
-  }
+  #context = create_context()
+  config = _get_config()
+  result = config.to_dict()
+
+  # targets = [t.name for t in config.targets]
+  # result = {
+  #   "project_id": config.project_id,
+  #   "name": target.name,
+  #   "targets": targets,
+  #   "ga4_project": context.target.ga4_project,
+  #   "ga4_dataset": context.target.ga4_dataset,
+  #   "ga4_table": context.target.ga4_table,
+  #   "bq_dataset_id": context.target.bq_dataset_id,
+  #   "bq_dataset_location": context.target.bq_dataset_location,
+  #   "ads_customer_id": context.target.ads_customer_id,
+  #   "ads_developer_token": context.target.ads_developer_token,
+  #   "ads_client_id": context.target.ads_client_id,
+  #   "ads_client_secret": context.target.ads_client_secret,
+  #   "ads_refresh_token": context.target.ads_refresh_token,
+  #   "ads_login_customer_id": context.target.ads_login_customer_id,
+  #   #"scheduled": context.target.scheduled,
+  #   #"schedule": context.target.schedule,
+  #   #"schedule_timezone": context.target.schedule_timezone,
+  # }
+  logger.debug(f"returning configuration: {result}")
   return jsonify(result)
 
 
@@ -139,28 +156,63 @@ def get_configuration():
 def setup():
   context = create_context(fail_ok=True)
   params = request.get_json(force=True)
-  name = params.get('name')
-  context.config.bq_dataset_location = params.get('bq_dataset_location', None)
+  logger.info(f'Running setup with params:\n {params}')
+  is_new = params.get('is_new', False)
+  name = (params.get('name') or 'default').strip().lower()
   ga4_project = params.get('ga4_project', None)
   ga4_dataset = params.get('ga4_dataset', None)
-  ga4_table = params.get('ga4_table', None)
+  ga4_table = params.get('ga4_table', 'events')
   bq_dataset_id = params.get('bq_dataset_id', None)
-  if not context.config.targets:
+  #bq_dataset_location = params.get('bq_dataset_location', None)
+  context.config.targets = context.config.targets or []
+
+  if not ga4_dataset:
+    raise Exception(f'Please specify GA4 dataset')
+
+  if is_new:
+    # create new
+    if next(filter(lambda t: t.name == name, context.config.targets), None):
+      raise Exception(f'Configuration "{name}" already exists, please choose a different name')
     target = ConfigTarget()
-    context.config.targets = [target]
+    context.config.targets.append(target)
   else:
-    target = next(filter(lambda t: t.name == name, context.config.targets), None)
-    if not target:
-      target: ConfigTarget = context.config.targets[0]
+    # edit
+    if not context.config.targets:
+      # edit the default target
+      target = ConfigTarget()
+      context.config.targets = [target]
+    else:
+      name_org = params.get('name_org')
+      target = next(filter(lambda t: t.name == name_org, context.config.targets), None)
+      if not target:
+        if len(context.config.targets) == 1 and (not name_org or name_org == 'default'):
+          target: ConfigTarget = context.config.targets[0]
+        else:
+          raise Exception(f'Configuration "{name_org}" does not exist')
+
 
   target.name = name
-  target.ga4_project = ga4_project
+  target.ga4_project = ga4_project or context.config.project_id
   target.ga4_dataset = ga4_dataset
-  target.ga4_table = ga4_table
-  target.bq_dataset_id = bq_dataset_id or 'remarque'
-  #bq_dataset_location = context.config.bq_dataset_location or 'europe'
+  target.ga4_table = ga4_table or 'events'
+  #TODO: validate ga4_* parameters
+  try:
+    ds = context.data_gateway.bq_client.get_dataset(target.ga4_project + '.' + target.ga4_dataset)
+    logger.debug(f"As GA4 dataset was specified ({ga4_dataset}) we'll use its location '{ds.location}' as the location for our dataset")
+    bq_dataset_location = ds.location
+  except BaseException as e:
+    raise Exception(f'An error occurred while accessing GA4 dataset: {e}')
 
-  context.data_gateway.initialize(target)
+  target.bq_dataset_location = bq_dataset_location
+  target.bq_dataset_id = bq_dataset_id or 'remarque'
+
+  # targets should not be sharing same dataset
+  for other in context.config.targets:
+    if other != target:
+      if other.bq_dataset_id == target.bq_dataset_id:
+        raise Exception(f'Configuration "{name}" uses the same dataset "{target.bq_dataset_id}" as configuration "{other.name}", please choose a different one')
+
+  context.data_gateway.initialize(target.bq_dataset_id, target.bq_dataset_location)
 
   target.ads_client_id = params.get('ads_client_id', None)
   target.ads_client_secret = params.get('ads_client_secret', None)
@@ -170,38 +222,51 @@ def setup():
   target.ads_refresh_token = params.get('ads_refresh_token', None)
 
   # save config to the same location where it was read from
+  logger.info(f'Saving new configuration:\n{context.config.to_dict()}')
   save_config(context.config, args)
-  return jsonify({})
+
+  return jsonify(context.config.to_dict())
+
+
+@app.route('/api/setup/delete', methods=['POST'])
+def setup_delete_target():
+  context = create_context()
+  if not context.target:
+    raise Exception(f'Configuration "{context.target}" was not found')
+
+  credentials = _get_credentials()
+  config = _get_config()
+  target_name = _get_req_arg_str('target')
+  logger.info(f'Deleting target {target_name}')
+  target = next(filter(lambda t: t.name == target_name, config.targets), None)
+  if target:
+    if target.bq_dataset_id:
+      context = Context(config, target, credentials)
+      fully_qualified_dataset_id = f'{config.project_id}.{target.bq_dataset_id}'
+      context.data_gateway.bq_client.delete_dataset(fully_qualified_dataset_id, True)
+      logger.debug(f'Deleted target\'s dataset {fully_qualified_dataset_id}')
+    config.targets.remove(target)
+
+  save_config(config, args)
+  return jsonify(config.to_dict())
 
 
 @app.route("/api/setup/connect_ga4", methods=["POST"])
 def setup_connect_ga4():
   context = create_context()
   params = request.get_json(force=True)
-  if not context.config.targets:
-    target = ConfigTarget()
-    context.config.targets = [target]
-  else:
-    target: ConfigTarget = context.config.targets[0]
 
-  ga4_project = target.ga4_project
-  ga4_dataset = target.ga4_dataset
-  ga4_table = target.ga4_table
-  target.ga4_project = params.get('ga4_project')
-  target.ga4_dataset = params.get('ga4_dataset')
-  target.ga4_table = params.get('ga4_table')
-  ga_table = context.data_gateway.get_ga4_table_name(context.target, True)
+  ga4_project = params.get('ga4_project') or context.config.project_id
+  ga4_dataset = params.get('ga4_dataset')
+  ga4_table = params.get('ga4_table') or 'events'
+  ga_table = f'{ga4_project}.{ga4_dataset}.{ga4_table}_{datetime.today().strftime("%Y")}*'
   query = f"SELECT DISTINCT _TABLE_SUFFIX as table FROM `{ga_table}` ORDER BY 1 DESC LIMIT 10"
   try:
     response = context.data_gateway.execute_query(query)
     tables = [r["table"] for r in response]
-    # save config to the same location where it was read from
-    save_config(context.config, args)
     return jsonify({"results": tables})
   except BaseException as e:
-    target.ga4_project = ga4_project
-    target.ga4_dataset = ga4_dataset
-    target.ga4_table = ga4_table
+    logger.error(e)
     sa = f"{context.config.project_id}@appspot.gserviceaccount.com"
     return jsonify({"error": {
       "message": f"Incorrect GA4 table name or the application's service account ({sa}) doesn't have access permission to the BigQuery dataset. Original error: {e}"
@@ -228,6 +293,8 @@ def get_stat() -> Response:
 @app.route("/api/audiences", methods=["GET"])
 def get_audiences():
   context = create_context()
+  if not context.target:
+    raise AppNotInitializedError()
   audiences = context.data_gateway.get_audiences(context.target)
   return jsonify({"results": audiences})
 
@@ -552,8 +619,8 @@ def get_user_conversions():
       "conversions": result,
       "date_start": date_start.strftime("%Y-%m-%d"),
       "date_end": date_end.strftime("%Y-%m-%d"),
-      "pval": pval if not math.isnan(pval) and not math.isfinite(pval) else None,
-      "chi": chi if not math.isnan(chi) and not math.isinf(chi) else None,
+      "pval": pval if math.isfinite(pval) else None,
+      "chi": chi if math.isfinite(chi) else None,
     }
     if audience_name and audience.name == audience_name:
       break

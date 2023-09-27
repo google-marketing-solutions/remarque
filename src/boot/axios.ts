@@ -27,7 +27,20 @@ export default boot(({ app }) => {
   //       so you can easily perform requests against your app's API
 });
 
+let activeTarget = '';
+function setActiveTarget(target: string|undefined) {
+  activeTarget = target || '';
+}
+
 function getUrl(url: string) {
+  if (activeTarget) {
+    if (url.includes("?")) {
+      url += '&';
+    } else {
+      url += '?';
+    }
+    url += 'target=' + activeTarget;
+  }
   return '/api/' + url;
 }
 
@@ -40,9 +53,11 @@ async function postApi(url: string, params: any, loading?: () => void) {
     loading && loading();
     if (e.response && e.response.data) {
       const debugInfo = e.response.data.error?.debugInfo;
+      const type = e.response.data.error?.type;
       e = new Error(e.response.data.error?.message || e.response.data.error);
       console.error(debugInfo);
       e.debugInfo = debugInfo;
+      e.type = type;
     }
     throw e;
   }
@@ -57,11 +72,14 @@ async function getApi(url: string, params?: any, loading?: () => void) {
     loading && loading();
     if (e.response && e.response.data) {
       const debugInfo = e.response.data.error?.debugInfo;
+      const type = e.response.data.error?.type;
       e = new Error(e.response.data.error?.message || e.response.data.error);
       console.error(debugInfo);
       e.debugInfo = debugInfo;
+      e.type = type;
     }
     throw e;
   }
 }
-export { api, postApi, getApi };
+
+export { api, postApi, getApi, setActiveTarget };

@@ -19,7 +19,7 @@ from google.cloud import scheduler_v1
 from google.api_core import exceptions
 from google.auth import credentials
 from config import Config, ConfigTarget
-
+import os
 from dataclasses import dataclass
 
 @dataclass
@@ -102,10 +102,13 @@ class CloudSchedulerGateway:
         cloud_job.schedule != job.schedule or
         cloud_job.time_zone != job.schedule_timezone):
         # to enable
+        gae_service = os.getenv('GAE_SERVICE')
+        routing = scheduler_v1.AppEngineRouting()
+        routing.service = gae_service
         job = scheduler_v1.Job(
           name=job_name,
           app_engine_http_target=scheduler_v1.AppEngineHttpTarget(
-            app_engine_routing=scheduler_v1.AppEngineRouting(),
+            app_engine_routing=routing,
             relative_uri="/api/process",
             http_method=scheduler_v1.HttpMethod.POST,
             body=b"{}",

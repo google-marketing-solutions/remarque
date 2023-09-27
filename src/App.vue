@@ -11,10 +11,21 @@ import { useRouter } from 'vue-router';
 export default defineComponent({
   name: 'App',
   created: async () => {
-    const store = configurationStore();
     const $q = useQuasar();
+    const store = configurationStore();
     const router = useRouter();
-    // TODO: vue.use(VueApexCharts);
+
+    // TODO: to pass query param through routers (but it causes infinite recursion)
+    // router.beforeEach((to, from) => {
+    //   if (!Object.keys(to.query).length) {
+    //     return Object.assign({}, to, { query: from.query })
+    //   }
+    // });
+    router.beforeEach((to, from) => {
+      if (!Object.keys(to.query).length && Object.keys(from.query).length > 0) {
+        return Object.assign({}, to, { query: from.query });
+      }
+    });
     const progress = $q.dialog({
       message: 'Initialing. Loading configuration...',
       progress: true, // we enable default settings
@@ -39,8 +50,10 @@ export default defineComponent({
         $q.dialog({
           title: 'Error',
           message: e.message,
+        }).onDismiss(() => {
+          router.push({ path: '/configuration' })
+
         });
-        router.push({ path: '/configuration' })
       }
     });
   }

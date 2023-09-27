@@ -129,12 +129,11 @@ class ConfigTarget(ConfigItemBase):
   ga4_project = ''
   ga4_dataset = ''
   ga4_table = ''
-
+  # dataset id for all tables
   bq_dataset_id: str = 'remarque'
-  #period_start = 0
-  #period_end = 0
+  # location for dataset in BigQuery (readonly on the client)
+  bq_dataset_location: str = ''
 
-  #audiences = []
   # Google Ads customer id
   ads_customer_id: str = ''
   ads_developer_token = ''
@@ -148,9 +147,6 @@ class Config(ConfigItemBase):
   # GCP project id
   project_id: str = ''
   scheduler_location_id = ''
-  #bq_dataset_id: str = 'remarque'
-  # location for dataset in BigQuery (all locations are in Europe by default)
-  bq_dataset_location: str = 'europe'
 
   def __init__(self) -> None:
     self.targets: List[ConfigTarget] = []
@@ -158,7 +154,6 @@ class Config(ConfigItemBase):
   def to_dict(self) -> dict:
     values = {
       "project_id": self.project_id,
-      "bq_dataset_location": self.bq_dataset_location,
       "scheduler_location_id": self.scheduler_location_id,
       "targets": []
     }
@@ -170,6 +165,7 @@ class Config(ConfigItemBase):
         "ga4_table": t.ga4_table,
         "ga4_table": t.ga4_table,
         "bq_dataset_id": t.bq_dataset_id,
+        "bq_dataset_location": t.bq_dataset_location,
         "ads_customer_id": t.ads_customer_id,
         "ads_developer_token": t.ads_developer_token,
         "ads_client_id": t.ads_client_id,

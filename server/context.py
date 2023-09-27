@@ -36,7 +36,7 @@ class Context:
     self.target = target
     self.credentials = credentials
 
-    self.data_gateway = DataGateway(config, credentials)
+    self.data_gateway = DataGateway(config, credentials, target)
     self.storage_client = storage.Client(project=config.project_id,
                                          credentials=credentials)
     self.cloud_scheduler = CloudSchedulerGateway(config, credentials)
