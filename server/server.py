@@ -20,6 +20,7 @@ import json
 import os
 import math
 import argparse
+import yaml
 import decimal
 from datetime import datetime, date
 from pprint import pprint
@@ -28,6 +29,7 @@ from flask import Flask, request, jsonify, abort, send_from_directory, Response
 from flask.json.provider import DefaultJSONProvider
 from flask_cors import CORS
 from gaarf.api_clients import GoogleAdsApiClient
+from gaarf.query_executor import AdsReportFetcher
 import pandas as pd
 import statsmodels.stats.proportion as proportion
 
@@ -221,6 +223,10 @@ def setup():
   target.ads_login_customer_id = params.get('ads_login_customer_id', None)
   target.ads_refresh_token = params.get('ads_refresh_token', None)
 
+  if (target.ads_refresh_token):
+    ads_cfg = _get_ads_config(target)
+    _validate_googleads_config(ads_cfg, throw=True)
+
   # save config to the same location where it was read from
   logger.info(f'Saving new configuration:\n{context.config.to_dict()}')
   save_config(context.config, args)
@@ -249,6 +255,45 @@ def setup_delete_target():
 
   save_config(config, args)
   return jsonify(config.to_dict())
+
+
+@app.route('/api/setup/upload_ads_cred', methods=['POST'])
+def setup_upload_ads_cred():
+  context = create_context()
+  names = request.files.keys()
+  if not names:
+    raise ValueError('Expected a file in google-ads.yaml format')
+  name = next(iter(names))
+  cfg = yaml.load(request.files[name].stream, Loader=yaml.SafeLoader)
+  logger.debug(f"Updating Ads API credentials from google-ads.yam file:\n {cfg}")
+  _validate_googleads_config(cfg, throw=True)
+
+  context.target.ads_client_id = cfg['client_id']
+  context.target.ads_client_secret = cfg['client_secret']
+  context.target.ads_customer_id = cfg['customer_id']
+  context.target.ads_developer_token = cfg['developer_token']
+  context.target.ads_login_customer_id = cfg['login_customer_id']
+  context.target.ads_refresh_token = cfg['refresh_token']
+
+  save_config(context.config, args)
+  return jsonify(cfg)
+
+
+@app.route('/api/setup/validate_ads_cred', methods=['POST'])
+def setup_validate_ads_cred():
+  context = create_context()
+  params = request.get_json(force=True)
+  cfg = {
+    "developer_token": params.get('ads_developer_token', None),
+    "client_id": params.get('ads_client_id', None),
+    "client_secret": params.get('ads_client_secret', None),
+    "refresh_token": params.get('ads_refresh_token', None),
+    "login_customer_id": str(params.get('ads_login_customer_id')),
+    "customer_id": str(params.get('ads_customer_id')),
+    "use_proto_plus": True
+  }
+  _validate_googleads_config(cfg, throw=True)
+  return jsonify(cfg)
 
 
 @app.route("/api/setup/connect_ga4", methods=["POST"])
@@ -419,23 +464,28 @@ def run_sampling() -> Response:
   return jsonify({"result": result})
 
 
-def _validate_googleads_config(ads_config):
-  # TODO:
-  return True
+def _validate_googleads_config(ads_config, *, throw=False):
+  client = GoogleAdsApiClient(config_dict=ads_config)
+  report_fetcher = AdsReportFetcher(client)
+  try:
+    report_fetcher.fetch("SELECT customer.id FROM customer", ads_config["customer_id"])
+    return True
+  except Exception as e:
+    if throw:
+      raise e
+    return False
 
-def _get_ads_config(target: ConfigTarget, validate_config = True):
+
+def _get_ads_config(target: ConfigTarget):
   ads_config = {
     "developer_token": target.ads_developer_token,
     "client_id": target.ads_client_id,
     "client_secret": target.ads_client_secret,
     "refresh_token": target.ads_refresh_token,
-    "login_customer_id": target.ads_login_customer_id or target.ads_customer_id,
-    "customer_id": target.ads_customer_id or target.ads_login_customer_id,
+    "login_customer_id": str(target.ads_login_customer_id or target.ads_customer_id),
+    "customer_id": str(target.ads_customer_id or target.ads_login_customer_id),
     "use_proto_plus": True
   }
-  if validate_config and not _validate_googleads_config(ads_config):
-    raise Exception("Incomplete Google Ads configuration")
-    #return jsonify({"error": "Incomplete Google Ads configuration"})
   return ads_config
 
 

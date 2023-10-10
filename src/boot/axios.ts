@@ -1,5 +1,5 @@
 import { boot } from 'quasar/wrappers';
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 
 declare module '@vue/runtime-core' {
   interface ComponentCustomProperties {
@@ -44,9 +44,14 @@ function getUrl(url: string) {
   return '/api/' + url;
 }
 
-async function postApi(url: string, params: any, loading?: () => void) {
+async function postApi(
+  url: string,
+  params: any,
+  loading?: () => void,
+  options?: AxiosRequestConfig
+) {
   try {
-    const res = await api.post(getUrl(url), params);
+    const res = await api.post(getUrl(url), params, options);
     loading && loading();
     return res;
   } catch (e: any) {

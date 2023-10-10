@@ -2,6 +2,7 @@ __pycache__
 .work
 .venv
 node_modules
+customers/
 
 *.local
 google-ads.yaml

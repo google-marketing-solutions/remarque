@@ -18,7 +18,8 @@ flask-cors
 gunicorn
 smart_open
 smart_open[gcs]
-google-ads-api-report-fetcher>=1.4
+google-ads-api-report-fetcher>=1.11
+google-ads>=22
 pyyaml
 python-dotenv
 #pycountry

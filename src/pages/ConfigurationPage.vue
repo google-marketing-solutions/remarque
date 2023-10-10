@@ -80,6 +80,15 @@
           </template> -->
         </q-input>
         <q-input outlined v-model="store.ads_login_customer_id" label="MCC id" placeholder="Google Ads MCC id" hint="" />
+
+        <div class="row q-pa-md">
+          <q-file class="col-3" v-model="data.file" label="Select File google-ads.yaml" accept=".yaml"></q-file>
+          <div class="col">
+            <q-btn label="Upload File" color="primary" @click="uploadGoogleAdsConfig" class="q-ml-md"></q-btn>
+            <q-btn label="Validate" color="primary" @click="validateGoogleAdsConfig" class="q-ml-md"></q-btn>
+          </div>
+          <div class="col"></div>
+        </div>
       </q-card>
     </div>
 
@@ -216,7 +225,10 @@ export default defineComponent({
         });
       }
     };
-    let data = ref({ notInitialized: false });
+    let data = ref({
+      notInitialized: false,
+      file: null
+    });
     store.$subscribe((mutation, state) => {
       if (state.state === States.NotInitialized) {
         data.value.notInitialized = true;
@@ -232,6 +244,81 @@ export default defineComponent({
         store.switchConfiguration(store.activeTarget);
       }
     });
+    const uploadGoogleAdsConfig = async () => {
+      let formData = new FormData();
+      formData.append('file', <any>data.value.file);
+      $q.loading.show({ message: 'Saving...' });
+      const loading = () => $q.loading.hide();
+      try {
+        const response = await postApi('setup/upload_ads_cred', formData, loading, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        })
+        console.log(response);
+        $q.notify({
+          color: 'green-4',
+          textColor: 'white',
+          icon: 'cloud_upload',
+          message: 'File uploaded successfully'
+        });
+        store.ads_client_id = response.data.client_id;
+        store.ads_client_secret = response.data.ads_client_secret;
+        store.ads_customer_id = response.data.customer_id;
+        store.ads_developer_token = response.data.developer_token;
+        store.ads_login_customer_id = response.data.login_customer_id;
+        store.ads_refresh_token = response.data.refresh_token;
+        let target = store.targets.find(t => t.name === store.activeTarget);
+        if (target) {
+          target.ads_client_id = store.ads_client_id;
+          target.ads_client_secret = store.ads_client_secret;
+          target.ads_customer_id = store.ads_customer_id;
+          target.ads_developer_token = store.ads_developer_token;
+          target.ads_login_customer_id = store.ads_login_customer_id;
+          target.ads_refresh_token = store.ads_refresh_token;
+        }
+      }
+      catch (error: any) {
+        console.error(error);
+        $q.notify({
+          color: 'red-5',
+          textColor: 'white',
+          icon: 'error',
+          message: 'File upload failed: ' + error.message
+        });
+      }
+    }
+    const validateGoogleAdsConfig = async () => {
+      $q.loading.show({ message: 'Validating...' });
+      const loading = () => $q.loading.hide();
+      try {
+        let config = {
+          ads_client_id: store.ads_client_id,
+          ads_client_secret: store.ads_client_secret,
+          ads_customer_id: store.ads_customer_id,
+          ads_developer_token: store.ads_developer_token,
+          ads_login_customer_id: store.ads_login_customer_id,
+          ads_refresh_token: store.ads_refresh_token,
+        }
+        const response = await postApi('setup/validate_ads_cred', config, loading);
+        console.log(response);
+        $q.notify({
+          color: 'green-4',
+          textColor: 'white',
+          icon: 'cloud_upload',
+          message: 'Ads API credentials validated successfully'
+        });
+      }
+      catch (error: any) {
+        console.error(error);
+        $q.notify({
+          color: 'red-5',
+          textColor: 'white',
+          icon: 'error',
+          message: 'Credentials are invalid: ' + error.message
+        });
+      }
+    }
     return {
       store,
       data: data,
@@ -241,6 +328,8 @@ export default defineComponent({
       onCancel,
       onDeleteTarget,
       onNewTarget,
+      uploadGoogleAdsConfig,
+      validateGoogleAdsConfig
     };
   }
 });
