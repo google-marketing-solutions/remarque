@@ -1,6 +1,7 @@
 #!/bin/bash
 COLOR='\033[0;36m' # Cyan
-NC='\033[0m' # No Color
+NC='\033[0m'       # No Color
+RED='\033[0;31m'   # Red (error)
 
 SETTING_FILE="./settings.ini"
 SCRIPT_PATH=$(readlink -f "$0" | xargs dirname)
@@ -39,14 +40,12 @@ check_billing() {
 
 enable_apis() {
   local GAE_REGION=$(git config -f $SETTING_FILE gae.region)
-  echo "Enabling APIs"
-  # App Engine Admin API
-  echo -e "${COLOR}\tApp Engine Admin API...${NC}"
+  echo -e "${COLOR}Enabling APIs${NC}"
+
   gcloud services enable appengine.googleapis.com
   gcloud services enable iamcredentials.googleapis.com
   gcloud services enable googleads.googleapis.com
   gcloud services enable cloudscheduler.googleapis.com
-
   gcloud services enable iap.googleapis.com
   gcloud services enable cloudresourcemanager.googleapis.com
   # NOTE: despite other GCP services GAE supports only two regions: europe-west and us-central
@@ -67,8 +66,8 @@ set_iam_permissions() {
 update_git_commit() {
   echo -e "${COLOR}Updating last GIT commit in app.yaml...${NC}"
   GIT_COMMIT=$(git rev-parse HEAD)
-  sed -i'.original' -e "s/GIT_COMMIT\s*:\s*.*$/GIT_COMMIT: '$GIT_COMMIT'/" app.yaml
-  # TODO: use it in code 
+  sed -i'.original' -e "s/GIT_COMMIT\s*:\s*.*$/GIT_COMMIT: $GIT_COMMIT/" app.yaml
+  # TODO: use it in code
   #  commit = os.getenv('GIT_COMMIT') or ''
 
   #TODO:
@@ -89,6 +88,7 @@ deploy_files() {
 }
 
 deploy_app() {
+  echo -e "${COLOR}Building app...${NC}"
   npm i
   npm run build
   echo -e "${COLOR}Deploying app to GAE...${NC}"
@@ -101,10 +101,16 @@ create_iap() {
 
   # create IAP
   IAP_BRAND=$(gcloud iap oauth-brands list --format='value(name)' 2>/dev/null)
+  # creating oauth-brand will fail in projects outside an Organization
+  exit_status=$?
+  if [ $exit_status -ne 0 ]; then
+    echo -e "${RED}OAuth brand (a.k.a. OAuth consent screen) failed to create, please create it manualy in Cloud Console:\n${NC}https://console.cloud.google.com/apis/credentials/consent"
+    return -1
+  fi
+  
   if [[ ! -n $IAP_BRAND ]]; then
     # IAP OAuth brand doesn't exists, creating
     echo -e "${COLOR}Creating oauth brand (consent screen) for IAP...${NC}"
-    gcloud iap oauth-brands create --application_title="$PROJECT_TITLE" --support_email=$USER_EMAIL
     IAP_BRAND=projects/$PROJECT_NUMBER/brands/$PROJECT_NUMBER
   else
     echo -e "${COLOR}Found an IAP oauth brand (consent screen):'${IAP_BRAND}'${NC}"
@@ -113,6 +119,7 @@ create_iap() {
 
   # Find or create OAuth client for IAP
   output=$(gcloud iap oauth-clients list $IAP_BRAND --format='csv(name,secret)' 2>/dev/null | tail -n +2)
+
   IAP_CLIENT_ID=
   IAP_CLIENT_SECRET=
   while IFS=',' read -r name secret; do
@@ -163,7 +170,7 @@ create_iap() {
 
 
 deploy_all() {
-  check_billing 
+  check_billing
   enable_apis
   set_iam_permissions
   update_git_commit
@@ -194,7 +201,7 @@ else
         exit $exitcode
       fi
     else
-      echo -e "\033[0;31mFunction '$i' does not exist.\033[0m"
+      echo -e "${RED}Function '$i' does not exist.${NC}"
     fi
   done
 fi

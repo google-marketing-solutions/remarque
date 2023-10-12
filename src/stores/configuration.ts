@@ -20,6 +20,7 @@ export interface AudienceInfo {
   user_count?: number;
   mode: AudienceMode;
   query: string;
+  ttl: number;
 }
 export interface ConfigTarget {
   name?: string;
@@ -169,7 +170,7 @@ export const configurationStore = defineStore('configuration', {
 */
 
 // TODO: this implementation is more flexible than via Options API but it cause TS compilation errors,
-// but the other one via Options API 
+// but the other one via Options API
 export const configurationStore = defineStore('configuration', () => {
   const activeTarget = ref(<string | undefined>'');
   const state = ref({

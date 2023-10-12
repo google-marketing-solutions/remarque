@@ -36,6 +36,8 @@ from utils import format_duration
 
 TABLE_USER_NORMALIZED = 'users_normalized'
 
+country_name_to_code_cache = {}
+
 AudienceLog = namedtuple(
   'AudienceLog',
   ['name', 'date', 'job', 'user_count', 'new_user_count', 'new_control_user_count', 'test_user_count', 'control_user_count', 'total_user_count', 'total_control_user_count']
@@ -106,7 +108,9 @@ class DataGateway:
     return ds
 
 
-  def initialize(self, bq_dataset_id: str, bq_dataset_location: str):
+  def initialize(self, target: ConfigTarget):
+    bq_dataset_id = target.bq_dataset_id
+    bq_dataset_location = target.bq_dataset_location
     self.bq_client = bigquery.Client(project=self.config.project_id,
                                     credentials=self.credentials,
                                     location=bq_dataset_location)
@@ -125,6 +129,7 @@ class DataGateway:
        bigquery.SchemaField(name="created", field_type="TIMESTAMP"),
        bigquery.SchemaField(name="mode", field_type="STRING"),
        bigquery.SchemaField(name="query", field_type="STRING", mode="NULLABLE"),
+       bigquery.SchemaField(name="ttl", field_type="INT64", default_value_expression="1"),
     ]
     table_name = f"{bq_dataset_id}.audiences"
     self._ensure_table(table_name, schema)
@@ -144,8 +149,23 @@ class DataGateway:
     ]
     self._ensure_table(table_name, schema)
 
+    # update user segments tables for test users (adding ttl)
+    schema = [
+        bigquery.SchemaField(name="user", field_type="STRING"),
+        bigquery.SchemaField(name="status", field_type="INT64"),
+        bigquery.SchemaField(name="ttl", field_type="INT64"),
+    ]
+    audiences = self.get_audiences(target)
+    for audience in audiences:
+      if audience.table_name:
+        query = f"SELECT table_name FROM {bq_dataset_id}.INFORMATION_SCHEMA.TABLES WHERE table_name like '{audience.table_name}_test_%'"
+        rows = self.execute_query(query)
+        for row in rows:
+          table_name = row['table_name']
+          self._ensure_table(f"{bq_dataset_id}.{table_name}", schema, strict=False)
 
-  def _ensure_table(self, table_name, expected_schema):
+
+  def _ensure_table(self, table_name, expected_schema, strict = False):
     table_ref = bigquery.TableReference.from_string(table_name, self.config.project_id)
     try:
       table = self.bq_client.get_table(table_ref)
@@ -160,21 +180,28 @@ class DataGateway:
             current_field = field
             break
 
+        expected_field_type = expected_field.field_type
+        if expected_field_type == 'INT64':
+          expected_field_type = 'INTEGER'
         if current_field is None:
           schema_fields.append(expected_field)
         elif (
-          expected_field.field_type != current_field.field_type or
+          expected_field_type != current_field.field_type or
           expected_field.mode != current_field.mode
         ):
           schema_fields.append(expected_field)
 
-      for current_field in current_schema:
-        if not any(field.name == current_field.name for field in expected_schema):
-          schema_fields.append(current_field)
+      if strict:
+        # strict check required, so let's check for existing fields missing in expected schema
+        # update with such schema will fail and the table will be recreated
+        for current_field in current_schema:
+          if not any(field.name == current_field.name for field in expected_schema):
+            schema_fields.append(current_field)
 
       if schema_fields:
         table.schema = expected_schema
         try:
+          logger.debug(f"Updating table {table_name} with new schema:\n {schema_fields}")
           table = self.bq_client.update_table(table, ["schema"])
           logger.info(f'Table {table_name} schema updated')
         except Exception as e:
@@ -182,6 +209,15 @@ class DataGateway:
           if getattr(e, "errors", None) and e.errors[0]:
             if e.errors[0].get("debugInfo", None) and e.errors[0]["debugInfo"].startswith("[SCHEMA_INCOMPATIBLE]"):
               logger.info(f'Table {table_name} schema is incompatible and the table has to be recreated')
+              backup_table_id = table_name + "_backup"
+              try:
+                self.bq_client.delete_table(backup_table_id, not_found_ok=True)
+              except:
+                logger.warning(f"Failed to delete backup table {backup_table_id}")
+              try:
+                self.bq_client.copy_table(table, backup_table_id)
+              except Exception as e:
+                logger.warning(f"Failed to backup table before recreating {table.full_table_id}: {e}")
               self.bq_client.delete_table(table, not_found_ok=True)
               table = bigquery.Table(table_ref, schema=expected_schema)
               self.bq_client.create_table(table)
@@ -227,6 +263,7 @@ class DataGateway:
        raise ValueError('days_ago_start should be greater than days_ago_end')
 
     ga_table = self.get_ga4_table_name(target, True)
+    logger.debug(f"Loading GA4 stats for target {target.name} (GA4 table {ga_table})")
     # load events stats
     query = f"""
 SELECT
@@ -250,6 +287,7 @@ ORDER BY 1, 3 DESC
 """
     events_stat = self.execute_query(query)
     #pprint(events_stat)
+    logger.debug(f"Loaded event stats per app_id: {len(events_stat)}")
     app_ids = set()
     events_stat_dict = {}
     for app_id, group in groupby(sorted(events_stat, key=lambda x: x['app_id']), key=lambda x: x['app_id']):
@@ -279,16 +317,24 @@ HAVING country is not null AND country != ''
 ORDER BY 1, 3 DESC
 """
     countries_stat = self.execute_query(query)
-    #pprint(countries_stat)
+    logger.debug(f"Loaded country stats per app_id: {len(countries_stat)}")
+
     countries_stat_dict = {}
+    ts_start = datetime.now()
     for app_id, group in groupby(sorted(countries_stat, key=lambda x: x['app_id']), key=lambda x: x['app_id']):
         countries = list(group)
         for country in countries:
-          code = coco.convert(names = [country['country']], to = 'ISO2', not_found=None)
+          country_name = country['country']
+          code = country_name_to_code_cache.get(country_name, None)
+          if not code:
+            code = coco.convert(names = [country['country']], to = 'ISO2', not_found=None)
+            country_name_to_code_cache[country_name] = code
           country['country_code'] = code
           if code == country['country']:
             logger.warning(f"Could not find country by its name {country['country']}")
         countries_stat_dict[app_id] = countries
+    elapsed = datetime.now() - ts_start
+    logger.debug(f"Enriched stats by country with country codes (elapsed {elapsed})")
 
     return {
         "app_ids": sorted(list(app_ids)),
@@ -300,7 +346,7 @@ ORDER BY 1, 3 DESC
   def get_audiences(self, target: ConfigTarget) -> list[Audience]:
     query = f"""
 SELECT
-  name, app_id, table_name, countries, events_include, events_exclude, days_ago_start, days_ago_end, user_list, created, mode, query
+  name, app_id, table_name, countries, events_include, events_exclude, days_ago_start, days_ago_end, user_list, created, mode, query, ttl
 FROM `{target.bq_dataset_id}.audiences`
 ORDER BY created
 """
@@ -320,6 +366,7 @@ ORDER BY created
       audience.created = row['created']
       audience.mode = row['mode']
       audience.query = row['query']
+      audience.ttl = row['ttl']
       audiences.append(audience)
     return audiences
 
@@ -358,6 +405,8 @@ ORDER BY created
       name = i.name
       # TODO: 1) validate name 2) generate table name
       i.ensure_table_name()
+      if not i.ttl:
+        i.ttl = 1
 
     selects = []
     query_params = []
@@ -373,7 +422,8 @@ ORDER BY created
   {i.days_ago_start} days_ago_start, {i.days_ago_end} days_ago_end,
   {"'" + i.user_list + "'" if i.user_list is not None else "CAST(NULL as STRING)"} user_list,
   {"'" + i.mode + "'"} mode,
-  @query{idx} query
+  @query{idx} query,
+  {i.ttl} ttl
 """)
     sql_selects = "\nUNION ALL\n".join(selects)
     query = f"""
@@ -394,10 +444,11 @@ WHEN MATCHED THEN
       ELSE s.user_list
     END,
     t.mode = s.mode,
-    t.query = s.query
+    t.query = s.query,
+    t.ttl = s.ttl
 WHEN NOT MATCHED THEN
-  INSERT (name, app_id, table_name, countries, events_include, events_exclude, days_ago_start, days_ago_end, created, mode, query)
-  VALUES (s.name, s.app_id, s.table_name, s.countries, s.events_include, s.events_exclude, s.days_ago_start, s.days_ago_end, CURRENT_TIMESTAMP(), s.mode, s.query)
+  INSERT (name, app_id, table_name, countries, events_include, events_exclude, days_ago_start, days_ago_end, created, mode, query, ttl)
+  VALUES (s.name, s.app_id, s.table_name, s.countries, s.events_include, s.events_exclude, s.days_ago_start, s.days_ago_end, CURRENT_TIMESTAMP(), s.mode, s.query, s.ttl)
 """
     logger.debug(query)
     job_config = bigquery.QueryJobConfig()
@@ -477,6 +528,7 @@ WHEN NOT MATCHED THEN
         "day_start": day_start,
         "day_end": day_end,
         "app_id": audience.app_id,
+        "countries_clause": f"f.country IN ({countries}) " if audience.countries else "1=1",
         "countries": countries,
         "all_users_table": target.bq_dataset_id + "." + TABLE_USER_NORMALIZED,
         "all_events_list": all_events_list,
@@ -516,16 +568,18 @@ WHEN NOT MATCHED THEN
 
 
   def fetch_audience_users(self, target: ConfigTarget, audience: Audience, suffix: str = None):
-    """Segment an audience - takes a audience desrciption and fetches the users from GA4 events according to the conditions.
+    """Segment an audience - takes an audience desrciption and fetches the users
+       from GA4 events according to the conditions.
+
+       Returns:
+        DataFrame with columns user, brand, osv, days_since_install, src, n_sessions
     """
     suffix = datetime.now().strftime("%Y%m%d") if suffix is None else suffix
     audience.ensure_table_name()
-    destination_table = target.bq_dataset_id + '.' + audience.table_name + "_" + suffix
+    destination_table = target.bq_dataset_id + '.' + audience.table_name + "_all_" + suffix
     query = self.get_audience_sampling_query(target, audience)
     query = f"CREATE OR REPLACE TABLE `{destination_table}` AS\n" + query
 
-    # TODO: we can add a column is_test into prepare.sql and update it after sampling,
-    # but before doing it make sure do_sampling function correctly handles additional columns (hint: it doesn't)!
     # TODO: parse error with line:column and add query with numbered lines into exception for easier diagnosis
     self.execute_query(query)
 
@@ -555,6 +609,47 @@ FROM `{audience_table_name}`
     return df
 
 
+  def load_old_users(self, target: ConfigTarget, audience: Audience):
+    table_name_test = self._get_user_segment_table_full_name(target, audience.table_name, "test", '*')
+    table_name_ctrl = self._get_user_segment_table_full_name(target, audience.table_name, "control", '*')
+    suffix_today = datetime.now().strftime("%Y%m%d")
+    query_test = f"""SELECT user FROM `{table_name_test}` WHERE _TABLE_SUFFIX != '{suffix_today}'"""
+    query_ctrl = f"""SELECT user FROM `{table_name_ctrl}` WHERE _TABLE_SUFFIX != '{suffix_today}'"""
+    # If we're running it for the first time then user segment tables can not exist yet
+    # (BadRequest: 400 remarque.audience_XXX_test_* does not match any table.)
+    try:
+      df_test = pd.read_gbq(
+          query=query_test,
+          project_id=self.config.project_id,
+          credentials=self.credentials
+      )
+      df_ctrl = pd.read_gbq(
+          query=query_ctrl,
+          project_id=self.config.project_id,
+          credentials=self.credentials
+      )
+    except BaseException as e:
+      # we expect an pd.GenericGBQException wrapped an exceptions.BadRequest but better be on the safe side to catch all
+      logger.info(f"Loading of users from previous days failed: {e}")
+      df_test = pd.DataFrame(columns=['user'])
+      df_ctrl = pd.DataFrame(columns=['user'])
+
+    return df_test, df_ctrl
+
+
+  def _get_user_segment_tables(self, target: ConfigTarget,
+                               audience_table_name,
+                               group_name: Literal['test'] | Literal['control'] = 'test',
+                               suffix: str = None,
+                               include_dataset = False):
+    bq_dataset_id = target.bq_dataset_id
+    query = f"SELECT table_name FROM {bq_dataset_id}.INFORMATION_SCHEMA.TABLES WHERE table_name LIKE '{audience_table_name}_{group_name}_%' ORDER BY 1 DESC"
+    rows = self.execute_query(query)
+    tables = [row['table_name'] for row in rows]
+    if include_dataset:
+      return [f"{bq_dataset_id}.{t}" for t in tables]
+    return tables
+
   def _get_user_segment_table_full_name(self, target: ConfigTarget,
                                         audience_table_name,
                                         group_name: Literal['test'] | Literal['control'] = 'test',
@@ -578,12 +673,15 @@ FROM `{audience_table_name}`
       schema = [
         bigquery.SchemaField(name="user", field_type="STRING"),
         bigquery.SchemaField(name="status", field_type="INT64"),
+        bigquery.SchemaField(name="ttl", field_type="INT64"),
       ]
       self._ensure_table(test_table_name, schema)
     else:
       # add 'status' column (empty for all rows)
       users_test = users_test.assign(status=None).astype({"status": 'Int64'})
-      pandas_gbq.to_gbq(users_test, test_table_name, project_id, if_exists='replace')
+      # add 'ttl' column with audience's initial ttl
+      users_test = users_test.assign(ttl=audience.ttl).astype({"ttl": 'Int64'})
+      pandas_gbq.to_gbq(users_test[['user', 'status', 'ttl']], test_table_name, project_id, if_exists='replace')
 
     control_table_name = self._get_user_segment_table_full_name(target, audience.table_name, 'control', suffix)
     if len(users_control) == 0:
@@ -592,8 +690,31 @@ FROM `{audience_table_name}`
       ]
       self._ensure_table(control_table_name, schema)
     else:
-      pandas_gbq.to_gbq(users_control, control_table_name, project_id, if_exists='replace')
+      pandas_gbq.to_gbq(users_control[['user']], control_table_name, project_id, if_exists='replace')
+
     logger.info(f'Sampled users for audience {audience.name} saved to {test_table_name}/{control_table_name} tables')
+
+    # add test users from yesterday with TTL>1 into today's test users
+    if audience.ttl > 0:
+      tables = self._get_user_segment_tables(target, audience.table_name, 'test', suffix, include_dataset=True)
+      if tables:
+        try:
+          idx = tables.index(test_table_name)
+          if idx != len(tables) - 1:
+            test_table_name_yesterday = tables[idx+1]
+            logger.debug(f"Adding users with TTL>1 from yesterday ({test_table_name_yesterday})")
+            query = f"""
+  INSERT INTO `{test_table_name}` (user, ttl)
+  SELECT user, ttl-1 FROM `{test_table_name_yesterday}` t1
+  WHERE
+    NOT EXISTS (SELECT user FROM `{test_table_name}` WHERE user=t1.user)
+    AND ttl>1
+  """
+            res = self.execute_query(query)
+            logger.debug(f"Added test users from previous day with TTL>1")
+        except ValueError:
+          pass
+
 
 
   def load_audience_segment(self, target: ConfigTarget, audience: Audience, group_name: Literal['test'] | Literal['control'] = 'test', suffix: str = None) -> list[str]:
@@ -611,7 +732,7 @@ FROM `{audience_table_name}`
 
   def update_audience_segment_status(self, target: ConfigTarget, audience: Audience,
                                      suffix: str, failed_users: list[str]):
-    """Update users statuses in a segment table (by deafult - for today)
+    """Update users statuses in a segment table (by default - for today)
         Returns:
           tuple (new_user_count, test_user_count, control_user_count)
     """

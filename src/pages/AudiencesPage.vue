@@ -33,14 +33,14 @@
             <q-table title="GA4 Apps" style="height: 400px" flat bordered :rows="data.app_ids" :row-key="r => r"
               :columns="data.appid_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]"
               @row-click="onAppIdSelected" selection="single" v-model:selected="data.selectedAppId"
-              :loading="data.loading" />
+              :loading="data.ga_stat_loading" />
           </div>
 
           <div class="col">
             <q-table title="GA4 Events" style="height: 400px" flat bordered :rows="data.events" row-key="event"
               :columns="data.events_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]"
-              :no-data-label="data.app_ids.length ? 'Choose an app id' : 'Load all events'" :loading="data.loading"
-              :filter-method="filterEvents" :filter="data.eventsSearch">
+              :no-data-label="data.app_ids.length ? 'Choose an app id' : 'Load all events'"
+              :loading="data.ga_stat_loading" :filter-method="filterEvents" :filter="data.eventsSearch">
               <template v-slot:top>
                 <div style="width: 100%" class="row">
                   <div class="col-7">
@@ -62,8 +62,9 @@
             <q-table title="GA4 Countries" style="height: 400px" flat bordered :rows="data.countries" row-key="country"
               :columns="data.countries_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }"
               :rows-per-page-options="[0]" selection="multiple"
-              :no-data-label="data.app_ids.length ? 'Choose an app id' : 'Load all events'" :loading="data.loading"
-              v-model:selected="data.selectedCountries" :filter-method="filterCountries" :filter="data.countriesSearch">
+              :no-data-label="data.app_ids.length ? 'Choose an app id' : 'Load all events'"
+              :loading="data.ga_stat_loading" v-model:selected="data.selectedCountries" :filter-method="filterCountries"
+              :filter="data.countriesSearch">
               <template v-slot:top>
                 <div style="width: 100%" class="row">
                   <div class="col-7">
@@ -149,6 +150,9 @@
                     placeholder="" hint="days ago" />
                   <q-input class="col-3 q-gutter-md1" outlined v-model="audience.days_ago_end" label="Period end"
                     placeholder="" hint="days ago" />
+                  <q-input class="col-3 q-gutter-md1" outlined v-model="audience.ttl" type="number" min="1"
+                    @blur="() => audience.ttl = audience.ttl < 1 ? 1 : audience.ttl" label="Time to live" placeholder=""
+                    hint="Days to stay in treatment group" />
                 </div>
               </div>
               <div class="row">
@@ -257,7 +261,7 @@
 </style>
 
 <script lang="ts">
-import { defineComponent, ref, watch, computed } from 'vue';
+import { defineComponent, ref, watch, computed, toRaw } from 'vue';
 import { AudienceInfo, AudienceMode, configurationStore } from 'stores/configuration';
 import { getApi, postApi } from 'boot/axios';
 import { useQuasar, QForm, QInput, QDialog, QBtn } from 'quasar';
@@ -302,7 +306,7 @@ export default defineComponent({
         { name: 'mode', label: 'Mode', field: 'mode' },
         { name: 'actions', label: 'Actions', field: '', align: 'center' },
       ],
-      loading: false,
+      ga_stat_loading: false,
       eventsSearch: '',
       countriesSearch: '',
       audiences: computed(() => store.audiences)
@@ -322,7 +326,8 @@ export default defineComponent({
       days_ago_start: undefined,
       days_ago_end: undefined,
       user_list: '',
-      query: ''
+      query: '',
+      ttl: 1
     });
     const audienceForm = ref(null as unknown as QForm);
 
@@ -373,7 +378,7 @@ export default defineComponent({
         return;
       }
       const loading = $q.notify('Loading stat');
-      data.value.loading = true;
+      data.value.ga_stat_loading = true;
       getApi('stat', { days_ago_start, days_ago_end }, loading)
         .then((response) => {
           // we expect an object with `results` field containing an array of objects
@@ -385,7 +390,7 @@ export default defineComponent({
           data.value.countries = [];
           store.stat.events = results.events;
           store.stat.countries = results.countries;
-          data.value.loading = false;
+          data.value.ga_stat_loading = false;
         })
         .catch((e) => {
           $q.notify({
@@ -393,7 +398,7 @@ export default defineComponent({
             message: 'Loading failed: ' + e.message,
             icon: 'report_problem'
           });
-          data.value.loading = false;
+          data.value.ga_stat_loading = false;
         })
     }
     const onAppIdSelected = (evt: any, row: any, index: any) => {
@@ -422,6 +427,7 @@ export default defineComponent({
         user_list: audience.value.user_list,
         mode: <AudienceMode>audience.value.mode,
         query: audience.value.query,
+        ttl: audience.value.ttl,
       }
       return obj;
     }
@@ -479,6 +485,7 @@ export default defineComponent({
       audience.value.days_ago_end = undefined;
       audience.value.mode = 'off';
       audience.value.query = '';
+      audience.value.ttl = 1;
       audienceForm.value.resetValidation();
     }
     const onAudienceFilterCountries = (val: string, doneFn: (callbackFn: () => void) => void, abortFn: () => void) => {
@@ -492,16 +499,19 @@ export default defineComponent({
       });
     }
     const onAudiencePreview = async () => {
+      const obj = getAudienceFromForm();
+      if (!obj.app_id) {
+        $q.dialog({ message: 'Please specify an app_id' });
+        return;
+      }
       $q.loading.show({ message: 'Getting a preview of the audience...' });
       const loading = () => $q.loading.hide();
-      const obj = getAudienceFromForm();
-      //$q.notify({ message: 'Audiences successfully updated', icon: 'success', timeout: 1000 });
       try {
         let res = await postApi('audiences/preview', { audience: obj }, loading);
         console.log(res.data);
         $q.dialog({
           title: 'Audience preview',
-          message: `The audience with current conditions returned ${res.data.users_count} users`
+          message: `The audience with current conditions returned ${res.data.users_count} users.\nPlease it doens't take into account TTL (users readded from previous days because of ttl>1)`
         });
       }
       catch (e: any) {
@@ -512,6 +522,7 @@ export default defineComponent({
       }
     };
     const onAudienceGetQuery = async () => {
+      $q.loading.show({ message: 'Getting query...' });
       const loading = () => $q.loading.hide();
       const obj = getAudienceFromForm();
       try {
@@ -557,6 +568,7 @@ export default defineComponent({
           days_ago_end: row.days_ago_end,
           mode: row.mode,
           query: row.query,
+          ttl: row.ttl,
           // NOTE: we're not sending id, user_list
         }
       });
@@ -579,7 +591,8 @@ export default defineComponent({
         cancel: true,
         persistent: true
       }).onOk(async () => {
-        const loading = $q.notify('Downloading audiences...');
+        $q.loading.show({ message: 'Loading audiences...' });
+        const loading = () => $q.loading.hide();
         try {
           let res = await getApi('audiences', {}, loading);
           const audiences = res.data.results;

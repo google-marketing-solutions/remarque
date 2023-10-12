@@ -41,10 +41,10 @@ def makeEncoding(df: pd.DataFrame, exclude_cols: list[str], all_cols, encoder=No
     """
     _df = df.copy()
     dtypes_dct = dict(df.dtypes.to_frame('dtypes').reset_index().values)
-
+    # dtypes_dct is a Python dictionary, where keys are column names of the DataFrame and values are these columns' corresponding data types.
     # numerical_ix = _df.drop(exclude_cols, axis=1).select_dtypes(include=['int64', 'float64']).columns.values.tolist()
     cat_ix = _df.drop(exclude_cols, axis=1).select_dtypes(include=['object']).columns.values.tolist()
-    #print(cat_ix)
+    # cat_ix is a list of categorical variables (e.g. 'brand', 'osv', 'src')
     # t = [('num', MinMaxScaler(), numerical_ix), ('cat', OrdinalEncoder(), cat_ix)]
     t = [('cat', OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-99), cat_ix)]
     col_transform = ColumnTransformer(transformers=t, remainder='passthrough')
@@ -52,11 +52,12 @@ def makeEncoding(df: pd.DataFrame, exclude_cols: list[str], all_cols, encoder=No
         encoder = col_transform.fit(_df)
     res = encoder.transform(_df)
     part_cols = [col for col in all_cols if col not in cat_ix]
+    # part_cols is names of the columns that were not transformed ('user', 'days_since_install', 'n_sessions', 'num_sessions_bins')
     reorder_df = pd.DataFrame(res, columns=cat_ix + part_cols).astype(dtypes_dct)
-
+    # not reorder_df has all the columns that the original _df had, but with the categorical ones transformed according to the rules defined via OrdinalEncoder
     reorder_df[cat_ix] = reorder_df[cat_ix].astype(int)
 
-    return reorder_df[all_cols], encoder, cat_ix
+    return reorder_df[all_cols], cat_ix
 
 
 def stratify(data, classes, ratios, one_hot=False):
@@ -302,7 +303,8 @@ def process_df(df: pd.DataFrame, frac_test=.5, max_test_share=30):
   bins = binsify(df, 'n_sessions')
   df['num_sessions_bins'] = np.searchsorted(bins, df['n_sessions'].values)
 
-  encoded, encoder, cat_f = makeEncoding(df, exclude_cols=['user'], all_cols=df.columns)
+  # encode original DF: all categorical columns will be encoded as integers
+  encoded, cat_f = makeEncoding(df, exclude_cols=['user'], all_cols=df.columns)
   encoded = offset_features(encoded, cat_f)
 
   all_classes = countClasses(encoded)
@@ -340,9 +342,4 @@ def do_sampling(df: pd.DataFrame):
   user_count_control = users_control.shape[0]
   logger.info(f'Data sampling completed (user count: {user_count}, test count: {user_count_test}, control count: {user_count_control}, test fraction: {frac_test:2})')
 
-  #test_table_name =f'{bq_dataset_id}.{audience_table}_test'
-  #pandas_gbq.to_gbq(users_test, test_table_name, project_id, if_exists='replace')
-  #control_table_name =f'{bq_dataset_id}.{audience_table}_control'
-  #pandas_gbq.to_gbq(users_control, control_table_name, project_id, if_exists='replace')
-  #logger.info(f'Sampled users exported to {test_table_name}/{control_table_name} tables')
   return users_test, users_control

@@ -82,7 +82,7 @@
         <q-input outlined v-model="store.ads_login_customer_id" label="MCC id" placeholder="Google Ads MCC id" hint="" />
 
         <div class="row q-pa-md">
-          <q-file class="col-3" v-model="data.file" label="Select File google-ads.yaml" accept=".yaml"></q-file>
+          <q-file class="col-3" v-model="data.file" label="Select google-ads.yaml" accept=".yaml"></q-file>
           <div class="col">
             <q-btn label="Upload File" color="primary" @click="uploadGoogleAdsConfig" class="q-ml-md"></q-btn>
             <q-btn label="Validate" color="primary" @click="validateGoogleAdsConfig" class="q-ml-md"></q-btn>

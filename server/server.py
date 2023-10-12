@@ -214,7 +214,7 @@ def setup():
       if other.bq_dataset_id == target.bq_dataset_id:
         raise Exception(f'Configuration "{name}" uses the same dataset "{target.bq_dataset_id}" as configuration "{other.name}", please choose a different one')
 
-  context.data_gateway.initialize(target.bq_dataset_id, target.bq_dataset_location)
+  context.data_gateway.initialize(target)
 
   target.ads_client_id = params.get('ads_client_id', None)
   target.ads_client_secret = params.get('ads_client_secret', None)
@@ -446,17 +446,39 @@ def run_sampling() -> Response:
     if len(df) == 0:
       logger.warning("User segment of audience '{audience.name}' contains no users")
 
+    # exclude old users from test and control groups from today's users
+    old_test_users, old_ctrl_users = context.data_gateway.load_old_users(context.target, audience)
+    mask = df['user'].isin(old_test_users['user']) | df['user'].isin(old_ctrl_users['user'])
+    df_new = df[~mask]
+    logger.debug(f"The segment has been adjusted to exclude old users and now contains {len(df_new)} users")
+    # now df doesn't contain users from previous days
+
     # if the segment is empty there's no point in sampling
     # TODO: if audience.mode == 'prod':
     #
-    if len(df) > 0:
-      users_test, users_control = do_sampling(df)
+    if len(df_new) > 0:
+      users_test, users_control = do_sampling(df_new)
     else:
       # create empty tables for test and control users so other queries wouldn't fail
       users_test = pd.DataFrame(columns=['user'])
       users_control = pd.DataFrame(columns=['user'])
 
+    logger.debug(f"Using stratification the segment was split onto: test - {len(users_test)} users, control - {len(users_control)} users")
+    # add old test/control users from df to the new test/control groups
+    old_test_df = df[df['user'].isin(old_test_users['user'])]
+    old_control_df = df[df['user'].isin(old_ctrl_users['user'])]
+
+    # append old users to the new test/control groups
+    users_test = pd.concat([users_test, old_test_df], ignore_index=True)
+    users_control = pd.concat([users_control, old_control_df], ignore_index=True)
+    #users_test = users_test.concat(old_test_df, ignore_index=True)
+    #users_control = users_control.concat(old_control_df, ignore_index=True)
+    logger.debug(f"The today's test/control groups were updated with previously exposed users: test - {len(users_test)} users, control - {len(users_control)} users")
+
+    # TODO: add old tests users with TTL>0
+
     context.data_gateway.save_sampled_users(context.target, audience, users_test, users_control)
+
     result[audience.name] = {
       "test_count": len(users_test),
       "control_count": len(users_control),
@@ -526,8 +548,8 @@ def update_customer_match_audiences():
     user_list_res_name = audience.user_list
     # load of users for 'today' table (audience_{listname}_test_yyyyMMdd)
     users = context.data_gateway.load_audience_segment(context.target, audience, audience.mode)
-    logger.warn(f"Audience '{audience.name}' segment has no users")
-    # upload users to Google Ads: note we overwrite users for prod and increament for test modes
+
+    # upload users to Google Ads
     if len(users) > 0:
       job_resource_name, failed_users, uploaded_users = \
           ads_gateway.upload_customer_match_audience(user_list_res_name, users, True)
@@ -535,6 +557,7 @@ def update_customer_match_audiences():
       test_user_count, control_user_count, new_test_user_count, new_control_user_count = \
           context.data_gateway.update_audience_segment_status(context.target, audience, None, failed_users)
     else:
+      logger.warn(f"Audience '{audience.name}' segment has no users")
       job_resource_name = None
       failed_users = []
       uploaded_users = []

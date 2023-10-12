@@ -26,7 +26,7 @@ WITH
       event_table
       INNER JOIN `{all_users_table}` f USING (user)
     WHERE
-      f.country IN ({countries}) AND
+      {countries_clause} AND
       f.app_id = '{app_id}' AND
       {SEARCH_CONDITIONS}
   )
