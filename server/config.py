@@ -27,8 +27,8 @@ from logger import logger
 from env import GAE_LOCATION
 
 class AppNotInitializedError(Exception):
-  def __init__(self) -> None:
-    super().__init__("Application is not initialized, please go to Configuration page and run setup")
+  def __init__(self, msg = None) -> None:
+    super().__init__(msg or "Application is not initialized, please go to Configuration page and run setup")
 
 
 class Audience:

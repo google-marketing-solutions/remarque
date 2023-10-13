@@ -4,7 +4,7 @@
     <q-list separator>
       <q-item clickable v-ripple to="/configuration">
         <q-item-section>
-          <q-item-label>Configurations</q-item-label>
+          <q-item-label>Configuration</q-item-label>
           <q-item-label caption lines="2">Application setup, manage configurations, define GA4 source.</q-item-label>
         </q-item-section>
         <q-item-section side>

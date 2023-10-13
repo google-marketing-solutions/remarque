@@ -498,7 +498,7 @@ def _validate_googleads_config(ads_config, *, throw=False):
     return False
 
 
-def _get_ads_config(target: ConfigTarget):
+def _get_ads_config(target: ConfigTarget, assert_non_empty=False):
   ads_config = {
     "developer_token": target.ads_developer_token,
     "client_id": target.ads_client_id,
@@ -508,13 +508,16 @@ def _get_ads_config(target: ConfigTarget):
     "customer_id": str(target.ads_customer_id or target.ads_login_customer_id),
     "use_proto_plus": True
   }
+  if assert_non_empty and (not ads_config["refresh_token"] or not ads_config["developer_token"]):
+    raise AppNotInitializedError("Google Ads API credentials are not specified, please add them on Configuration page")
+
   return ads_config
 
 
 @app.route("/api/ads/upload", methods=["POST"])
 def update_customer_match_audiences():
   context = create_context()
-  ads_config = _get_ads_config(context.target)
+  ads_config = _get_ads_config(context.target, True)
   ads_client = GoogleAdsApiClient(config_dict=ads_config)
   ads_gateway = AdsGateway(context.config, context.target, ads_client)
   logger.debug(f"Creating or loading existing user lists from Google Ads")
@@ -609,7 +612,7 @@ def update_customer_match_audiences():
 @app.route("/api/audiences/status", methods=["GET"])
 def get_audiences_status():
   context = create_context()
-  ads_config = _get_ads_config(context.target)
+  ads_config = _get_ads_config(context.target, True)
   ads_client = GoogleAdsApiClient(config_dict=ads_config)
   ads_gateway = AdsGateway(context.config, context.target, ads_client)
 
@@ -717,8 +720,11 @@ def catch_all(path):
   # There is a "feature" in GAE - all files have zeroed timestamp ("Tue, 01 Jan 1980 00:00:01 GMT")
   if IS_GAE:
     response.headers.remove("Last-Modified")
+  if path == "index.html":
+    response.headers.remove("ETag")
+  response.cache_control.no_cache = True
   response.cache_control.no_store = True
-
+  logger.debug(f"Static file request {path} processed")
   return response
 
 

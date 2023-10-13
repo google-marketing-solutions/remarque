@@ -174,7 +174,7 @@
         <div class="">
           <q-table title="Audiences" style="height: 400px" flat bordered :rows="data.audiences" row-key="name"
             :columns="data.audiences_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }"
-            :rows-per-page-options="[0]">
+            :rows-per-page-options="[0]" :wrap-cells="true">
             <template v-slot:body-cell-actions="props">
               <q-td :props="props">
                 <q-btn dense round flat color="grey" @click="onAudienceListEdit(props)" icon="edit"></q-btn>
@@ -303,6 +303,7 @@ export default defineComponent({
         { name: 'events_exclude', label: 'Exclude events', field: 'events_exclude', sortable: true, format: formatArray },
         { name: 'days_ago_start', label: 'Start', field: 'days_ago_start' },
         { name: 'days_ago_end', label: 'End', field: 'days_ago_end' },
+        { name: 'ttl', label: 'TTL', field: 'ttl'},
         { name: 'mode', label: 'Mode', field: 'mode' },
         { name: 'actions', label: 'Actions', field: '', align: 'center' },
       ],

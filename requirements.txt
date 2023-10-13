@@ -4,6 +4,7 @@ google-auth-oauthlib
 google-cloud-storage
 google-cloud-bigquery
 google-cloud-scheduler
+google-cloud-logging
 # for sampling
 numpy
 pandas

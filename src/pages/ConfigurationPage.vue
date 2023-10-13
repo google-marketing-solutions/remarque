@@ -47,7 +47,7 @@
             <q-icon name="info" color="primary" />
           </template>
 
-          Please note that the dataset will be created in the save location (us or eu) where your GA4 dataset is
+          Please note that the dataset will be created in the same location (us or eu) where your GA4 dataset is
           located.
         </q-banner>
 

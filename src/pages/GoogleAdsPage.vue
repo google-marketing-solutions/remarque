@@ -76,7 +76,8 @@
           <div class="">
             <q-table title="Audiences" style="height: 300px" flat bordered :rows="data.audiences" row-key="name"
               :columns="data.audiences_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }"
-              :rows-per-page-options="[0]" v-model:selected="data.selectedAudience" selection="single" hide-bottom>
+              :rows-per-page-options="[0]" v-model:selected="data.selectedAudience" :wrap-cells="true" selection="single"
+              hide-bottom>
               <template v-slot:body-cell-actions="props">
                 <q-td :props="props">
                   <q-btn dense round flat color="grey" @click="onOpenChart(props)" icon="query_stats"></q-btn>
@@ -94,7 +95,7 @@
         </q-card-section>
         <q-card-section>
           <div class="">
-            <q-table title="Log" style="height: 300px" flat bordered :rows="data.audience_log" row-key="name"
+            <q-table title="Upload history" style="height: 300px" flat bordered :rows="data.audience_log" row-key="name"
               :columns="data.audience_status_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }"
               :rows-per-page-options="[0]" hide-bottom>
             </q-table>
@@ -226,6 +227,7 @@ export default defineComponent({
         { name: 'events_exclude', label: 'Exclude events', field: 'events_exclude', sortable: true, format: formatArray },
         { name: 'days_ago_start', label: 'Start', field: 'days_ago_start' },
         { name: 'days_ago_end', label: 'End', field: 'days_ago_end' },
+        { name: 'ttl', label: 'TTL', field: 'ttl' },
         { name: 'actions', label: 'Actions', field: '', align: 'center' },
       ],
       audience_status_columns: [
@@ -439,6 +441,7 @@ export default defineComponent({
             'days_ago_start': audience.days_ago_start,
             'days_ago_end': audience.days_ago_end,
             'user_list': audience.user_list,
+            'ttl': audience.ttl,
             'log': audience.log
           });
         });

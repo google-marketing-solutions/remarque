@@ -13,9 +13,10 @@
  See the License for the specific language governing permissions and
  limitations under the License.
  """
- 
+
 import os
 import logging
+from env import IS_GAE
 
 logging.basicConfig(
     format='[%(asctime)s][%(name)s][%(levelname)s] %(message)s',
@@ -23,6 +24,12 @@ logging.basicConfig(
     datefmt='%H:%M:%S')
 
 loglevel = os.getenv('LOG_LEVEL') or 'DEBUG'
+
+if IS_GAE:
+  import google.cloud.logging
+  client = google.cloud.logging.Client()
+  client.setup_logging(log_level=loglevel)
+
 logger = logging.getLogger('remarque')
 logger.setLevel(loglevel)
 logging.getLogger('google.ads.googleads.client').setLevel(logging.WARNING)
@@ -30,3 +37,4 @@ logging.getLogger('gaarf.query_executor').setLevel(logging.WARNING)
 logging.getLogger('googleapiclient.discovery').setLevel(logging.WARNING)
 logging.getLogger('smart_open.gcs').setLevel(logging.WARNING)
 logging.getLogger('smart_open.smart_open_lib').setLevel(logging.WARNING)
+
