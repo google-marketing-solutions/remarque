@@ -129,7 +129,7 @@ class DataGateway:
        bigquery.SchemaField(name="created", field_type="TIMESTAMP"),
        bigquery.SchemaField(name="mode", field_type="STRING"),
        bigquery.SchemaField(name="query", field_type="STRING", mode="NULLABLE"),
-       bigquery.SchemaField(name="ttl", field_type="INT64", default_value_expression="1"),
+       bigquery.SchemaField(name="ttl", field_type="INT64", mode="NULLABLE"),
     ]
     table_name = f"{bq_dataset_id}.audiences"
     self._ensure_table(table_name, schema)
@@ -158,7 +158,7 @@ class DataGateway:
     audiences = self.get_audiences(target)
     for audience in audiences:
       if audience.table_name:
-        query = f"SELECT table_name FROM {bq_dataset_id}.INFORMATION_SCHEMA.TABLES WHERE table_name like '{audience.table_name}_test_%'"
+        query = f"SELECT table_name FROM {bq_dataset_id}.INFORMATION_SCHEMA.TABLES WHERE table_name like '{audience.table_name}_test_%' ORDER BY 1"
         rows = self.execute_query(query)
         for row in rows:
           table_name = row['table_name']
@@ -169,10 +169,10 @@ class DataGateway:
     table_ref = bigquery.TableReference.from_string(table_name, self.config.project_id)
     try:
       table = self.bq_client.get_table(table_ref)
-      logger.debug(f"Initialize: table {table_name} exists")
+      logger.debug(f"Initialize: table {table_name} found")
 
       current_schema = table.schema
-      schema_fields = []
+      updated_fields = []
       for expected_field in expected_schema:
         current_field = None
         for field in current_schema:
@@ -184,24 +184,31 @@ class DataGateway:
         if expected_field_type == 'INT64':
           expected_field_type = 'INTEGER'
         if current_field is None:
-          schema_fields.append(expected_field)
+          updated_fields.append(expected_field)
         elif (
           expected_field_type != current_field.field_type or
           expected_field.mode != current_field.mode
         ):
-          schema_fields.append(expected_field)
+          updated_fields.append(expected_field)
 
-      if strict:
-        # strict check required, so let's check for existing fields missing in expected schema
-        # update with such schema will fail and the table will be recreated
-        for current_field in current_schema:
-          if not any(field.name == current_field.name for field in expected_schema):
-            schema_fields.append(current_field)
+      deleted_fields = []
+      for current_field in current_schema:
+        if not any(field.name == current_field.name for field in expected_schema):
+          deleted_fields.append(current_field)
 
-      if schema_fields:
+      if deleted_fields:
+        # drop columns (update_table doesn't support removing columns)
+        logger.debug(f"Removing excess columns for {table_name}: {deleted_fields}")
+        for field in deleted_fields:
+          sql = f"ALTER TABLE `{table_name}` DROP COLUMN {field.name}"
+          self.execute_query(sql)
+        # refresh the table as w/o it we'll have 'PRECONDITION_FAILED: 412' error on update_table
+        table = self.bq_client.get_table(table_ref)
+
+      if updated_fields:
         table.schema = expected_schema
         try:
-          logger.debug(f"Updating table {table_name} with new schema:\n {schema_fields}")
+          logger.debug(f"Updating table {table_name} with new schema:\n {updated_fields}")
           table = self.bq_client.update_table(table, ["schema"])
           logger.info(f'Table {table_name} schema updated')
         except Exception as e:
@@ -222,8 +229,10 @@ class DataGateway:
               table = bigquery.Table(table_ref, schema=expected_schema)
               self.bq_client.create_table(table)
               return
+          logger.warning(f"It is not a scheme_incompatible error or we failed to parse it")
           raise
-
+      else:
+        logger.debug(f"Table {table_name} has compatible schema")
     except exceptions.NotFound:
       logger.debug(f"Initialize: Creating '{table_name}' table")
       table = bigquery.Table(table_ref, schema=expected_schema)
