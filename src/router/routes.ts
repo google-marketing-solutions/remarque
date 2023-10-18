@@ -4,6 +4,7 @@ import IndexPage from 'pages/IndexPage.vue';
 import ConfigurationPage from 'pages/ConfigurationPage.vue';
 import AudiencesPage from 'pages/AudiencesPage.vue';
 import GoogleAdsPage from 'pages/GoogleAdsPage.vue';
+import SchedulePage from 'pages/SchedulePage.vue';
 
 const routes: RouteRecordRaw[] = [
   {
@@ -28,6 +29,11 @@ const routes: RouteRecordRaw[] = [
         path: 'google-ads',
         component: GoogleAdsPage,
         meta: { title: 'Google Ads' },
+      },
+      {
+        path: 'schedule',
+        component: SchedulePage,
+        meta: { title: 'Scheduling' },
       },
     ],
   },

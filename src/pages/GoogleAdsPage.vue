@@ -8,52 +8,6 @@
       <q-btn label="Upload audiences" @click="onAudiencesUpload" :fab="true" color="primary"></q-btn>
     </div>
 
-
-    <div class="q-mt-md">
-      <q-card class="card" flat bordered>
-        <q-card-section class="q-col-gutter-md" style="padding-top: 0; padding-bottom: 30px;">
-          <div class="text-h6">Schedule execution</div>
-          <div class="row">
-            <div class="col-4">
-              <q-toggle v-model="store.scheduled" indeterminate-value="null" label="Enabled" />
-            </div>
-          </div>
-          <div class="row">
-            <div class="col-4">
-              <!-- <q-time v-model="store.schedule" format24h /> -->
-              <q-input filled v-model="store.schedule" mask="time" :rules="['time']">
-                <template v-slot:append>
-                  <q-icon name="access_time" class="cursor-pointer">
-                    <q-popup-proxy cover transition-show="scale" transition-hide="scale">
-                      <q-time v-model="store.schedule" format24h>
-                        <div class="row items-center justify-end">
-                          <q-btn v-close-popup label="Close" color="primary" flat />
-                        </div>
-                      </q-time>
-                    </q-popup-proxy>
-                  </q-icon>
-                </template>
-              </q-input>
-            </div>
-            <div class="col-1"></div>
-            <div class="col-4">
-              <q-select outlined v-model="store.schedule_timezone" label="Timezone" :hide-bottom-space=true
-                :options="data.timeZonesSelect" use-input @filter="onTimezoneFilter" input-debounce="0"
-                hint="Name of a timezone from tz database, e.g. Europe/Moscow, America/Los_Angeles, UTC">
-                <template v-slot:append>
-                  <q-icon name="language" />
-                </template>
-              </q-select>
-            </div>
-          </div>
-        </q-card-section>
-        <q-card-actions class="q-pa-md">
-          <q-btn label="Load" icon="download" size="md" @click="onScheduleLoad" color="primary" style="width:130px" />
-          <q-btn label="Save" icon="save" size="md" @click="onScheduleSave" color="primary" style="width:130px" />
-        </q-card-actions>
-      </q-card>
-    </div>
-
     <div class="q-mt-md">
       <q-card class="card" flat bordered>
         <q-card-section>
@@ -61,7 +15,8 @@
           <div>
             <q-banner class="bg-grey-3">
               <template v-slot:avatar>
-                <q-icon name="info" color="primary" />If you scheduled execution then for each defined audience
+                <q-icon name="info" color="primary" size="md" style="margin-right: 5px;"/>
+                If you scheduled execution then for each defined audience
                 there will be segments with sampled users uploaded to Google Ads as customer match user lists.
               </template>
             </q-banner>
@@ -90,6 +45,14 @@
                       'Test ' : 'Prod' }}</q-chip>
                 </q-td>
               </template>
+              <template v-slot:body-cell-countries="props">
+                <q-td :props="props">
+                  <div class="limited-width">
+                    {{ formatArray(props.row.countries) }}
+                    <q-tooltip>{{ formatArray(props.row.countries) }}</q-tooltip>
+                  </div>
+                </q-td>
+              </template>
             </q-table>
           </div>
         </q-card-section>
@@ -105,7 +68,17 @@
         <q-card-section v-if="data.selectedAudience.length">
           <q-banner class="bg-grey-2">
             <div class="row">
-              <div class="col-1 q-pa-md" style="width:250px">
+               <div class="col q-pa-xs">
+                  <q-banner class="bg-grey-3">
+                    <template v-slot:avatar><q-icon name="info" color="primary" size="md" style="margin-right: 5px;"/>
+                      If you don't specify the start date then the day of first upload to Google Ads will be used.<br>
+                      If you don't specify the end date then yesterday will be used.
+                    </template>
+                  </q-banner>
+                </div>
+            </div>
+            <div class="row">
+              <div class="col q-pa-xs" style="max-width:250px">
                 <q-input filled v-model="data.conversions_from" mask="####-##-##" label="Start date" clearable>
                   <template v-slot:append>
                     <q-icon name="event" class="cursor-pointer">
@@ -118,7 +91,7 @@
                   </template>
                 </q-input>
               </div>
-              <div class="col-1 q-pa-md" style="width:250px">
+              <div class="col q-pa-xs" style="max-width:250px">
                 <q-input filled v-model="data.conversions_to" mask="####-##-##" label="End date" clearable>
                   <template v-slot:append>
                     <q-icon name="event" class="cursor-pointer">
@@ -131,20 +104,19 @@
                   </template>
                 </q-input>
               </div>
-              <div class="col-4">
-                <q-banner class="bg-grey-3">
-                  <template v-slot:avatar>
-                    If you don't specify the start date then the day of first upload to Google Ads will be used.<br>
-                    If you don't specify the end date then yesterday will be used.
-                  </template>
-                </q-banner>
+              <div class="col q-pa-xs" >
+                <!-- <q-input filled v-model="data.country" label="Country" clearable></q-input> -->
+                <q-select filled v-model="data.conversions_selected_countries" multiple
+                  :options="data.conversions_countries" label="Country" style="width: 250px" clearable />
               </div>
-              <div class="col-3">
+
+              <div class="col q-pa-xs">
                 <q-banner class="bg-grey-3">
                   p-val: <q-badge>{{ data.pvalFormatted }}</q-badge>
                   <br>If pval &lt;=0.05, then results are statistically significant
                 </q-banner>
               </div>
+
             </div>
             <q-btn label="Load conversions" @click="onLoadConversions" color="primary" icon="query_stats"></q-btn>
           </q-banner>
@@ -168,13 +140,21 @@
   </q-dialog>
 </template>
 
+<style>
+.limited-width {
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+</style>
+
 <script lang="ts">
 import { computed, defineComponent, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { AudienceInfo, configurationStore } from 'stores/configuration';
 import { getApi, postApi } from 'boot/axios';
 import { formatArray, formatDate } from '../helpers/utils';
-import { timeZones } from '../helpers/timezones';
 
 interface AudienceLog {
   //status: any;
@@ -213,7 +193,6 @@ export default defineComponent({
     const store = configurationStore();
     const $q = useQuasar();
     const data = ref({
-      timeZonesSelect: timeZones,
       audiences: [] as AudienceWithLog[], //store.audiences,
       audiences_data: {},
       audience_log: [],
@@ -276,6 +255,8 @@ export default defineComponent({
       },
       conversions_from: <string | undefined>undefined,
       conversions_to: <string | undefined>undefined,
+      conversions_selected_countries: [],
+      conversions_countries: [],
       pval: <number | undefined>undefined,
       pvalFormatted: computed(() => {
         return data.value.pval ? data.value.pval.toFixed(5) : '-'
@@ -365,55 +346,13 @@ export default defineComponent({
         });
       }
     };
-    const onTimezoneFilter = (val: string, doneFn: (callbackFn: () => void) => void, abortFn: () => void) => {
-      doneFn(() => {
-        data.value.timeZonesSelect = timeZones.filter(r => r.toLowerCase().includes(val?.toLowerCase()));
-      });
-    }
-    const onScheduleLoad = async () => {
-      $q.loading.show({ message: 'Fetching Cloud Scheduler job...' });
-      const loading = () => $q.loading.hide();
-      try {
-        let res = await getApi('schedule', {}, loading);
-        if (res.data) {
-          store.scheduled = res.data.scheduled;
-          store.schedule = res.data.schedule;
-          store.schedule_timezone = res.data.schedule_timezone;
-        } else {
-          store.scheduled = false;
-          store.schedule = '';
-          store.schedule_timezone = '';
-        }
-      }
-      catch (e: any) {
-        $q.dialog({
-          title: 'Error',
-          message: e.message,
-        });
-      }
-    };
-    const onScheduleSave = async () => {
-      $q.loading.show({ message: 'Updating Cloud Scheduler job...' });
-      const loading = () => $q.loading.hide();
-      try {
-        await postApi('schedule/edit', {
-          scheduled: store.scheduled,
-          schedule: store.schedule,
-          schedule_timezone: store.schedule_timezone
-        }, loading);
-      }
-      catch (e: any) {
-        $q.dialog({
-          title: 'Error',
-          message: e.message,
-        });
-      }
-    };
 
     watch(() => data.value.selectedAudience, (newValue: any[]) => {
       if (newValue && newValue.length) {
         let newActiveAudience = newValue[0];
         data.value.audience_log = newActiveAudience.log;
+        data.value.conversions_selected_countries = [];
+        data.value.conversions_countries = newActiveAudience.countries;
         updateConversionsChart(newActiveAudience.conversions);
       }
     });
@@ -463,17 +402,21 @@ export default defineComponent({
         const audience = data.value.selectedAudience[0];
         let date_start = <string | undefined>data.value.conversions_from;
         let date_end = <string | undefined>data.value.conversions_to;
-        audience.conversions = await loadConversions(audience.name, date_start, date_end);
+        let country = data.value.conversions_selected_countries;
+        if (country && country.length) {
+          country = country.join(',');
+        }
+        audience.conversions = await loadConversions(audience.name, date_start, date_end, country);
         updateConversionsChart(audience.conversions);
       }
     };
 
-    const loadConversions = async (audienceName: string, date_start: string | undefined, date_end: string | undefined): Promise<Conversions | undefined> => {
+    const loadConversions = async (audienceName: string, date_start: string | undefined, date_end: string | undefined, country: string | undefined): Promise<Conversions | undefined> => {
       data.value.chart.series = [];
       $q.loading.show({ message: 'Fetching the audience conversion history...' });
       const loading = () => $q.loading.hide();
       try {
-        let res = await getApi('audiences/conversions', { audience: audienceName, date_start, date_end }, loading);
+        let res = await getApi('audiences/conversions', { audience: audienceName, date_start, date_end, country }, loading);
         const results = res.data.results;
         let result;
         if (results) {
@@ -540,12 +483,10 @@ export default defineComponent({
       data,
       onSampling,
       onAudiencesUpload,
-      onTimezoneFilter,
-      onScheduleLoad,
-      onScheduleSave,
       onFetchAudiencesStatus,
       onLoadConversions,
-      onOpenChart
+      onOpenChart,
+      formatArray
     };
   }
 });

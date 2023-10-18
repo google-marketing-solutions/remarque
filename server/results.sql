@@ -15,8 +15,11 @@ WITH
       AND event_name IN ({events})
   ),
   conversions AS (
-    SELECT * FROM all_conversions
+    SELECT *
+    FROM all_conversions
+      JOIN `{all_users_table}` USING(user)
     WHERE rr = 1
+      {SEARCH_CONDITIONS}
   ),
   test_converted AS (
     SELECT

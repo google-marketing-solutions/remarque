@@ -671,7 +671,9 @@ def get_user_conversions():
   date_start = date.fromisoformat(date_start) if date_start else None
   date_end = request.args.get('date_end')
   date_end = date.fromisoformat(date_end) if date_end else None
-
+  country = request.args.get('country')
+  if country:
+    country = country.split(',')
   audiences = context.data_gateway.get_audiences(context.target)
   audience_name = request.args.get('audience')
   logger.info(f"Calculating conversions graph for '{audience_name}' audience and {date_start}-{date_end} timeframe")
@@ -681,7 +683,7 @@ def get_user_conversions():
   for audience in audiences:
     if audience_name and audience.name != audience_name:
       continue
-    result, date_start, date_end = context.data_gateway.get_user_conversions(context.target, audience, date_start, date_end)
+    result, date_start, date_end = context.data_gateway.get_user_conversions(context.target, audience, date_start, date_end, country)
     # the result is a list of columns: date, cum_test_regs, cum_control_regs, total_user_count, total_control_user_count
 
     array_conversions = [ [i["cum_test_regs"], i["cum_control_regs"]] for i in result]

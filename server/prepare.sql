@@ -21,7 +21,8 @@ WITH
       f.days_since_install,
       f.acquisition_source,
       f.acquisition_medium,
-      n_sessions
+      n_sessions,
+      f.country
     FROM
       event_table
       INNER JOIN `{all_users_table}` f USING (user)
@@ -36,6 +37,7 @@ WITH
     osv,
     days_since_install,
     IFNULL(acquisition_source,'') || '_' || IFNULL(acquisition_medium,'') as src,
-    n_sessions
+    n_sessions,
+    country
   FROM
     filtered_users

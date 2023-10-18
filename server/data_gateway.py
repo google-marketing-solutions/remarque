@@ -725,7 +725,6 @@ FROM `{audience_table_name}`
           pass
 
 
-
   def load_audience_segment(self, target: ConfigTarget, audience: Audience, group_name: Literal['test'] | Literal['control'] = 'test', suffix: str = None) -> list[str]:
     """Loads test users of a given audience for a particular segment (by default - today)"""
     table_name = self._get_user_segment_table_full_name(target, audience.table_name, group_name, suffix)
@@ -849,7 +848,8 @@ ORDER BY name, date
 
 
   def get_user_conversions(self, target: ConfigTarget, audience: Audience,
-                           date_start: date = None, date_end: date = None):
+                           date_start: date = None, date_end: date = None,
+                           country = None):
     if date_start is None:
       log = self.get_audiences_log(target)
       log_rows = log.get(audience.name, None)
@@ -870,15 +870,23 @@ ORDER BY name, date
 
     # NOTE: all events that we ignored for sampling (we picked users for whom those events didn't happen)
     # now are our conversions, but except "app_remove"
+    # TODO: if events_exclude has more than one we need to make sure all of them happened not just one!
     conversion_events = [item for item in audience.events_exclude if item != 'app_remove']
     events_list = ", ".join([f"'{event}'" for event in conversion_events])
     ga_table = self.get_ga4_table_name(target, True)
     user_table = target.bq_dataset_id + '.' + audience.table_name
+    if country:
+      country_list = ",".join([f"'{c}'" for c in country])
+      conversions_conditions = f" AND country IN ({country_list})"
+    else:
+      conversions_conditions = ''
     query = query.format(**{
       "source_table": ga_table,
       "events": events_list,
       "day_start": date_start.strftime("%Y%m%d"),
       "day_end": date_end.strftime("%Y%m%d"),
+      "all_users_table": target.bq_dataset_id + "." + TABLE_USER_NORMALIZED,
+      "SEARCH_CONDITIONS": conversions_conditions,
       "test_users_table": user_table + "_test_*",
       "control_users_table": user_table + "_control_*",
       "date_start": date_start.strftime("%Y-%m-%d"),
