@@ -165,14 +165,15 @@ class DataGateway:
           self._ensure_table(f"{bq_dataset_id}.{table_name}", schema, strict=False)
 
 
-  def _ensure_table(self, table_name, expected_schema, strict = False):
+  def _ensure_table(self, table_name, expected_schema: list[bigquery.SchemaField], strict = False):
     table_ref = bigquery.TableReference.from_string(table_name, self.config.project_id)
     try:
       table = self.bq_client.get_table(table_ref)
       logger.debug(f"Initialize: table {table_name} found")
 
       current_schema = table.schema
-      updated_fields = []
+      added_fields: list[bigquery.SchemaField] = []
+      updated_fields: list[bigquery.SchemaField] = []
       for expected_field in expected_schema:
         current_field = None
         for field in current_schema:
@@ -184,7 +185,7 @@ class DataGateway:
         if expected_field_type == 'INT64':
           expected_field_type = 'INTEGER'
         if current_field is None:
-          updated_fields.append(expected_field)
+          added_fields.append(expected_field)
         elif (
           expected_field_type != current_field.field_type or
           expected_field.mode != current_field.mode
@@ -204,6 +205,24 @@ class DataGateway:
           self.execute_query(sql)
         # refresh the table as w/o it we'll have 'PRECONDITION_FAILED: 412' error on update_table
         table = self.bq_client.get_table(table_ref)
+      if added_fields:
+        logger.debug(f"Adding new columns to {table_name}: {added_fields}")
+        for field in added_fields:
+          sql = f"ALTER TABLE `{table_name}` ADD COLUMN {field.name} {field.field_type}"
+          self.execute_query(sql)
+          if field.default_value_expression:
+            if isinstance(field.default_value_expression, (str)):
+              default_value_expression = "'" + field.default_value_expression + "'"
+            else:
+              default_value_expression = field.default_value_expression
+            # 1. ALTER TABLE my_table ADD COLUMN field;
+            # 2. ALTER TABLE my_table ALTER COLUMN field SET DEFAULT '';
+            # 3. UPDATE my_table SET field = '' WHERE TRUE;
+            sql = f"ALTER TABLE `{table_name}` ALTER COLUMN {field.name} SET DEFAULT {default_value_expression}"
+            self.execute_query(sql)
+            sql = f"UPDATE `{table_name}` SET {field.name} = {default_value_expression} WHERE TRUE"
+            self.execute_query(sql)
+        table = self.bq_client.get_table(table_ref)
 
       if updated_fields:
         table.schema = expected_schema
@@ -215,7 +234,7 @@ class DataGateway:
           logger.error(e)
           if getattr(e, "errors", None) and e.errors[0]:
             if e.errors[0].get("debugInfo", None) and e.errors[0]["debugInfo"].startswith("[SCHEMA_INCOMPATIBLE]"):
-              logger.info(f'Table {table_name} schema is incompatible and the table has to be recreated')
+              logger.warning(f'Table {table_name} schema is incompatible and the table has to be recreated')
               backup_table_id = table_name + "_backup"
               try:
                 self.bq_client.delete_table(backup_table_id, not_found_ok=True)
