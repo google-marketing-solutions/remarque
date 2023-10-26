@@ -1,5 +1,6 @@
 import { boot } from 'quasar/wrappers';
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import { QVueGlobals } from 'quasar';
 
 declare module '@vue/runtime-core' {
   interface ComponentCustomProperties {
@@ -34,7 +35,7 @@ function setActiveTarget(target: string|undefined) {
 
 function getUrl(url: string) {
   if (activeTarget) {
-    if (url.includes("?")) {
+    if (url.includes('?')) {
       url += '&';
     } else {
       url += '?';
@@ -68,6 +69,26 @@ async function postApi(
   }
 }
 
+async function postApiUi(
+  url: string,
+  params: any,
+  $q: QVueGlobals,
+  message: string,
+  options?: AxiosRequestConfig
+) {
+  //const $q = useQuasar();
+  $q.loading.show({ message });
+  const loading = () => $q.loading.hide();
+  try {
+    return await postApi(url, params, loading, options);
+  } catch (e: any) {
+    $q.dialog({
+      title: 'Error',
+      message: e.message,
+    });
+  }
+}
+
 async function getApi(url: string, params?: any, loading?: () => void) {
   try {
     const res = await api.get(getUrl(url), { params: params });
@@ -87,4 +108,23 @@ async function getApi(url: string, params?: any, loading?: () => void) {
   }
 }
 
-export { api, postApi, getApi, setActiveTarget };
+async function getApiUi(
+  url: string,
+  params: any,
+  $q: QVueGlobals,
+  message: string
+) {
+  //const $q = useQuasar();
+  $q.loading.show({ message });
+  const loading = () => $q.loading.hide();
+  try {
+    return await getApi(url, params, loading);
+  } catch (e: any) {
+    $q.dialog({
+      title: 'Error',
+      message: e.message,
+    });
+  }
+}
+
+export { api, postApi, getApi, postApiUi, getApiUi, setActiveTarget };

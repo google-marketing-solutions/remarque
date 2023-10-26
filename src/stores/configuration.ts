@@ -8,6 +8,7 @@ export enum AudienceMode {
   test = 'test',
   prod = 'prod',
 }
+
 export interface AudienceInfo {
   name: string;
   app_id: string;
@@ -22,6 +23,7 @@ export interface AudienceInfo {
   query: string;
   ttl: number;
 }
+
 export interface ConfigTarget {
   name?: string;
   ads_client_id?: string;
@@ -172,7 +174,7 @@ export const configurationStore = defineStore('configuration', {
 // TODO: this implementation is more flexible than via Options API but it cause TS compilation errors,
 // but the other one via Options API
 export const configurationStore = defineStore('configuration', () => {
-  const activeTarget = ref(<string | undefined>'');
+  //const activeTarget = ref(<string | undefined>'');
   const state = ref({
     state: States.Initial,
     debug: false,
@@ -302,7 +304,7 @@ export const configurationStore = defineStore('configuration', () => {
 
   return {
     ...state.value,
-    activeTarget,
+    //activeTarget,
     removeAudience,
     initTarget,
     activateTarget,

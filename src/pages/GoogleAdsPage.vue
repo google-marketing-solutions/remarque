@@ -474,7 +474,7 @@ export default defineComponent({
 
     const onOpenChart = async (props: any) => {
       const audience = props.row;
-      audience.conversions = await loadConversions(audience.name, undefined, undefined);
+      audience.conversions = await loadConversions(audience.name, undefined, undefined, undefined);
       updateConversionsChart(audience.conversions);
     }
 

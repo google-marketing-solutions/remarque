@@ -69,10 +69,6 @@ WITH
       date,
       (SELECT count(user) FROM test_converted t WHERE t.reg_date = date_formatted) AS test_regs,
       (SELECT count(user) FROM control_converted t WHERE t.reg_date = date_formatted) AS control_regs,
-      -- total number of test users on the 'date' date
-      -- total number of control users on the 'date' date
-      --(SELECT user_count FROM test_counts t WHERE t.date = date_formatted) AS test_counts,
-      --(SELECT user_count FROM control_counts t WHERE t.date = date_formatted) AS control_counts,
     FROM
       dates_formatted d
     ORDER BY 1 ASC

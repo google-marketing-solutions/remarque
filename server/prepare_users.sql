@@ -14,7 +14,6 @@ WITH user_latest_events AS (
     `{source_table}`
   WHERE
     event_name IN ('session_start', 'first_open')
-    AND device.category = 'mobile'
     AND device.operating_system = 'Android'
     AND device.advertising_id IS NOT NULL
     AND device.advertising_id != ''

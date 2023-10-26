@@ -568,6 +568,118 @@ WHEN NOT MATCHED THEN
     return query
 
 
+  def get_base_conversion_query(self, target: ConfigTarget, audience: Audience, conversion_window_days: int,
+                                date_start: date = None, date_end: date = None):
+    if not date_start:
+      date_start = date.today() - timedelta(days=30)
+    if date_end is None:
+      date_end = date.today()
+    days_ago_start = int(audience.days_ago_start)
+    days_ago_end = int(audience.days_ago_end)
+    audience_duration =  abs(days_ago_end - days_ago_start)
+
+    date_audience_start = date_start
+    date_audience_end = date_start + timedelta(days=audience_duration)
+    date_conversion_start = date_start + timedelta(days=audience_duration + 1)
+    date_conversion_end = date_start + timedelta(days=audience_duration + conversion_window_days)
+
+    countries = ",".join([f"'{c}'" for c in audience.countries])
+    conversion_events = [item for item in audience.events_exclude if item != 'app_remove']
+    conversion_events_list = ", ".join([f"'{event}'" for event in conversion_events])
+    events_include = audience.events_include or []
+    events_exclude = audience.events_exclude or []
+    if not 'app_remove' in events_exclude:
+      events_exclude = ['app_remove'] + events_exclude
+    all_events = events_include + events_exclude
+    all_events_list = ", ".join([f"'{event}'" for event in all_events])
+    audience_events_list = ", ".join([f"'{event}'" for event in events_include])
+
+    query = """
+WITH
+  event_table AS (
+    SELECT
+      device.advertising_id AS user,
+      event_name,
+      event_date,
+    FROM
+      `{source_table}`
+    WHERE
+      _TABLE_SUFFIX BETWEEN '{date_start}' AND '{date_end}'
+      AND app_info.id = '{app_id}'
+      AND event_name IN ({all_events_list})
+  ),
+  audience_users AS (
+    SELECT
+      distinct f.user
+    FROM
+      `{all_users_table}` f
+    WHERE
+      {countries_clause}
+      AND app_id = '{app_id}'
+      AND EXISTS (
+        SELECT user from event_table WHERE user=f.user AND event_name IN ({audience_events_list})
+          AND event_date BETWEEN '{date_audience_start}' AND '{date_audience_end}'
+      )
+      AND NOT EXISTS (SELECT user from event_table WHERE user=f.user AND event_name = 'app_remove')
+  ),
+  converted_users AS (
+    SELECT
+      distinct f.user
+    FROM
+      `{all_users_table}` f
+    WHERE
+      {countries_clause}
+      AND app_id = '{app_id}'
+      AND EXISTS (
+        SELECT user from event_table WHERE user=f.user AND event_name IN ({conversion_events_list})
+          AND event_date BETWEEN '{date_conversion_start}' AND  '{date_conversion_end}'
+      )
+      AND NOT EXISTS (SELECT user from event_table WHERE user=f.user AND event_name = 'app_remove')
+  )
+  SELECT
+    count(a.user) as audience,
+    count(c.user) as converted,
+    safe_divide(count(c.user), count(a.user)) as cr
+  FROM audience_users a
+    LEFT JOIN converted_users c USING(user)
+"""
+    try:
+      query = query.format(**{
+        "source_table": self.get_ga4_table_name(target, True),
+        "all_users_table": target.bq_dataset_id + "." + TABLE_USER_NORMALIZED,
+        "date_start": date_start.strftime("%Y%m%d"),
+        "date_end": date_end.strftime("%Y%m%d"),
+        "app_id": audience.app_id,
+        "countries": countries,
+        "countries_clause": f"country IN ({countries}) " if audience.countries else "1=1",
+        "all_events_list": all_events_list,
+        "audience_events_list": audience_events_list,
+        "date_audience_start": date_audience_start.strftime("%Y%m%d"),
+        "date_audience_end": date_audience_end.strftime("%Y%m%d"),
+        "conversion_events_list": conversion_events_list,
+        "date_conversion_start": date_conversion_start.strftime("%Y%m%d"),
+        "date_conversion_end": date_conversion_end.strftime("%Y%m%d")
+      })
+    except KeyError as e:
+      raise Exception(f"An error occured during substituting macros into audience query, unknown macro {e} was used")
+    return query
+
+  def get_base_conversion(self, target: ConfigTarget, audience: Audience, conversion_window_days: int,
+                                date_start: date = None, date_end: date = None):
+    if not conversion_window_days:
+      conversion_window_days = 7
+    query = self.get_base_conversion_query(target, audience, conversion_window_days, date_start, date_end)
+    row = self.execute_query(query)[0]
+    logger.info(row)
+    return {
+      "audience": row["audience"],
+      "converted": row["converted"],
+      "cr": float(row["cr"]),
+      "query": query,
+      "conversion_window_days": conversion_window_days
+    }
+
+
   def _create_users_normalized_table(self, target: ConfigTarget):
     query = self._read_file('prepare_users.sql')
     query = query.format(**{

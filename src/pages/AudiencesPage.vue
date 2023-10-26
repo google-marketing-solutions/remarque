@@ -146,11 +146,11 @@
               </div>
               <div class="">
                 <div class="row q-col-gutter-md">
-                  <q-input class="col-3 q-gutter-md1" outlined v-model="audience.days_ago_start" label="Period start"
-                    placeholder="" hint="days ago" />
-                  <q-input class="col-3 q-gutter-md1" outlined v-model="audience.days_ago_end" label="Period end"
-                    placeholder="" hint="days ago" />
-                  <q-input class="col-3 q-gutter-md1" outlined v-model="audience.ttl" type="number" min="1"
+                  <q-input class="col-3" outlined v-model="audience.days_ago_start" label="Period start" placeholder=""
+                    hint="days ago" />
+                  <q-input class="col-3" outlined v-model="audience.days_ago_end" label="Period end" placeholder=""
+                    hint="days ago" />
+                  <q-input class="col-3" outlined v-model="audience.ttl" type="number" min="1"
                     @blur="() => audience.ttl = audience.ttl < 1 ? 1 : audience.ttl" label="Time to live" placeholder=""
                     hint="Days to stay in treatment group" />
                 </div>
@@ -167,14 +167,15 @@
             <q-btn label="Reset" type="reset" color="primary" flat class="q-ml-sm" />
             <q-btn label="Preview" @click="onAudiencePreview" flat class="q-ml-sm" />
             <q-btn label="Get Query" @click="onAudienceGetQuery" flat class="q-ml-sm" />
+            <q-btn label="Power Analysis" @click="data.powerAnalysis.showDialog = true" flat class="q-ml-sm" />
           </div>
         </q-form>
       </q-card-section>
       <q-card-section>
         <div class="">
           <q-table title="Audiences" style="height: 400px" flat bordered :rows="data.audiences" row-key="name"
-            :columns="data.audiences_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }"
-            :rows-per-page-options="[0]" :wrap-cells="true">
+            :columns="data.audiences_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]"
+            :wrap-cells="true">
             <template v-slot:body-cell-actions="props">
               <q-td :props="props">
                 <q-btn dense round flat color="grey" @click="onAudienceListEdit(props)" icon="edit"></q-btn>
@@ -248,6 +249,101 @@
       </q-card-actions>
     </q-card>
   </q-dialog>
+
+  <q-dialog v-model="data.powerAnalysis.showDialog">
+    <q-card style="max-width: 80%; width: 800px;" class="q-px-sm q-pb-md">
+      <q-card-section>
+        <div class="text-h6">Power Analysis</div>
+      </q-card-section>
+      <q-card-section>
+        <!-- q-pa-xs q-gutter-md -->
+        <div class="row q-col-gutter-md full-width">
+          <q-banner class="col bg-grey-3">
+            <template v-slot:avatar>
+              <q-icon name="info" color="primary" />
+            </template>
+            Power analysis tells us the minimum amount of users in a user list for an experiment to make sense.
+            To calculate power we need to calculate baseline conversion first (conversion that usually happens without any
+            tests).
+            To do this we'll take users (device_id's) from your GA4 data by criteria from the current audience and find
+            how many of them were converted to the next "conversion window" days. Alternately you can enter the baseline
+            conversion manually.
+          </q-banner>
+        </div>
+        <div class="row q-col-gutter-md q-my-xs">
+          <div class="col " style="max-width:250px">
+            <q-input filled v-model="data.powerAnalysis.from" mask="####-##-##" label="Start date" clearable>
+              <template v-slot:append>
+                <q-icon name="event" class="cursor-pointer">
+                  <q-popup-proxy ref="qStartProxy" cover transition-show="scale" transition-hide="scale">
+                    <q-date v-model="data.powerAnalysis.from" mask="YYYY-MM-DD" :no-unset="true"
+                      @update:model-value="$refs.qStartProxy.hide()">
+                    </q-date>
+                  </q-popup-proxy>
+                </q-icon>
+              </template>
+            </q-input>
+          </div>
+          <div class="col " style="max-width:250px">
+            <q-input filled v-model="data.powerAnalysis.to" mask="####-##-##" label="End date" clearable>
+              <template v-slot:append>
+                <q-icon name="event" class="cursor-pointer">
+                  <q-popup-proxy ref="qEndProxy" cover transition-show="scale" transition-hide="scale">
+                    <q-date v-model="data.powerAnalysis.to" mask="YYYY-MM-DD" today-btn :no-unset="true"
+                      @update:model-value="$refs.qEndProxy.hide()">
+                    </q-date>
+                  </q-popup-proxy>
+                </q-icon>
+              </template>
+            </q-input>
+          </div>
+          <q-input class="col " outlined v-model="data.powerAnalysis.conversion_window" type="number" min="1"
+            label="Conversion window (days)" placeholder="" hint="Days for users to convert" />
+        </div>
+        <div class="row q-col-gutter-md q-my-xs">
+          <q-input class="col-3" outlined v-model="data.powerAnalysis.conversion_rate" type="number" min="0"
+            label="Conversion rate" placeholder="" hint="Baseline conversion"
+            :readonly="!data.powerAnalysis.conversion_manual" />
+          <q-toggle v-model="data.powerAnalysis.conversion_manual" label="Enter manually" />
+        </div>
+      </q-card-section>
+      <q-card-section>
+        <div class="row q-col-gutter-md">
+          <div class="col">
+            <div>Users in the audience: {{ data.powerAnalysis.users_audience }}</div>
+            <div>Baseline conversion: {{ data.powerAnalysis.users_converted }}</div>
+          </div>
+          <div class="col">
+            <q-btn label="Show query" color="primary" @click="onGetPowerQuery" :disable="!data.powerAnalysis.query" />
+          </div>
+        </div>
+        <!-- <br> -->
+        <!-- <q-btn label="Calculate" color="primary" @click="onGetPower" /> -->
+      </q-card-section>
+      <q-card-section>
+        <div class="row q-col-gutter-md q-my-xs">
+          <q-input class="col " outlined v-model="data.powerAnalysis.power" type="number" min="0" label="Power"
+            placeholder="" hint="" />
+          <q-input class="col " outlined v-model="data.powerAnalysis.uplift" type="number" min="0" max="100"
+            label="Uplift" placeholder="" hint="Uplift rate (between 0-1) of conversion (desired/expected)" />
+          <q-input class="col " outlined v-model="data.powerAnalysis.alpha" type="number" min="0" max="100" label="Alpha"
+            placeholder="" hint="" />
+          <q-input class="col " outlined v-model="data.powerAnalysis.ratio" type="number" min="0" label="ratio"
+            placeholder="" hint="" />
+        </div>
+      </q-card-section>
+      <q-card-section>
+        <div>Sample size: <b>{{ data.powerAnalysis.sample_size }}</b> (calculated for t-test)</div>
+        <div>Power: {{ data.powerAnalysis.new_power }} (recalculated for sample size as z-test)</div>
+        <br>
+        <q-btn label="Calculate" color="primary" @click="onGetPower" />
+      </q-card-section>
+      <q-separator />
+      <q-card-actions align="right">
+        <q-btn label="Close" color="primary" @click="data.powerAnalysis.showDialog = false" />
+      </q-card-actions>
+    </q-card>
+  </q-dialog>
 </template>
 
 <style>
@@ -261,10 +357,10 @@
 </style>
 
 <script lang="ts">
-import { defineComponent, ref, watch, computed, toRaw } from 'vue';
+import { defineComponent, ref, watch, computed } from 'vue';
 import { AudienceInfo, AudienceMode, configurationStore } from 'stores/configuration';
-import { getApi, postApi } from 'boot/axios';
-import { useQuasar, QForm, QInput, QDialog, QBtn } from 'quasar';
+import { getApi, postApi, postApiUi, getApiUi } from 'boot/axios';
+import { useQuasar, QForm } from 'quasar';
 import { formatArray } from '../helpers/utils';
 
 export default defineComponent({
@@ -276,6 +372,26 @@ export default defineComponent({
 
     const data = ref({
       showEditQueryDialog: false,
+      showPowerAnalysisDialog: false,
+      powerAnalysis: {
+        showDialog: false,
+        // parameters:
+        from: '',
+        to: '',
+        conversion_window: 7,
+        conversion_manual: false,
+        power: 0.8,
+        alpha: 0.05,
+        ratio: 1,
+        uplift: 0.25,
+        // response:
+        query: '',
+        users_audience: 0,
+        conversion_rate: undefined,
+        users_converted: 0,
+        sample_size: 0,
+        new_power: undefined
+      },
       selectedAppId: [] as string[],
       selectedCountries: [] as any[],
       app_ids: [] as any[],
@@ -295,7 +411,6 @@ export default defineComponent({
       ],
       audiences_columns: [
         { name: 'name', label: 'Name', field: 'name', sortable: true },
-        // { name: 'id', label: 'Id', field: 'id', sortable: true },
         { name: 'app_id', label: 'App id', field: 'app_id', sortable: true },
         { name: 'query', label: 'Custom query', field: 'query' },
         { name: 'countries', label: 'Countries', field: 'countries', sortable: true, format: formatArray },
@@ -303,7 +418,7 @@ export default defineComponent({
         { name: 'events_exclude', label: 'Exclude events', field: 'events_exclude', sortable: true, format: formatArray },
         { name: 'days_ago_start', label: 'Start', field: 'days_ago_start' },
         { name: 'days_ago_end', label: 'End', field: 'days_ago_end' },
-        { name: 'ttl', label: 'TTL', field: 'ttl'},
+        { name: 'ttl', label: 'TTL', field: 'ttl' },
         { name: 'mode', label: 'Mode', field: 'mode' },
         { name: 'actions', label: 'Actions', field: '', align: 'center' },
       ],
@@ -523,28 +638,65 @@ export default defineComponent({
       }
     };
     const onAudienceGetQuery = async () => {
-      $q.loading.show({ message: 'Getting query...' });
-      const loading = () => $q.loading.hide();
       const obj = getAudienceFromForm();
-      try {
-        let res = await postApi('audiences/get_query', { audience: obj }, loading);
-        console.log(res.data.query);
-        $q.dialog({
-          title: 'SQL Query for the audience',
-          message: res.data.query,
-          ok: {
-            push: true
-          },
-          class: 'text-pre',
-          fullWidth: true
-        });
+      let res = await postApiUi('audiences/get_query', { audience: obj }, $q, 'Getting query...');
+      if (!res?.data?.result) {
+        return;
       }
-      catch (e: any) {
-        $q.dialog({
-          title: 'Error',
-          message: e.message,
-        });
+      console.log(res.data.query);
+      $q.dialog({
+        title: 'SQL Query for the audience',
+        message: res.data.query,
+        ok: {
+          push: true
+        },
+        class: 'text-pre',
+        fullWidth: true
+      });
+    };
+    const onGetPower = async () => {
+      if (!data.value.powerAnalysis.conversion_manual) {
+        // calculate baseline conversion rate first
+        const obj = getAudienceFromForm();
+        let res = await postApiUi('audiences/base_conversion', {
+          audience: obj,
+          date_start: data.value.powerAnalysis.from,
+          date_end: data.value.powerAnalysis.to,
+        }, $q, 'Calculating baseline conversion...');
+        if (!res?.data?.result) {
+          return;
+        }
+        console.log(res.data);
+        let result = res.data.result;
+        data.value.powerAnalysis.conversion_rate = result.cr;
+        data.value.powerAnalysis.users_audience = result.audience;
+        data.value.powerAnalysis.users_converted = result.converted;
+        data.value.powerAnalysis.query = result.query;
       }
+      // calculate power
+      let res = await getApiUi('audiences/power', {
+        cr: data.value.powerAnalysis.conversion_rate,
+        power: data.value.powerAnalysis.power,
+        alpha: data.value.powerAnalysis.alpha,
+        ratio: data.value.powerAnalysis.ratio,
+        uplift: data.value.powerAnalysis.uplift,
+      }, $q, 'Calculating power...');
+      if (!res?.data) {
+        return;
+      }
+      data.value.powerAnalysis.sample_size = res.data.sample_size;
+      data.value.powerAnalysis.new_power = res.data.new_power;
+    };
+    const onGetPowerQuery = async () => {
+      $q.dialog({
+        title: 'SQL Query for calculating the baseline conversion',
+        message: data.value.powerAnalysis.query,
+        ok: {
+          push: true
+        },
+        class: 'text-pre',
+        fullWidth: true
+      });
     };
 
     const onAudienceListEdit = (props: any) => {
@@ -621,6 +773,8 @@ export default defineComponent({
       onAudienceFormReset,
       onAudiencePreview,
       onAudienceGetQuery,
+      onGetPower,
+      onGetPowerQuery,
       onAudienceFilterCountries,
       onAudienceFilterEvents,
       onAudienceListEdit,

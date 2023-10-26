@@ -199,10 +199,11 @@ export default defineComponent({
         }, loading);
         store.targets = res.data.targets;
         store.is_new = false;
-        store.activateTarget(store.name);
         $q.dialog({
           title: 'Succeeded',
           message: 'Application successfully initialized',
+        }).onDismiss(() => {
+          store.activateTarget(store.name);
         });
       }
       catch (e: any) {
@@ -241,7 +242,8 @@ export default defineComponent({
         )
         // cancel the navigation and stay on the same page
         if (!answer) return false
-        store.switchConfiguration(store.activeTarget);
+        store.activateTarget(store.activeTarget);
+        //store.switchConfiguration(store.activeTarget);
       }
     });
     const uploadGoogleAdsConfig = async () => {

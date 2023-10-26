@@ -31,6 +31,7 @@ from flask_cors import CORS
 from gaarf.api_clients import GoogleAdsApiClient
 from gaarf.query_executor import AdsReportFetcher
 import pandas as pd
+import numpy as np
 import statsmodels.stats.proportion as proportion
 
 from env import IS_GAE
@@ -385,6 +386,63 @@ def get_query_for_audience() -> Response:
   return jsonify({"query": query})
 
 
+@app.route("/api/audiences/base_conversion", methods=["POST", "GET"])
+def get_base_conversion():
+  context = create_context()
+  params = request.get_json(force=True)
+  audience_raw = params["audience"]
+  audience = Audience.from_dict(audience_raw)
+  date_start = params.get("date_start", None) or request.args.get('date_start')
+  date_start = date.fromisoformat(date_start) if date_start else None
+  date_end = params.get("date_end", None) or request.args.get('date_end')
+  date_end = date.fromisoformat(date_end) if date_end else None
+  conversion_window_days = params.get("conversion_window", None) or request.args.get('conversion_window')
+  logger.info(f"Calculating baseline conversions for audience:\n {audience_raw}\nconversion_window={conversion_window_days}, date_start={date_start}, date_end={date_end}")
+
+  result = context.data_gateway.get_base_conversion(context.target, audience, conversion_window_days, date_start, date_end)
+
+  cr = float(result["cr"])
+  logger.debug(f"Base conversion for audience is {cr}")
+  return jsonify({"result": result})
+
+
+@app.route("/api/audiences/power", methods=["POST", "GET"])
+def get_power_analysis():
+  from statsmodels.stats.power import TTestIndPower
+
+  # parameters for power analysis
+  cr = request.args.get('cr')
+  if not cr:
+    raise Exception("conversion rate (cr) was not specified")
+  cr = float(cr)
+  power = float(request.args.get('power') or 0.8)  # power
+  alpha = float(request.args.get('alpha') or 0.05) # alpha
+  ratio = float(request.args.get('ratio') or 1)    # ratio of test and control groups
+  uplift = float(request.args.get('uplift') or 0.25)  # conversion uplift ratio
+  p1 = cr
+  p2 = cr * (1 + uplift)
+  effect_size = (p1 - p2) / np.sqrt((p1*(1 - p1) + p2*(1 - p2)) / 2) #Cohen's h for proportions
+  # Here p1 and p2 are the expected conversion rates in the control and treatment groups, respectively.
+
+  analysis = TTestIndPower()
+  sample_size = analysis.solve_power(effect_size=effect_size, power=power, alpha=alpha, ratio=ratio)
+  sample_size = float(sample_size)
+  logger.info(f"Power analysis calculation for parameters: cr={cr}, power={power}, alpha={alpha}, ratio={ratio}, uplift={uplift}, p1={p1}, p2={p2}, effect_size={effect_size}, the resulted sample_size={sample_size}")
+
+  from statsmodels.stats.proportion import power_proportions_2indep
+  # prop2 = cr  # base conversion rate
+  # uplift = 0.25  # expect a 25% relative increase in conversion rate
+  new_conversion_rate = cr * (1 + uplift)
+  diff = new_conversion_rate - cr
+  new_power = power_proportions_2indep(diff=diff, prop2=cr, nobs1=sample_size)
+  logger.debug(f"new_conversion_rate={new_conversion_rate},diff={diff},new power={new_power}")
+
+  return jsonify({
+    "sample_size": int(sample_size),
+    "new_power": new_power.power
+  })
+
+
 @app.route("/api/process", methods=["POST"])
 def process():
   # it's a method for automated execution (via Cloud Scheduler)
@@ -490,11 +548,11 @@ def _validate_googleads_config(ads_config, *, throw=False):
   client = GoogleAdsApiClient(config_dict=ads_config)
   report_fetcher = AdsReportFetcher(client)
   try:
-    report_fetcher.fetch("SELECT customer.id FROM customer", ads_config["customer_id"])
+    report_fetcher.fetch("SELECT customer.id FROM customer", ads_config["customer_id"] or ads_config["login_customer_id"])
     return True
   except Exception as e:
     if throw:
-      raise e
+      raise Exception(f"Validation of Ads credentials failed: {e}")
     return False
 
 
@@ -657,7 +715,7 @@ def get_audiences_status():
         else:
           status, failure_reason = None, None
         log_item_dict['job_status'] = status
-        log_item_dict['job_failure'] = failure_reason
+        log_item_dict['job_failure'] = failure_reason if failure_reason != 'UNSPECIFIED' else ''
         audience_dict['log'].append(log_item_dict)
 
   return jsonify({"result": result})
@@ -762,13 +820,13 @@ def handle_exception(e: Exception):
   return e
 
 
-@app.route("/_ah/start")
-def on_instance_start():
-  """Instance start handler. It's called by GAE to start a new instance (not workers).
+# @app.route("/_ah/start")
+# def on_instance_start():
+#   """Instance start handler. It's called by GAE to start a new instance (not workers).
 
-  Be mindful about code here because errors won't be propagated to webapp users
-  (i.e. visible only in log)"""
-  pass
+#   Be mindful about code here because errors won't be propagated to webapp users
+#   (i.e. visible only in log)"""
+#   pass
 
 
 if __name__ == '__main__':
