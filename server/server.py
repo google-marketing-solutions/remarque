@@ -25,12 +25,13 @@ import decimal
 from datetime import datetime, date
 from pprint import pprint
 import traceback
-from flask import Flask, request, jsonify, abort, send_from_directory, Response
+from flask import Flask, request, jsonify, abort, send_from_directory, send_file, Response
 from flask.json.provider import DefaultJSONProvider
 from flask_cors import CORS
 from gaarf.api_clients import GoogleAdsApiClient
 from gaarf.query_executor import AdsReportFetcher
 import pandas as pd
+import pandas_gbq
 import numpy as np
 import statsmodels.stats.proportion as proportion
 
@@ -620,13 +621,14 @@ def update_customer_match_audiences():
   result = {}
   log = []
   for audience in audiences:
+    # TODO: support 'prod' mode
     if audience.mode == 'off':
       continue
 
     audience_name = audience.name
     user_list_res_name = audience.user_list
     # load of users for 'today' table (audience_{listname}_test_yyyyMMdd)
-    users = context.data_gateway.load_audience_segment(context.target, audience, audience.mode)
+    users = context.data_gateway.load_audience_segment(context.target, audience, 'test')
 
     # upload users to Google Ads
     if len(users) > 0:
@@ -644,6 +646,13 @@ def update_customer_match_audiences():
       control_user_count = 0
       new_test_user_count = 0
       new_control_user_count = 0
+
+    # for debug reason save uplaoded users
+    if len(uploaded_users):
+      uploaded_users_mapped = [[id] for id in uploaded_users]
+      df = pd.DataFrame(uploaded_users_mapped, columns=['user'])
+      uploaded_table_name = context.data_gateway._get_user_segment_table_full_name(context.target, audience.table_name, 'uploaded')
+      pandas_gbq.to_gbq(df[['user']], uploaded_table_name, context.config.project_id, if_exists='replace')
 
     total_test_user_count = 0
     total_control_user_count = 0
