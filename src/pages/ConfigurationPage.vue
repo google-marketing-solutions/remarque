@@ -84,8 +84,10 @@
         <div class="row q-pa-md">
           <q-file class="col-3" v-model="data.file" label="Select google-ads.yaml" accept=".yaml"></q-file>
           <div class="col">
-            <q-btn label="Upload File" color="primary" @click="uploadGoogleAdsConfig" class="q-ml-md"></q-btn>
-            <q-btn label="Validate" color="primary" @click="validateGoogleAdsConfig" class="q-ml-md"></q-btn>
+            <q-btn label="Upload google-ads.yaml" color="primary" @click="uploadGoogleAdsConfig" class="q-ml-md q-my-xs"></q-btn>
+            <q-btn label="Download google-ads.yaml" color="primary" @click="downloadGoogleAdsConfig"
+              class="q-ml-md q-my-xs"></q-btn>
+            <q-btn label="Validate" color="primary" @click="validateGoogleAdsConfig" class="q-ml-md q-my-xs"></q-btn>
           </div>
           <div class="col"></div>
         </div>

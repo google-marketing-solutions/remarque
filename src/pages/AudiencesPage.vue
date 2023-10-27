@@ -173,9 +173,10 @@
       </q-card-section>
       <q-card-section>
         <div class="">
+          <q-toggle v-model="data.audiences_wrap" label="Word wrap" />
           <q-table title="Audiences" style="height: 400px" flat bordered :rows="data.audiences" row-key="name"
             :columns="data.audiences_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]"
-            :wrap-cells="true">
+            :wrap-cells="data.audiences_wrap">
             <template v-slot:body-cell-actions="props">
               <q-td :props="props">
                 <q-btn dense round flat color="grey" @click="onAudienceListEdit(props)" icon="edit"></q-btn>
@@ -422,6 +423,7 @@ export default defineComponent({
         { name: 'mode', label: 'Mode', field: 'mode' },
         { name: 'actions', label: 'Actions', field: '', align: 'center' },
       ],
+      audiences_wrap: true,
       ga_stat_loading: false,
       eventsSearch: '',
       countriesSearch: '',

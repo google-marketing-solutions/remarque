@@ -29,9 +29,10 @@
 
         <q-card-section>
           <div class="">
+            <q-toggle v-model="data.audiences_wrap" label="Word wrap" />
             <q-table title="Audiences" style="height: 300px" flat bordered :rows="data.audiences" row-key="name"
               :columns="data.audiences_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }"
-              :rows-per-page-options="[0]" v-model:selected="data.selectedAudience" :wrap-cells="true" selection="single"
+              :rows-per-page-options="[0]" v-model:selected="data.selectedAudience" :wrap-cells="data.audiences_wrap" selection="single"
               hide-bottom>
               <template v-slot:body-cell-actions="props">
                 <q-td :props="props">
@@ -209,6 +210,7 @@ export default defineComponent({
         { name: 'ttl', label: 'TTL', field: 'ttl' },
         { name: 'actions', label: 'Actions', field: '', align: 'center' },
       ],
+      audiences_wrap: true,
       audience_status_columns: [
         //{ name: 'status', label: 'Status', field: 'status', sortable: true },
         { name: 'date', label: 'Date', field: 'date', sortable: true },
