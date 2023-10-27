@@ -112,7 +112,7 @@
 <script lang="ts">
 import { useQuasar } from 'quasar';
 import { onBeforeRouteLeave, useRouter, useRoute } from 'vue-router'
-import { postApi } from 'boot/axios';
+import { getApiUi, postApi, getFile } from 'boot/axios';
 import { States, configurationStore } from 'stores/configuration';
 import { defineComponent, ref } from 'vue';
 
@@ -248,6 +248,11 @@ export default defineComponent({
         //store.switchConfiguration(store.activeTarget);
       }
     });
+
+    const downloadGoogleAdsConfig = async () => {
+      await getFile('setup/download_ads_cred', {})
+    };
+
     const uploadGoogleAdsConfig = async () => {
       let formData = new FormData();
       formData.append('file', <any>data.value.file);
@@ -267,7 +272,7 @@ export default defineComponent({
           message: 'File uploaded successfully'
         });
         store.ads_client_id = response.data.client_id;
-        store.ads_client_secret = response.data.ads_client_secret;
+        store.ads_client_secret = response.data.client_secret;
         store.ads_customer_id = response.data.customer_id;
         store.ads_developer_token = response.data.developer_token;
         store.ads_login_customer_id = response.data.login_customer_id;
@@ -333,6 +338,7 @@ export default defineComponent({
       onDeleteTarget,
       onNewTarget,
       uploadGoogleAdsConfig,
+      downloadGoogleAdsConfig,
       validateGoogleAdsConfig
     };
   }

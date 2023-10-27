@@ -281,6 +281,23 @@ def setup_upload_ads_cred():
   return jsonify(cfg)
 
 
+@app.route('/api/setup/download_ads_cred', methods=['GET'])
+def setup_download_ads_cred():
+  context = create_context()
+  ads_config = {
+  "client_id": context.target.ads_client_id,
+  "client_secret": context.target.ads_client_secret,
+  "customer_id": context.target.ads_customer_id,
+  "developer_token": context.target.ads_developer_token,
+  "login_customer_id": context.target.ads_login_customer_id,
+  "refresh_token": context.target.ads_refresh_token
+  }
+  file_name ="/tmp/google_ads.yaml"
+  with open(file_name, mode="w") as f:
+    yaml.safe_dump(ads_config, f)
+  return send_file(file_name, as_attachment=True, download_name="google-ads.yaml")
+
+
 @app.route('/api/setup/validate_ads_cred', methods=['POST'])
 def setup_validate_ads_cred():
   context = create_context()
