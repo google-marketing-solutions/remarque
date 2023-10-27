@@ -7,8 +7,7 @@ WITH
     FROM
       `{source_table}`
     WHERE
-      device.category = 'mobile'
-      AND device.operating_system = 'Android'
+      device.operating_system = 'Android'
       AND device.advertising_id IS NOT NULL
       AND device.advertising_id NOT IN ('', '00000000-0000-0000-0000-000000000000')
       AND _TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
@@ -74,7 +73,9 @@ WITH
     ORDER BY 1 ASC
   ),
   total_counts AS (
-    SELECT DISTINCT DATE(date) as day, total_user_count, total_control_user_count
+    SELECT
+      DISTINCT DATE(date) as day, total_user_count, total_control_user_count,
+      rank() over(partition by name order by date desc) r 
     FROM `{audiences_log}` l
     WHERE NAME = '{audience_name}'
   )
@@ -93,5 +94,5 @@ SELECT
     0
   ) AS total_control_user_count
 FROM grouped_conversions c
-  LEFT JOIN total_counts t ON c.date = t.day
+  LEFT JOIN (select * from total_counts where r=1) t ON c.date = t.day
 ORDER BY 1

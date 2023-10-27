@@ -267,6 +267,7 @@ def setup_upload_ads_cred():
   name = next(iter(names))
   cfg = yaml.load(request.files[name].stream, Loader=yaml.SafeLoader)
   logger.debug(f"Updating Ads API credentials from google-ads.yam file:\n {cfg}")
+  cfg["use_proto_plus"] = True
   _validate_googleads_config(cfg, throw=True)
 
   context.target.ads_client_id = cfg['client_id']

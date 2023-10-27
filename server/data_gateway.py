@@ -301,8 +301,7 @@ SELECT
 FROM
   `{ga_table}`
 WHERE
-    device.category = 'mobile'
-    AND app_info.id IS NOT NULL
+    app_info.id IS NOT NULL
     AND device.operating_system = 'Android'
     AND device.advertising_id IS NOT NULL
     AND device.advertising_id NOT IN ('', '00000000-0000-0000-0000-000000000000')
@@ -331,8 +330,7 @@ SELECT
 FROM
   `{ga_table}`
 WHERE
-    device.category = 'mobile'
-    AND app_info.id IS NOT NULL
+    app_info.id IS NOT NULL
     AND device.operating_system = 'Android'
     AND device.advertising_id IS NOT NULL
     AND device.advertising_id NOT IN ('', '00000000-0000-0000-0000-000000000000')
@@ -570,13 +568,14 @@ WHEN NOT MATCHED THEN
 
   def get_base_conversion_query(self, target: ConfigTarget, audience: Audience, conversion_window_days: int,
                                 date_start: date = None, date_end: date = None):
-    if not date_start:
-      date_start = date.today() - timedelta(days=30)
     if date_end is None:
       date_end = date.today()
     days_ago_start = int(audience.days_ago_start)
     days_ago_end = int(audience.days_ago_end)
     audience_duration =  abs(days_ago_end - days_ago_start)
+    if not date_start:
+      delta = max(30, audience_duration + conversion_window_days)
+      date_start = date.today() - timedelta(days=delta)
 
     date_audience_start = date_start
     date_audience_end = date_start + timedelta(days=audience_duration)
@@ -790,9 +789,10 @@ FROM `{audience_table_name}`
       return [f"{bq_dataset_id}.{t}" for t in tables]
     return tables
 
+
   def _get_user_segment_table_full_name(self, target: ConfigTarget,
                                         audience_table_name,
-                                        group_name: Literal['test'] | Literal['control'] = 'test',
+                                        group_name: Literal['test'] | Literal['control'],
                                         suffix: str = None):
     bq_dataset_id = target.bq_dataset_id
     suffix = datetime.now().strftime("%Y%m%d") if suffix is None else suffix
