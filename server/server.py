@@ -416,7 +416,7 @@ def get_base_conversion():
   date_end = params.get("date_end", None) or request.args.get('date_end')
   date_end = date.fromisoformat(date_end) if date_end else None
   conversion_window_days = params.get("conversion_window", None) or request.args.get('conversion_window')
-  logger.info(f"Calculating baseline conversions for audience:\n {audience_raw}\nconversion_window={conversion_window_days}, date_start={date_start}, date_end={date_end}")
+  logger.info(f"Calculating baseline conversion for audience:\n {audience_raw}\nconversion_window={conversion_window_days}, date_start={date_start}, date_end={date_end}")
 
   result = context.data_gateway.get_base_conversion(context.target, audience, conversion_window_days, date_start, date_end)
 

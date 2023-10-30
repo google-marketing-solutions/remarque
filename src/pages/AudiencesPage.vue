@@ -174,7 +174,7 @@
       <q-card-section>
         <div class="">
           <q-toggle v-model="data.audiences_wrap" label="Word wrap" />
-          <q-table title="Audiences" style="height: 400px" flat bordered :rows="data.audiences" row-key="name"
+          <q-table title="Audiences" class="qtable-sticky-header" style="height: 400px" flat bordered :rows="data.audiences" row-key="name"
             :columns="data.audiences_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]"
             :wrap-cells="data.audiences_wrap">
             <template v-slot:body-cell-actions="props">
@@ -642,7 +642,7 @@ export default defineComponent({
     const onAudienceGetQuery = async () => {
       const obj = getAudienceFromForm();
       let res = await postApiUi('audiences/get_query', { audience: obj }, $q, 'Getting query...');
-      if (!res?.data?.result) {
+      if (!res?.data) {
         return;
       }
       console.log(res.data.query);

@@ -568,14 +568,22 @@ WHEN NOT MATCHED THEN
 
   def get_base_conversion_query(self, target: ConfigTarget, audience: Audience, conversion_window_days: int,
                                 date_start: date = None, date_end: date = None):
-    if date_end is None:
-      date_end = date.today()
     days_ago_start = int(audience.days_ago_start)
     days_ago_end = int(audience.days_ago_end)
     audience_duration =  abs(days_ago_end - days_ago_start)
     if not date_start:
       delta = max(30, audience_duration + conversion_window_days)
-      date_start = date.today() - timedelta(days=delta)
+      date_start = (date_end if date_end else date.today()) - timedelta(days=delta)
+    elif not date_end:
+      date_end = date.today()
+    else:
+      # date_start AND date_end: we might need to adjust one of them (start or end)
+      delta = audience_duration + conversion_window_days
+      if (date_end - date_start).days < audience_duration + conversion_window_days:
+        if date_start + timedelta(days=delta) < date.today():
+          date_end = date_start + timedelta(days=delta)
+        else:
+          date_start = date_end - timedelta(days=delta)
 
     date_audience_start = date_start
     date_audience_end = date_start + timedelta(days=audience_duration)

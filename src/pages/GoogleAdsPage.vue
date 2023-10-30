@@ -15,7 +15,7 @@
           <div>
             <q-banner class="bg-grey-3">
               <template v-slot:avatar>
-                <q-icon name="info" color="primary" size="md" style="margin-right: 5px;"/>
+                <q-icon name="info" color="primary" size="md" style="margin-right: 5px;" />
                 If you scheduled execution then for each defined audience
                 there will be segments with sampled users uploaded to Google Ads as customer match user lists.
               </template>
@@ -30,10 +30,10 @@
         <q-card-section>
           <div class="">
             <q-toggle v-model="data.audiences_wrap" label="Word wrap" />
-            <q-table title="Audiences" style="height: 300px" flat bordered :rows="data.audiences" row-key="name"
-              :columns="data.audiences_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }"
-              :rows-per-page-options="[0]" v-model:selected="data.selectedAudience" :wrap-cells="data.audiences_wrap" selection="single"
-              hide-bottom>
+            <q-table title="Audiences" class="qtable-sticky-header" style="height: 300px" flat bordered
+              :rows="data.audiences" row-key="name" :columns="data.audiences_columns" virtual-scroll
+              :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" v-model:selected="data.selectedAudience"
+              :wrap-cells="data.audiences_wrap" selection="single" hide-bottom>
               <template v-slot:body-cell-actions="props">
                 <q-td :props="props">
                   <q-btn dense round flat color="grey" @click="onOpenChart(props)" icon="query_stats"></q-btn>
@@ -59,9 +59,9 @@
         </q-card-section>
         <q-card-section>
           <div class="">
-            <q-table title="Upload history" style="height: 300px" flat bordered :rows="data.audience_log" row-key="name"
-              :columns="data.audience_status_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }"
-              :rows-per-page-options="[0]" hide-bottom>
+            <q-table title="Upload history" class="qtable-sticky-header" style="height: 300px" flat bordered
+              :rows="data.audience_log" row-key="name" :columns="data.audience_status_columns" virtual-scroll
+              :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" hide-bottom>
             </q-table>
           </div>
         </q-card-section>
@@ -69,14 +69,14 @@
         <q-card-section v-if="data.selectedAudience.length">
           <q-banner class="bg-grey-2">
             <div class="row">
-               <div class="col q-pa-xs">
-                  <q-banner class="bg-grey-3">
-                    <template v-slot:avatar><q-icon name="info" color="primary" size="md" style="margin-right: 5px;"/>
-                      If you don't specify the start date then the day of first upload to Google Ads will be used.<br>
-                      If you don't specify the end date then yesterday will be used.
-                    </template>
-                  </q-banner>
-                </div>
+              <div class="col q-pa-xs">
+                <q-banner class="bg-grey-3">
+                  <template v-slot:avatar><q-icon name="info" color="primary" size="md" style="margin-right: 5px;" />
+                    If you don't specify the start date then the day of first upload to Google Ads will be used.<br>
+                    If you don't specify the end date then yesterday will be used.
+                  </template>
+                </q-banner>
+              </div>
             </div>
             <div class="row">
               <div class="col q-pa-xs" style="max-width:250px">
@@ -105,7 +105,7 @@
                   </template>
                 </q-input>
               </div>
-              <div class="col q-pa-xs" >
+              <div class="col q-pa-xs">
                 <!-- <q-input filled v-model="data.country" label="Country" clearable></q-input> -->
                 <q-select filled v-model="data.conversions_selected_countries" multiple
                   :options="data.conversions_countries" label="Country" style="width: 250px" clearable />
