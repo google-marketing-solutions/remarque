@@ -76,7 +76,6 @@ async function postApiUi(
   message: string,
   options?: AxiosRequestConfig
 ) {
-  //const $q = useQuasar();
   $q.loading.show({ message });
   const loading = () => $q.loading.hide();
   try {
@@ -118,6 +117,7 @@ function downloadFile(data: any, filename: string, mime: string, bom?: any) {
     window.URL.revokeObjectURL(blobURL);
   }, 200);
 }
+
 async function getFile(url: string, params?: any, loading?: () => void) {
   try {
     const res = await api.get(getUrl(url), { responseType: 'blob', params });

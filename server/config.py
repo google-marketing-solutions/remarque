@@ -136,6 +136,8 @@ class ConfigTarget(ConfigItemBase):
   bq_dataset_id: str = 'remarque'
   # location for dataset in BigQuery (readonly on the client)
   bq_dataset_location: str = ''
+  # notification email
+  notification_email = ''
 
   # Google Ads customer id
   ads_customer_id: str = ''
@@ -169,6 +171,7 @@ class Config(ConfigItemBase):
         "ga4_table": t.ga4_table,
         "bq_dataset_id": t.bq_dataset_id,
         "bq_dataset_location": t.bq_dataset_location,
+        "notification_email": t.notification_email,
         "ads_customer_id": t.ads_customer_id,
         "ads_developer_token": t.ads_developer_token,
         "ads_client_id": t.ads_client_id,

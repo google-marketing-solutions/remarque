@@ -17,6 +17,7 @@
 import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Tuple, Literal
+from dataclasses import dataclass
 from google.auth import credentials
 from google.cloud import bigquery
 from google.api_core import exceptions
@@ -38,10 +39,41 @@ TABLE_USER_NORMALIZED = 'users_normalized'
 
 country_name_to_code_cache = {}
 
-AudienceLog = namedtuple(
-  'AudienceLog',
-  ['name', 'date', 'job', 'user_count', 'new_user_count', 'new_control_user_count', 'test_user_count', 'control_user_count', 'total_user_count', 'total_control_user_count']
-  )
+# AudienceLog = namedtuple(
+#   'AudienceLog',
+#   ['name', 'date', 'job', 'user_count', 'new_user_count', 'new_control_user_count',
+#    'test_user_count', 'control_user_count',
+#    'total_user_count', 'total_control_user_count']
+#   )
+
+@dataclass
+class AudienceLog:
+  name: str
+  date: date
+  job_resource_name: str
+  uploaded_user_count: int
+  new_test_user_count: int
+  new_control_user_count: int
+  test_user_count: int
+  control_user_count: int
+  total_test_user_count: int
+  total_control_user_count: int
+  failed_user_count: int
+
+  def to_dict(self):
+    return {
+      "date": self.date,
+      "job_resource_name": self.job_resource_name,
+      "uploaded_user_count": self.uploaded_user_count,
+      "new_test_user_count": self.new_test_user_count,
+      "new_control_user_count": self.new_control_user_count,
+      "failed_user_count": self.failed_user_count,
+      "test_user_count": self.test_user_count,
+      "control_user_count": self.control_user_count,
+      "total_test_user_count": self.total_test_user_count,
+      "total_control_user_count": self.total_control_user_count,
+    }
+
 
 class DataGateway:
   """Object for loading and udpating data in Database
@@ -843,7 +875,7 @@ FROM `{audience_table_name}`
     logger.info(f'Sampled users for audience {audience.name} saved to {test_table_name}/{control_table_name} tables')
 
     # add test users from yesterday with TTL>1 into today's test users
-    if audience.ttl > 0:
+    if audience.ttl > 1:
       tables = self._get_user_segment_tables(target, audience.table_name, 'test', suffix, include_dataset=True)
       if tables:
         try:
@@ -918,8 +950,11 @@ WHERE t1.user = t2.user
       """
       self.execute_query(query)
 
+
+  def load_user_segment_stat(self, target: ConfigTarget, audience: Audience, suffix: str):
     # load test and control user counts
-    query = f"SELECT COUNT(1) as count FROM `{table_name}`"
+    test_table_name = self._get_user_segment_table_full_name(target, audience.table_name, 'test', suffix)
+    query = f"SELECT COUNT(1) as count FROM `{test_table_name}` WHERE status = 1"
     test_user_count = self.execute_query(query)[0]["count"]
     control_table_name = self._get_user_segment_table_full_name(target, audience.table_name, 'control', suffix)
     query = f"SELECT COUNT(1) as count FROM `{control_table_name}`"
@@ -928,8 +963,8 @@ WHERE t1.user = t2.user
     # load new user count
     table_name_prev = self._get_user_segment_table_full_name(target, audience.table_name, 'test', "*")
     suffix = datetime.now().strftime("%Y%m%d") if suffix is None else suffix
-    query = f"""SELECT count(DISTINCT t.user) as user_count FROM `{table_name}` t
-WHERE NOT EXISTS (
+    query = f"""SELECT count(DISTINCT t.user) as user_count FROM `{test_table_name}` t
+WHERE status = 1 AND NOT EXISTS (
   SELECT * FROM `{table_name_prev}` t0
   WHERE t0._TABLE_SUFFIX != '{suffix}' AND t.user=t0.user
 )
@@ -949,12 +984,29 @@ WHERE NOT EXISTS (
     return test_user_count, control_user_count, new_test_user_count, new_control_user_count
 
 
-  def update_audiences_log(self, target: ConfigTarget, result: list[AudienceLog]):
+  def update_audiences_log(self, target: ConfigTarget, logs: list[AudienceLog]):
     #result[user_list_name] = { "job_resource_name": job_resource_name, "user_count": len(uploaded_users) }
     table_name = f"{target.bq_dataset_id}.audiences_log"
     table = self.bq_client.get_table(table_name)
-    self.bq_client.insert_rows(table, result)
-    logger.debug(f'Saved audience_log: ')
+    rows = [ {
+        "name": i.name,
+        "date": datetime.now(),
+        "job": i.job_resource_name,
+        "user_count": i.uploaded_user_count,
+        "new_user_count": i.new_test_user_count,
+        "new_control_user_count": i.new_control_user_count,
+        "test_user_count": i.test_user_count,
+        "control_user_count": i.control_user_count,
+        "total_user_count": i.total_test_user_count,
+        "total_control_user_count": i.total_control_user_count
+        } for i in logs]
+    res = self.bq_client.insert_rows(table, rows)
+    if res and res[0] and res[0].get('errors', None):
+      msg = res[0].get('errors', None)[0].get('message', None)
+      if msg:
+        raise ValueError(f"Audience log entries failed to save: {msg}")
+
+    logger.debug(f'Saved audience_log: {rows}')
 
 
   def get_audiences_log(self, target: ConfigTarget) -> dict[str, list[AudienceLog]]:
@@ -970,16 +1022,17 @@ ORDER BY name, date
       log_items = []
       for item in group:
         log_item = AudienceLog(
-          item["name"],
-          item["date"],
-          item["job"],
-          item["user_count"],
-          item["new_user_count"],
-          item["new_control_user_count"],
-          item["test_user_count"],
-          item["control_user_count"],
-          item["total_user_count"],
-          item["total_control_user_count"]
+          name=item["name"],
+          date=item["date"],
+          job_resource_name=item["job"],
+          uploaded_user_count=item["user_count"],
+          new_test_user_count=item["new_user_count"],
+          new_control_user_count=item["new_control_user_count"],
+          test_user_count=item["test_user_count"],
+          control_user_count=item["control_user_count"],
+          total_test_user_count=item["total_user_count"],
+          total_control_user_count=item["total_control_user_count"],
+          failed_user_count=item["test_user_count"] - item["user_count"]
           )
         log_items.append(log_item)
       result[name] = log_items

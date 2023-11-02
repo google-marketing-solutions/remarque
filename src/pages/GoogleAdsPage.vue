@@ -4,8 +4,9 @@
       <div class="text-h2">Google Ads</div>
     </div>
     <div class="row" style="margin-top: 20px">
-      <q-btn label="Run sampling" @click="onSampling" :fab="true" color="primary"></q-btn>
-      <q-btn label="Upload audiences" @click="onAudiencesUpload" :fab="true" color="primary"></q-btn>
+      <q-btn label="Run All" @click="onExecute" :fab="true" color="primary" class="q-mx-md"></q-btn>
+      <q-btn label="Run sampling" @click="onSampling" :fab="true" class="q-mx-md"></q-btn>
+      <q-btn label="Upload audiences" @click="onAudiencesUpload" :fab="true" class="q-mx-md"></q-btn>
     </div>
 
     <div class="q-mt-md">
@@ -113,7 +114,7 @@
 
               <div class="col q-pa-xs">
                 <q-banner class="bg-grey-3">
-                  p-val: <q-badge>{{ data.pvalFormatted }}</q-badge>
+                  p-val: <q-badge>{{ formatFloat(data.pval) }}</q-badge>
                   <br>If pval &lt;=0.05, then results are statistically significant
                 </q-banner>
               </div>
@@ -154,8 +155,8 @@
 import { computed, defineComponent, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { AudienceInfo, configurationStore } from 'stores/configuration';
-import { getApi, postApi } from 'boot/axios';
-import { formatArray, formatDate } from '../helpers/utils';
+import { getApi, postApi, postApiUi } from 'boot/axios';
+import { formatArray, formatDate, formatFloat } from '../helpers/utils';
 
 interface AudienceLog {
   //status: any;
@@ -260,42 +261,67 @@ export default defineComponent({
       conversions_selected_countries: [],
       conversions_countries: [],
       pval: <number | undefined>undefined,
-      pvalFormatted: computed(() => {
-        return data.value.pval ? data.value.pval.toFixed(5) : '-'
-      })
     });
 
-    const onSampling = async () => {
-      $q.loading.show({ message: 'Running sampling for audiences...' });
-      const loading = () => $q.loading.hide();
-      try {
-        let res = await postApi('sampling/run', {}, loading);
-        /*
-          "result": {
-            "userlist1": {
-              "control_count": 0,
-              "test_count": 0
-            }
+    function showExecutionResultDialog(results: Record<string, any>) {
+      let html = '';
+      /*
+        {
+          "userlist1": {
+            "control_user_count": 5806,
+            "failed_user_count": 0,
+            "job_resource_name": "customers/xxx/offlineUserDataJobs/yyy",
+            "new_test_user_count": 0,
+            "test_user_count": 10856,
+            "uploaded_user_count": 10856
           }
-         */
-        if (res.data && res.data.result) {
-          let results = Object.entries(res.data.result);
-          let html = '';
-          for (const item of results) {
-            html += `<div class="text-subtitle1">Audience '${item[0]}' results:</div>`;
-            const result = <any>item[1];
-            html += `<div class="text-caption">Control user count: ${result.control_count}<br>Test count: ${result.test_count}<br></div>`;
-          }
-          data.value.resultDialog.header = 'Sampling completed';
-          data.value.resultDialog.message = html;
-          data.value.resultDialog.show = true;
         }
+      */
+
+      for (const item of Object.entries(results)) {
+        html += `<div class="text-subtitle1">Audience '${item[0]}' results:</div>`;
+        const result = item[1];
+        html += `<div class="text-caption"><ul>
+              <li>Test user count: ${result.test_user_count}</li>
+              <li>Control user count: ${result.control_user_count}</li>
+              <li>Uploaded user count: ${result.uploaded_user_count}</li>
+              <li>New test user count: ${result.new_test_user_count}</li>
+              <li>New control user count: ${result.new_control_user_count}</li>
+              <li>Total test user count: ${result.total_test_user_count}</li>
+              <li>Total control user count: ${result.total_control_user_count}</li>
+              </ul></div>`;
       }
-      catch (e: any) {
-        $q.dialog({
-          title: 'Error',
-          message: e.message,
-        });
+      data.value.resultDialog.header = 'Audience uploading to Google Ads completed';
+      data.value.resultDialog.message = html;
+      data.value.resultDialog.show = true;
+    }
+    const onExecute = async () => {
+      let res = await postApiUi('process', {}, $q, 'Running sampling and uploading...');
+      if (res?.data.result) {
+        showExecutionResultDialog(res.data.result);
+      }
+    };
+    const onSampling = async () => {
+      let res = await postApiUi('sampling/run', {}, $q, 'Running sampling for audiences...');
+      /* Expect:
+        "result": {
+          "userlist1": {
+            "control_count": 0,
+            "test_count": 0
+          }
+        }
+       */
+      if (res?.data.result) {
+        let results = Object.entries(res.data.result);
+        let html = '';
+        for (const item of results) {
+          html += `<div class="text-subtitle1">Audience '${item[0]}' results:</div>`;
+          const result = <any>item[1];
+          html += `<div class="text-caption">Control user count: ${result.control_count}<br>Test count: ${result.test_count}<br></div>`;
+        }
+        data.value.resultDialog.header = 'Sampling completed';
+        data.value.resultDialog.message = html;
+        data.value.resultDialog.show = true;
       }
     };
     const onAudiencesUpload = async () => {
@@ -308,37 +334,8 @@ export default defineComponent({
       const loading = () => progressDlg.hide();
       try {
         let res = await postApi('ads/upload', {}, loading);
-        /*
-          {
-            "userlist1": {
-              "control_user_count": 5806,
-              "failed_user_count": 0,
-              "job_resource_name": "customers/xxx/offlineUserDataJobs/yyy",
-              "new_test_user_count": 0,
-              "test_user_count": 10856,
-              "uploaded_user_count": 10856
-            }
-          }
-        */
         if (res.data && res.data.result) {
-          let results = Object.entries(res.data.result);
-          let html = '';
-          for (const item of results) {
-            html += `<div class="text-subtitle1">Audience '${item[0]}' results:</div>`;
-            const result = <any>item[1];
-            html += `<div class="text-caption"><ul>
-              <li>Control user count: ${result.control_user_count}</li>
-              <li>Test user count: ${result.test_user_count}</li>
-              <li>Uploaded user count: ${result.uploaded_user_count}</li>
-              <li>New test user count: ${result.new_test_user_count}</li>
-              <li>New control user count: ${result.new_control_user_count}</li>
-              <li>Total test user count: ${result.total_test_user_count}</li>
-              <li>Total control user count: ${result.total_control_user_count}</li>
-              </ul></div>`;
-          }
-          data.value.resultDialog.header = 'Audience uploading to Google Ads completed';
-          data.value.resultDialog.message = html;
-          data.value.resultDialog.show = true;
+          showExecutionResultDialog(res.data.result);
         }
       }
       catch (e: any) {
@@ -483,12 +480,14 @@ export default defineComponent({
     return {
       store,
       data,
+      onExecute,
       onSampling,
       onAudiencesUpload,
       onFetchAudiencesStatus,
       onLoadConversions,
       onOpenChart,
-      formatArray
+      formatArray,
+      formatFloat,
     };
   }
 });

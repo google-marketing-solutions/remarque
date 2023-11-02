@@ -17,6 +17,7 @@ seaborn
 flask
 flask-cors
 gunicorn
+appengine-python-standard>=1.0.0
 smart_open
 smart_open[gcs]
 google-ads-api-report-fetcher>=1.11

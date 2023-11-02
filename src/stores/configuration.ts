@@ -215,6 +215,7 @@ export const configurationStore = defineStore('configuration', () => {
     scheduled: undefined as boolean | undefined,
     schedule: '',
     schedule_timezone: '',
+    schedule_email: <undefined|string>'',
   });
 
   const router = useRouter();

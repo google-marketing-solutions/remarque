@@ -15,19 +15,18 @@
  """
 
 from typing import Any, Callable
-from google import oauth2
 import json
 import os
 import math
-import argparse
 import yaml
-import decimal
 from datetime import datetime, date
 from pprint import pprint
 import traceback
 from flask import Flask, request, jsonify, abort, send_from_directory, send_file, Response
 from flask.json.provider import DefaultJSONProvider
+from google.appengine.api import wrap_wsgi_app
 from flask_cors import CORS
+
 from gaarf.api_clients import GoogleAdsApiClient
 from gaarf.query_executor import AdsReportFetcher
 import pandas as pd
@@ -38,12 +37,14 @@ import statsmodels.stats.proportion as proportion
 from env import IS_GAE
 from auth import get_credentials
 from logger import logger
-from context import Context
+from context import Context, ContextOptions
 from config import Config, ConfigTarget, Audience, parse_arguments, get_config, save_config, AppNotInitializedError
+from middleware import run_sampling_for_audience, upload_customer_match_audience, update_customer_match_mappings
 from sampling import do_sampling
 from ads_gateway import AdsGateway
 from data_gateway import AudienceLog
 from cloud_scheduler_gateway import Job
+from mailer import send_email
 
 # NOTE: this module's code is executed each time when a new worker started, so keep it small
 # To handle instance start up see `on_instance_start` method
@@ -78,6 +79,8 @@ STATIC_DIR = os.getenv(
 
 Flask.json_provider_class = JSONProvider
 app = Flask(__name__)
+app.wsgi_app = wrap_wsgi_app(app.wsgi_app)
+
 CORS(app)
 
 args = parse_arguments(only_known=True)
@@ -101,7 +104,7 @@ def _get_config(*, fail_ok = False) -> Config:
   return config
 
 
-def create_context(target_name: str = None, *, fail_ok = False) -> Context:
+def create_context(target_name: str = None, *, create_ads = False, fail_ok = False) -> Context:
   credentials = _get_credentials()
   config = _get_config(fail_ok=fail_ok)
   target_name = _get_req_arg_str('target') if target_name == None else target_name
@@ -121,8 +124,9 @@ def create_context(target_name: str = None, *, fail_ok = False) -> Context:
     target = next(filter(lambda t: t.name == target_name, config.targets), None)
   else:
     target = None
+
+  context = Context(config, target, credentials, ContextOptions(create_ads_gateway=create_ads))
   logger.debug(f"Created context for target: {target}")
-  context = Context(config, target, credentials)
   return context
 
 
@@ -167,7 +171,6 @@ def setup():
   ga4_dataset = params.get('ga4_dataset', None)
   ga4_table = params.get('ga4_table', 'events')
   bq_dataset_id = params.get('bq_dataset_id', None)
-  #bq_dataset_location = params.get('bq_dataset_location', None)
   context.config.targets = context.config.targets or []
 
   if not ga4_dataset:
@@ -465,10 +468,35 @@ def get_power_analysis():
 @app.route("/api/process", methods=["POST"])
 def process():
   # it's a method for automated execution (via Cloud Scheduler)
-  # TODO: currently it's not optimal as we load audiences twice and load test users though we have them at run_sampling stage
-  run_sampling()
-  update_customer_match_audiences()
-  return jsonify({})
+
+  context = create_context(create_ads=True)
+  logger.info(f"Starting process for target {context.target.name}")
+
+  context.data_gateway.ensure_user_normalized(context.target)
+  audiences = context.data_gateway.get_audiences(context.target)
+  audiences_log = context.data_gateway.get_audiences_log(context.target)
+  update_customer_match_mappings(context, audiences)
+  result = {}
+  log = []
+  logger.debug(f"Loaded {len(audiences)} audiences with logs")
+  for audience in audiences:
+    if audience.mode == 'off':
+      continue
+    users_test, users_control = run_sampling_for_audience(context, audience)
+
+    audience_log = audiences_log.get(audience.name, None)
+    users_test_list = users_test['user'].tolist()
+    log_item = upload_customer_match_audience(context, audience, audience_log, users_test_list)
+    log.append(log_item)
+    result[audience.name] = log_item.to_dict()
+
+  context.data_gateway.update_audiences_log(context.target, log)
+
+  if context.target.notification_email:
+    subject = f"Remarque {' [' + context.target.name + ']' if context.target.name != 'default' else ''} - sampling completed"
+    body = f"Processing of {len(result)} audiences has been completed. Results:{result}"
+    send_email(context.config, context.target.notification_email, subject, body)
+  return jsonify({"result": result})
 
 
 @app.route("/api/schedule", methods=["GET"])
@@ -480,7 +508,8 @@ def get_schedule():
   return jsonify({
     "scheduled": job.enabled,
     "schedule": job.schedule_time,
-    "schedule_timezone": job.schedule_timezone
+    "schedule_timezone": job.schedule_timezone,
+    "schedule_email": context.target.notification_email,
   })
 
 
@@ -491,6 +520,7 @@ def update_schedule():
   enabled = bool(params.get('scheduled', False))
   schedule = params.get('schedule')
   schedule_timezone = params.get('schedule_timezone')
+  schedule_email = params.get('schedule_email')
   if enabled and not schedule:
     return jsonify({"error": {
       "message": "Schedule was not specified"
@@ -498,6 +528,10 @@ def update_schedule():
   job = Job(enabled, schedule_timezone=schedule_timezone, schedule_time=schedule)
   logger.info(f'Updating Scheduler Job {job}')
   context.cloud_scheduler.update_job(context.target, job)
+  if context.target.notification_email != schedule_email:
+    context.target.notification_email = schedule_email
+    save_config(context.config, args)
+
   return jsonify({})
 
 
@@ -508,58 +542,23 @@ def run_sampling() -> Response:
     - fetch users according to the audience definition
     - do sampling, i.e. split users onto test and control groups
   """
+  logger.info(f"Run sampling for all audiences")
   context = create_context()
   context.data_gateway.ensure_user_normalized(context.target)
   audiences = context.data_gateway.get_audiences(context.target)
   result = {}
   logger.debug(f"Loaded {len(audiences)} audiences")
   for audience in audiences:
-    # TODO: support 'prod' mode
-    if audience.mode != 'test':
+    if audience.mode == 'off':
       continue
-    logger.debug(f"Running sampling for '{audience.name}' audience")
-    df = context.data_gateway.fetch_audience_users(context.target, audience)
-    logger.info(f"Created a user segment of audience '{audience.name}' with {len(df)} users")
-    if len(df) == 0:
-      logger.warning("User segment of audience '{audience.name}' contains no users")
-
-    # exclude old users from test and control groups from today's users
-    old_test_users, old_ctrl_users = context.data_gateway.load_old_users(context.target, audience)
-    mask = df['user'].isin(old_test_users['user']) | df['user'].isin(old_ctrl_users['user'])
-    df_new = df[~mask]
-    logger.debug(f"The segment has been adjusted to exclude old users and now contains {len(df_new)} users")
-    # now df doesn't contain users from previous days
-
-    # if the segment is empty there's no point in sampling
-    # TODO: if audience.mode == 'prod':
-    #
-    if len(df_new) > 0:
-      users_test, users_control = do_sampling(df_new)
-    else:
-      # create empty tables for test and control users so other queries wouldn't fail
-      users_test = pd.DataFrame(columns=['user'])
-      users_control = pd.DataFrame(columns=['user'])
-
-    logger.debug(f"Using stratification the segment was split onto: test - {len(users_test)} users, control - {len(users_control)} users")
-    # add old test/control users from df to the new test/control groups
-    old_test_df = df[df['user'].isin(old_test_users['user'])]
-    old_control_df = df[df['user'].isin(old_ctrl_users['user'])]
-
-    # append old users to the new test/control groups
-    users_test = pd.concat([users_test, old_test_df], ignore_index=True)
-    users_control = pd.concat([users_control, old_control_df], ignore_index=True)
-    #users_test = users_test.concat(old_test_df, ignore_index=True)
-    #users_control = users_control.concat(old_control_df, ignore_index=True)
-    logger.debug(f"The today's test/control groups were updated with previously exposed users: test - {len(users_test)} users, control - {len(users_control)} users")
-
-    # TODO: add old tests users with TTL>0
-
-    context.data_gateway.save_sampled_users(context.target, audience, users_test, users_control)
+    users_test, users_control = run_sampling_for_audience(context, audience)
 
     result[audience.name] = {
       "test_count": len(users_test),
       "control_count": len(users_control),
     }
+  logger.info(f"Sampling completed with result: {result}")
+
   return jsonify({"result": result})
 
 
@@ -593,102 +592,25 @@ def _get_ads_config(target: ConfigTarget, assert_non_empty=False):
 
 @app.route("/api/ads/upload", methods=["POST"])
 def update_customer_match_audiences():
-  context = create_context()
-  ads_config = _get_ads_config(context.target, True)
-  ads_client = GoogleAdsApiClient(config_dict=ads_config)
-  ads_gateway = AdsGateway(context.config, context.target, ads_client)
-  logger.debug(f"Creating or loading existing user lists from Google Ads")
+  logger.info("Uploading audiences to Google Ads")
+  context = create_context(create_ads=True)
   audiences = context.data_gateway.get_audiences(context.target)
-  user_lists = ads_gateway.create_customer_match_user_lists(audiences)
-  logger.info(user_lists)
-  # update user list resource names for audiences
-  need_updating = False
-  for list_name, res_name in user_lists.items():
-    for audience in audiences:
-      if audience.name == list_name:
-        if audience.user_list != res_name:
-          logger.error(f'An audience {list_name} already has user_list ({audience.user_list}) but not the expected one - {res_name}')
-          need_updating = True
-        if not audience.user_list:
-          need_updating = True
-        audience.user_list = res_name
-  if need_updating:
-    context.data_gateway.update_audiences(context.target, audiences)
-
   audiences_log = context.data_gateway.get_audiences_log(context.target)
+  update_customer_match_mappings(context, audiences)
   # upload audiences users to Google Ads as customer match user lists
   logger.debug(f"Uploading audiences users to Google Ads as customer match userlists")
   result = {}
   log = []
   for audience in audiences:
-    # TODO: support 'prod' mode
     if audience.mode == 'off':
       continue
 
-    audience_name = audience.name
-    user_list_res_name = audience.user_list
+    audience_log = audiences_log.get(audience.name, None)
     # load of users for 'today' table (audience_{listname}_test_yyyyMMdd)
     users = context.data_gateway.load_audience_segment(context.target, audience, 'test')
-
-    # upload users to Google Ads
-    if len(users) > 0:
-      job_resource_name, failed_users, uploaded_users = \
-          ads_gateway.upload_customer_match_audience(user_list_res_name, users, True)
-      # update audience status in our tables, plus calculate some statistics
-      test_user_count, control_user_count, new_test_user_count, new_control_user_count = \
-          context.data_gateway.update_audience_segment_status(context.target, audience, None, failed_users)
-    else:
-      logger.warn(f"Audience '{audience.name}' segment has no users")
-      job_resource_name = None
-      failed_users = []
-      uploaded_users = []
-      test_user_count = 0
-      control_user_count = 0
-      new_test_user_count = 0
-      new_control_user_count = 0
-
-    # for debug reason save uplaoded users
-    if len(uploaded_users):
-      uploaded_users_mapped = [[id] for id in uploaded_users]
-      df = pd.DataFrame(uploaded_users_mapped, columns=['user'])
-      uploaded_table_name = context.data_gateway._get_user_segment_table_full_name(context.target, audience.table_name, 'uploaded')
-      pandas_gbq.to_gbq(df[['user']], uploaded_table_name, context.config.project_id, if_exists='replace')
-
-    total_test_user_count = 0
-    total_control_user_count = 0
-    # get total_user_count from the previous log entry if it exists and add new_user_count
-    audience_log = audiences_log.get(audience_name, None)
-    if not audience_log:
-      total_test_user_count = new_test_user_count
-      total_control_user_count = new_control_user_count
-    else:
-      total_test_user_count = audience_log[-1].total_user_count + new_test_user_count
-      total_control_user_count = audience_log[-1].total_control_user_count + new_control_user_count
-
-
-    result[audience_name] = {
-      "job_resource_name": job_resource_name,
-      "uploaded_user_count": len(uploaded_users),
-      "new_test_user_count": new_test_user_count,
-      "new_control_user_count": new_control_user_count,
-      "failed_user_count": len(failed_users) if failed_users else 0,
-      "test_user_count": test_user_count,
-      "control_user_count": control_user_count,
-      "total_test_user_count": total_test_user_count,
-      "total_control_user_count": total_control_user_count
-    }
-    if new_test_user_count == 0:
-      logger.warning(f'Audience segment for {audience_name} for {datetime.now().strftime("%Y-%m-%d")} contains no new users')
-    log.append(AudienceLog(
-      audience.name,
-      datetime.now(),
-      job_resource_name,
-      len(uploaded_users),
-      new_test_user_count, new_control_user_count,
-      test_user_count, control_user_count,
-      total_test_user_count, total_control_user_count
-      )
-    )
+    log_item = upload_customer_match_audience(context, audience, audience_log, users)
+    log.append(log_item)
+    result[audience.name] = log_item.to_dict()
 
   context.data_gateway.update_audiences_log(context.target, log)
   return jsonify({"result": result})
@@ -727,16 +649,16 @@ def get_audiences_status():
       for log_item in audience_log:
         log_item_dict = {
           "date": log_item.date,
-          "job": log_item.job,
-          "user_count": log_item.user_count,
-          "new_test_user_count": log_item.new_user_count,
+          "job": log_item.job_resource_name,
+          "user_count": log_item.uploaded_user_count,
+          "new_test_user_count": log_item.new_test_user_count,
           "new_control_user_count": log_item.new_control_user_count,
           "test_user_count": log_item.test_user_count,
           "control_user_count": log_item.control_user_count,
-          "total_test_user_count": log_item.total_user_count,
+          "total_test_user_count": log_item.total_test_user_count,
           "total_control_user_count": log_item.total_control_user_count,
         }
-        job_status = next(((j[1], j[2]) for j in jobs_statuses if j[0] == log_item.job), None)
+        job_status = next(((j[1], j[2]) for j in jobs_statuses if j[0] == log_item.job_resource_name), None)
         if not job_status is None:
           status, failure_reason = job_status
         else:
@@ -845,15 +767,6 @@ def handle_exception(e: Exception):
     # except:
     #   return jsonify({"error": str(e)}), 500
   return e
-
-
-# @app.route("/_ah/start")
-# def on_instance_start():
-#   """Instance start handler. It's called by GAE to start a new instance (not workers).
-
-#   Be mindful about code here because errors won't be propagated to webapp users
-#   (i.e. visible only in log)"""
-#   pass
 
 
 if __name__ == '__main__':

@@ -41,10 +41,15 @@
               </q-select>
             </div>
           </div>
+          <div class="row">
+            <div class="col-4">
+              <q-input filled v-model="store.schedule_email" label="Email" hint="Specify an email to send notifications about execution completions"></q-input>
+            </div>
+          </div>
         </q-card-section>
         <q-card-actions class="q-pa-md">
           <q-btn label="Load" icon="download" size="md" @click="onScheduleLoad" color="primary" style="width:130px" />
-          <q-btn label="Save" icon="save" size="md" @click="onScheduleSave" color="primary" style="width:130px" />
+          <q-btn label="Save" icon="save" size="md" @click="onScheduleSave" color="primary" style="width:130px" :disable="store.scheduled === undefined"/>
         </q-card-actions>
       </q-card>
     </div>
@@ -55,7 +60,7 @@
 import { defineComponent, ref } from 'vue';
 import { useQuasar } from 'quasar';
 import { configurationStore } from 'stores/configuration';
-import { getApi, postApi } from 'boot/axios';
+import { getApiUi, postApiUi } from 'boot/axios';
 import { timeZones } from '../helpers/timezones';
 
 export default defineComponent({
@@ -74,43 +79,31 @@ export default defineComponent({
       });
     }
     const onScheduleLoad = async () => {
-      $q.loading.show({ message: 'Fetching Cloud Scheduler job...' });
-      const loading = () => $q.loading.hide();
-      try {
-        let res = await getApi('schedule', {}, loading);
-        if (res.data) {
-          store.scheduled = res.data.scheduled;
-          store.schedule = res.data.schedule;
-          store.schedule_timezone = res.data.schedule_timezone;
-        } else {
-          store.scheduled = false;
-          store.schedule = '';
-          store.schedule_timezone = '';
-        }
-      }
-      catch (e: any) {
-        $q.dialog({
-          title: 'Error',
-          message: e.message,
-        });
+      let res = await getApiUi('schedule', {}, $q, 'Fetching Cloud Scheduler job...');
+      if (!res) return;
+      if (res.data) {
+        store.scheduled = res.data.scheduled;
+        store.schedule = res.data.schedule;
+        store.schedule_timezone = res.data.schedule_timezone;
+        store.schedule_email = res.data.schedule_email;
+      } else {
+        store.scheduled = false;
+        store.schedule = '';
+        store.schedule_timezone = '';
+        store.schedule_email = '';
       }
     };
     const onScheduleSave = async () => {
-      $q.loading.show({ message: 'Updating Cloud Scheduler job...' });
-      const loading = () => $q.loading.hide();
-      try {
-        await postApi('schedule/edit', {
-          scheduled: store.scheduled,
-          schedule: store.schedule,
-          schedule_timezone: store.schedule_timezone
-        }, loading);
+      if (store.scheduled && !store.schedule) {
+        $q.dialog({message: 'For enabling scheduled execution please specify time', title: 'Error', })
+        return;
       }
-      catch (e: any) {
-        $q.dialog({
-          title: 'Error',
-          message: e.message,
-        });
-      }
+      await postApiUi('schedule/edit', {
+        scheduled: store.scheduled,
+        schedule: store.schedule,
+        schedule_timezone: store.schedule_timezone,
+        schedule_email: store.schedule_email,
+      }, $q, 'Updating Cloud Scheduler job...');
     };
 
     return {
