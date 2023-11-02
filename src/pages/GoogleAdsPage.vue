@@ -136,7 +136,7 @@
               </div>
 
             </div>
-            <q-btn label="Load conversions" @click="onLoadConversions" color="primary" icon="query_stats"></q-btn>
+            <q-btn label="Load conversions" @click="onLoadConversions" color="primary" icon="query_stats" class="q-my-md"></q-btn>
           </q-banner>
           <apexchart v-if="data.chart.series.length" style="width:100%" :options="data.chart.options"
             :series="data.chart.series"></apexchart>
@@ -196,6 +196,8 @@ interface Conversions {
 }
 interface ConversionsData {
   date: string;
+  cr_test: number;
+  cr_control: number;
   cum_test_regs: number;
   cum_control_regs: number;
 }
@@ -261,9 +263,13 @@ export default defineComponent({
               opacity: 0.5
             },
           },
+          markers: {
+            size: 1
+          },
           labels: [],
           xaxis: {
-            type: 'category',
+            //type: 'category',
+            type: 'datetime',
           }
         },
         series: [] as any,
@@ -465,15 +471,17 @@ export default defineComponent({
       let graph_data = {} as Record<string, any>;
       // TODO: should we limit graph with on X axis back only N days from the end date?
       for (const item of conversions.data) {
+        //const label = new Date(item.date);
         const label = formatDate(new Date(item.date));
         // NOTE: dates should not repeat otherwise there will be no graph
         graph_data[label] = {
-          test: item.cum_test_regs,
-          control: item.cum_control_regs
+          date: item.date,
+          test: formatFloat(item.cr_test),       //item.cum_test_regs,
+          control: formatFloat(item.cr_control)  //item.cum_control_regs
         };
       }
-      const test_data = Object.entries(graph_data).map(item => { return { x: item[0], y: item[1].test }; });
-      const control_data = Object.entries(graph_data).map(item => { return { x: item[0], y: item[1].control }; });
+      const test_data = Object.entries(graph_data).map(item => { return { x: item[1].date, y: item[1].test }; });
+      const control_data = Object.entries(graph_data).map(item => { return { x: item[1].date, y: item[1].control }; });
       data.value.chart.series = [
         { name: 'treatment', data: test_data },
         { name: 'control', data: control_data },

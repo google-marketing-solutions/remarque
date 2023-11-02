@@ -75,24 +75,35 @@ WITH
   total_counts AS (
     SELECT
       DISTINCT DATE(date) as day, total_user_count, total_control_user_count,
-      rank() over(partition by name order by date desc) r 
+      rank() OVER(PARTITION BY name, format_date('%Y%m%d', date) ORDER BY date DESC) r
     FROM `{audiences_log}` l
     WHERE NAME = '{audience_name}'
+  ),
+  conversions_by_users AS (
+    SELECT
+      date,
+      SUM(test_regs) OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cum_test_regs,
+      SUM(control_regs) OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cum_control_regs,
+      coalesce(t.total_user_count,
+        LAST_VALUE(t.total_user_count IGNORE NULLS)
+        OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
+        0
+      ) AS total_user_count,
+      coalesce(t.total_control_user_count,
+        LAST_VALUE(t.total_control_user_count IGNORE NULLS)
+        OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
+        0
+      ) AS total_control_user_count
+    FROM grouped_conversions c
+      LEFT JOIN (select * from total_counts where r=1) t ON c.date = t.day
   )
 SELECT
   date,
-  SUM(test_regs) OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cum_test_regs,
-  SUM(control_regs) OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cum_control_regs,
-  coalesce(t.total_user_count,
-    LAST_VALUE(t.total_user_count IGNORE NULLS)
-    OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
-    0
-  ) AS total_user_count,
-  coalesce(t.total_control_user_count,
-    LAST_VALUE(t.total_control_user_count IGNORE NULLS)
-    OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
-    0
-  ) AS total_control_user_count
-FROM grouped_conversions c
-  LEFT JOIN (select * from total_counts where r=1) t ON c.date = t.day
+  cum_test_regs,
+  cum_control_regs,
+  total_user_count,
+  total_control_user_count,
+  SAFE_DIVIDE(cum_test_regs, total_user_count) as cr_test,
+  SAFE_DIVIDE(cum_control_regs, total_control_user_count) as cr_control
+FROM conversions_by_users
 ORDER BY 1

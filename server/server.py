@@ -29,8 +29,6 @@ from flask_cors import CORS
 
 from gaarf.api_clients import GoogleAdsApiClient
 from gaarf.query_executor import AdsReportFetcher
-import pandas as pd
-import pandas_gbq
 import numpy as np
 import statsmodels.stats.proportion as proportion
 
@@ -40,9 +38,6 @@ from logger import logger
 from context import Context, ContextOptions
 from config import Config, ConfigTarget, Audience, parse_arguments, get_config, save_config, AppNotInitializedError
 from middleware import run_sampling_for_audience, upload_customer_match_audience, update_customer_match_mappings
-from sampling import do_sampling
-from ads_gateway import AdsGateway
-from data_gateway import AudienceLog
 from cloud_scheduler_gateway import Job
 from mailer import send_email
 
