@@ -25,16 +25,25 @@
         </q-card-section>
         <q-card-actions class="q-pa-md">
           <q-btn label="Load" icon="download" size="md" @click="onFetchAudiencesStatus" color="primary"
-            style="width:130px" />
+            style="width:130px" class="q-mr-lg"/>
+          <q-toggle v-model="data.include_log_duplicates" label="Include duplicates" />
         </q-card-actions>
 
         <q-card-section>
           <div class="">
-            <q-toggle v-model="data.audiences_wrap" label="Word wrap" />
             <q-table title="Audiences" class="qtable-sticky-header" style="height: 300px" flat bordered
               :rows="data.audiences" row-key="name" :columns="data.audiences_columns" virtual-scroll
               :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" v-model:selected="data.selectedAudience"
               :wrap-cells="data.audiences_wrap" selection="single" hide-bottom>
+              <template v-slot:top="props">
+                <div class="col-2 q-table__title">Audiences</div>
+                <q-space />
+                <div class="col" align="right">
+                  <q-toggle v-model="data.audiences_wrap" label="Word wrap" />
+                </div>
+                <q-btn flat round dense :icon="props.inFullscreen ? 'fullscreen_exit' : 'fullscreen'"
+                  @click="props.toggleFullscreen" class="q-ml-md" />
+              </template>
               <template v-slot:body-cell-actions="props">
                 <q-td :props="props">
                   <q-btn dense round flat color="grey" @click="onOpenChart(props)" icon="query_stats"></q-btn>
@@ -63,6 +72,13 @@
             <q-table title="Upload history" class="qtable-sticky-header" style="height: 300px" flat bordered
               :rows="data.audience_log" row-key="name" :columns="data.audience_status_columns" virtual-scroll
               :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" hide-bottom>
+              <template v-slot:top="props">
+                <div class="col-2 q-table__title">Upload history</div>
+                <q-space />
+                <q-btn flat round dense :icon="props.inFullscreen ? 'fullscreen_exit' : 'fullscreen'"
+                  @click="props.toggleFullscreen" class="q-ml-md" />
+              </template>
+
             </q-table>
           </div>
         </q-card-section>
@@ -155,7 +171,7 @@
 import { computed, defineComponent, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { AudienceInfo, configurationStore } from 'stores/configuration';
-import { getApi, postApi, postApiUi } from 'boot/axios';
+import { getApi, postApi, postApiUi, getApiUi } from 'boot/axios';
 import { formatArray, formatDate, formatFloat } from '../helpers/utils';
 
 interface AudienceLog {
@@ -212,6 +228,7 @@ export default defineComponent({
         { name: 'actions', label: 'Actions', field: '', align: 'center' },
       ],
       audiences_wrap: true,
+      include_log_duplicates: false,
       audience_status_columns: [
         //{ name: 'status', label: 'Status', field: 'status', sortable: true },
         { name: 'date', label: 'Date', field: 'date', sortable: true },
@@ -258,7 +275,7 @@ export default defineComponent({
       },
       conversions_from: <string | undefined>undefined,
       conversions_to: <string | undefined>undefined,
-      conversions_selected_countries: [],
+      conversions_selected_countries: <string[]>[],
       conversions_countries: [],
       pval: <number | undefined>undefined,
     });
@@ -362,7 +379,7 @@ export default defineComponent({
       try {
         data.value.audiences = [];
         data.value.audience_log = [];
-        let res = await getApi('audiences/status', {}, loading);
+        let res = await getApi('audiences/status', { include_log_duplicates: data.value.include_log_duplicates }, loading);
         console.log(res.data);
         const result = res.data.result;
         data.value.audiences_data = result;
@@ -402,43 +419,35 @@ export default defineComponent({
         let date_start = <string | undefined>data.value.conversions_from;
         let date_end = <string | undefined>data.value.conversions_to;
         let country = data.value.conversions_selected_countries;
+        let country_str;
         if (country && country.length) {
-          country = country.join(',');
+          country_str = country.join(',');
         }
-        audience.conversions = await loadConversions(audience.name, date_start, date_end, country);
+        audience.conversions = await loadConversions(audience.name, date_start, date_end, country_str);
         updateConversionsChart(audience.conversions);
       }
     };
 
     const loadConversions = async (audienceName: string, date_start: string | undefined, date_end: string | undefined, country: string | undefined): Promise<Conversions | undefined> => {
       data.value.chart.series = [];
-      $q.loading.show({ message: 'Fetching the audience conversion history...' });
-      const loading = () => $q.loading.hide();
-      try {
-        let res = await getApi('audiences/conversions', { audience: audienceName, date_start, date_end, country }, loading);
-        const results = res.data.results;
-        let result;
-        if (results) {
-          result = results[audienceName]
-        }
-        if (!result) {
-          $q.dialog({
-            title: audienceName,
-            message: 'The audience has no conversions',
-          });
-          return;
-        }
-        // 'result' object for a particular audience is expected to be: conversions, date_start, date_end, pval, chi
-        // 'result.conversions' is an array of objects with fields: date, cum_test_regs, cum_control_regs
-        console.log(result);
-        return { data: result.conversions, start_date: result.date_start, end_date: result.date_end, pval: result.pval };
+      let res = await getApiUi('audiences/conversions', { audience: audienceName, date_start, date_end, country }, $q, 'Fetching the audience conversion history...');
+      if (!res) return;
+      const results = res.data.results;
+      let result;
+      if (results) {
+        result = results[audienceName]
       }
-      catch (e: any) {
+      if (!result) {
         $q.dialog({
-          title: 'Error',
-          message: e.message,
+          title: audienceName,
+          message: 'The audience has no conversions',
         });
+        return;
       }
+      // 'result' object for a particular audience is expected to be: conversions, date_start, date_end, pval, chi
+      // 'result.conversions' is an array of objects with fields: date, cum_test_regs, cum_control_regs
+      console.log(result);
+      return { data: result.conversions, start_date: result.date_start, end_date: result.date_end, pval: result.pval };
     };
 
     const updateConversionsChart = (conversions?: Conversions) => {

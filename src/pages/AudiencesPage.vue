@@ -173,10 +173,19 @@
       </q-card-section>
       <q-card-section>
         <div class="">
-          <q-toggle v-model="data.audiences_wrap" label="Word wrap" />
-          <q-table title="Audiences" class="qtable-sticky-header" style="height: 400px" flat bordered :rows="data.audiences" row-key="name"
-            :columns="data.audiences_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]"
-            :wrap-cells="data.audiences_wrap">
+          <q-table title="Audiences" class="qtable-sticky-header" style="height: 400px" flat bordered
+            :rows="data.audiences" row-key="name" :columns="data.audiences_columns" virtual-scroll
+            :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" :wrap-cells="data.audiences_wrap">
+            <template v-slot:top="props">
+              <div class="col-2 q-table__title">Audiences</div>
+              <q-space />
+              <div class="col" align="right">
+                <q-toggle v-model="data.audiences_wrap" label="Word wrap" />
+              </div>
+              <q-btn flat round dense :icon="props.inFullscreen ? 'fullscreen_exit' : 'fullscreen'"
+                @click="props.toggleFullscreen" class="q-ml-md" />
+            </template>
+
             <template v-slot:body-cell-actions="props">
               <q-td :props="props">
                 <q-btn dense round flat color="grey" @click="onAudienceListEdit(props)" icon="edit"></q-btn>

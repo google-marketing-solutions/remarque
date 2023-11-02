@@ -1009,10 +1009,28 @@ WHERE NOT EXISTS (
     logger.debug(f'Saved audience_log: {rows}')
 
 
-  def get_audiences_log(self, target: ConfigTarget) -> dict[str, list[AudienceLog]]:
+  def get_audiences_log(self, target: ConfigTarget, *, include_duplicates=False) -> dict[str, list[AudienceLog]]:
     table_name = f"{target.bq_dataset_id}.audiences_log"
-    query = f"""SELECT name, date, job, user_count, new_user_count, new_control_user_count, test_user_count, control_user_count, total_user_count, total_control_user_count
-FROM `{table_name}`
+    query = f"""SELECT * FROM
+(
+  SELECT
+    name,
+    date,
+    job,
+    user_count,
+    new_user_count,
+    new_control_user_count,
+    test_user_count,
+    control_user_count,
+    total_user_count,
+    total_control_user_count,
+    ROW_NUMBER() OVER (
+      PARTITION BY name, format_date('%Y%m%d', date)
+      ORDER BY name, date DESC
+    ) row_number
+  FROM `{table_name}`
+) t
+{"WHERE t.row_number = 1" if not include_duplicates else ""}
 ORDER BY name, date
     """
     rows = self.execute_query(query)

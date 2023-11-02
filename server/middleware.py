@@ -136,8 +136,15 @@ def upload_customer_match_audience(context: Context,
     total_test_user_count = new_test_user_count
     total_control_user_count = new_control_user_count
   else:
-    total_test_user_count = audience_log[-1].total_test_user_count + new_test_user_count
-    total_control_user_count = audience_log[-1].total_control_user_count + new_control_user_count
+    # take a AudienceLog entry for the previous day (not for today!)
+    today = datetime.now().strftime("%Y-%m-%d")
+    previous_day_log = next((obj for obj in audience_log if obj.date.strftime("%Y-%m-%d") != today), None)
+    if previous_day_log:
+      total_test_user_count = previous_day_log.total_test_user_count + new_test_user_count
+      total_control_user_count = previous_day_log.total_control_user_count + new_control_user_count
+    else:
+      total_test_user_count = new_test_user_count
+      total_control_user_count = new_control_user_count
   if new_test_user_count == 0:
     logger.warning(f'Audience segment for {audience_name} for {datetime.now().strftime("%Y-%m-%d")} contains no new users')
 

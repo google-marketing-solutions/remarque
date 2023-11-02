@@ -618,15 +618,12 @@ def update_customer_match_audiences():
 
 @app.route("/api/audiences/status", methods=["GET"])
 def get_audiences_status():
-  context = create_context()
-  ads_config = _get_ads_config(context.target, True)
-  ads_client = GoogleAdsApiClient(config_dict=ads_config)
-  ads_gateway = AdsGateway(context.config, context.target, ads_client)
-
+  context = create_context(create_ads=True)
+  include_log_duplicates = request.args.get('include_log_duplicates', type=str) == 'true'
   audiences = context.data_gateway.get_audiences(context.target)
-  audiences_log = context.data_gateway.get_audiences_log(context.target)
+  audiences_log = context.data_gateway.get_audiences_log(context.target, include_duplicates=include_log_duplicates)
   user_lists = [i.user_list for i in audiences if i.user_list]
-  jobs_status = ads_gateway.get_userlist_jobs_status(user_lists)
+  jobs_status = context.ads_gateway.get_userlist_jobs_status(user_lists)
   logger.debug(f"Loaded {len(jobs_status)} offline jobs, showing first 20:")
   if logger.isEnabledFor(logger.level):
     logger.debug(jobs_status[:20])
