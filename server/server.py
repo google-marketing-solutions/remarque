@@ -36,7 +36,8 @@ from env import IS_GAE
 from auth import get_credentials
 from logger import logger
 from context import Context, ContextOptions
-from config import Config, ConfigTarget, Audience, parse_arguments, get_config, save_config, AppNotInitializedError
+from models import Audience, AudienceLog
+from config import Config, ConfigTarget, parse_arguments, get_config, save_config, AppNotInitializedError
 from middleware import run_sampling_for_audience, upload_customer_match_audience, update_customer_match_mappings
 from cloud_scheduler_gateway import Job
 from mailer import send_email
@@ -489,7 +490,19 @@ def process():
 
   if context.target.notification_email:
     subject = f"Remarque {' [' + context.target.name + ']' if context.target.name != 'default' else ''} - sampling completed"
-    body = f"Processing of {len(result)} audiences has been completed. Results:{result}"
+    body = f"Processing of {len(result)} audiences has been completed.\n"
+    for val in log:
+      body += f"""\nAudience '{val.name}':
+      Users sampled: {val.test_user_count}, {val.uploaded_user_count} of which uploaded to Ads ({val.failed_user_count} failed)
+      Control users: {val.control_user_count}
+      New test users: {val.new_test_user_count}
+      New control users: {val.new_control_user_count}
+      In total:
+      test users for all days: {val.total_test_user_count}
+      control users for all days: {val.total_control_user_count}
+
+      Ads upload job resource name: {val.job_resource_name}
+      """
     send_email(context.config, context.target.notification_email, subject, body)
   return jsonify({"result": result})
 
@@ -617,8 +630,12 @@ def get_audiences_status():
   include_log_duplicates = request.args.get('include_log_duplicates', type=str) == 'true'
   audiences = context.data_gateway.get_audiences(context.target)
   audiences_log = context.data_gateway.get_audiences_log(context.target, include_duplicates=include_log_duplicates)
-  user_lists = [i.user_list for i in audiences if i.user_list]
-  jobs_status = context.ads_gateway.get_userlist_jobs_status(user_lists)
+  user_lists = [i.user_list for i in audiences if i.user_list and i.mode != 'off']
+  skip_jobs_loading = request.args.get('skip_ads', type=str) == 'true'
+  if skip_jobs_loading:
+    jobs_status = []
+  else:
+    jobs_status = context.ads_gateway.get_userlist_jobs_status(user_lists)
   logger.debug(f"Loaded {len(jobs_status)} offline jobs, showing first 20:")
   if logger.isEnabledFor(logger.level):
     logger.debug(jobs_status[:20])
@@ -660,6 +677,13 @@ def get_audiences_status():
         audience_dict['log'].append(log_item_dict)
 
   return jsonify({"result": result})
+
+
+@app.route("/api/audiences/recalculate_log", methods=["POST"])
+def recalculate_audiences_status():
+  context = create_context(create_ads=True)
+  context.data_gateway.rebuilt_audiences_log(context.target)
+  return jsonify({})
 
 
 @app.route("/api/audiences/conversions", methods=["GET"])

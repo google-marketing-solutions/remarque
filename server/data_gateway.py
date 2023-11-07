@@ -17,7 +17,6 @@
 import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Tuple, Literal
-from dataclasses import dataclass
 from google.auth import credentials
 from google.cloud import bigquery
 from google.api_core import exceptions
@@ -28,10 +27,10 @@ import pandas as pd
 import pandas_gbq
 import country_converter as coco
 from itertools import groupby
-from collections import namedtuple
 
 from logger import logger
-from config import Config, ConfigTarget, Audience
+from config import Config, ConfigTarget
+from models import Audience, AudienceLog
 from bigquery_utils import CloudBigQueryUtils
 from utils import format_duration
 
@@ -39,40 +38,39 @@ TABLE_USER_NORMALIZED = 'users_normalized'
 
 country_name_to_code_cache = {}
 
-# AudienceLog = namedtuple(
-#   'AudienceLog',
-#   ['name', 'date', 'job', 'user_count', 'new_user_count', 'new_control_user_count',
-#    'test_user_count', 'control_user_count',
-#    'total_user_count', 'total_control_user_count']
-#   )
-
-@dataclass
-class AudienceLog:
-  name: str
-  date: date
-  job_resource_name: str
-  uploaded_user_count: int
-  new_test_user_count: int
-  new_control_user_count: int
-  test_user_count: int
-  control_user_count: int
-  total_test_user_count: int
-  total_control_user_count: int
-  failed_user_count: int
-
-  def to_dict(self):
-    return {
-      "date": self.date,
-      "job_resource_name": self.job_resource_name,
-      "uploaded_user_count": self.uploaded_user_count,
-      "new_test_user_count": self.new_test_user_count,
-      "new_control_user_count": self.new_control_user_count,
-      "failed_user_count": self.failed_user_count,
-      "test_user_count": self.test_user_count,
-      "control_user_count": self.control_user_count,
-      "total_test_user_count": self.total_test_user_count,
-      "total_control_user_count": self.total_control_user_count,
-    }
+class TableSchemas:
+  audiences = [
+       bigquery.SchemaField(name="name", field_type="STRING", mode="REQUIRED"),
+       bigquery.SchemaField(name="app_id", field_type="STRING", mode="REQUIRED"),
+       bigquery.SchemaField(name="table_name", field_type="STRING", mode="NULLABLE"),
+       bigquery.SchemaField(name="countries", field_type="STRING", mode="REPEATED"),
+       bigquery.SchemaField(name="events_include", field_type="STRING", mode="REPEATED"),
+       bigquery.SchemaField(name="events_exclude", field_type="STRING", mode="REPEATED"),
+       bigquery.SchemaField(name="days_ago_start", field_type="INT64", mode="REQUIRED"),
+       bigquery.SchemaField(name="days_ago_end", field_type="INT64", mode="REQUIRED"),
+       bigquery.SchemaField(name="user_list", field_type="STRING"),
+       bigquery.SchemaField(name="created", field_type="TIMESTAMP"),
+       bigquery.SchemaField(name="mode", field_type="STRING"),
+       bigquery.SchemaField(name="query", field_type="STRING", mode="NULLABLE"),
+       bigquery.SchemaField(name="ttl", field_type="INT64", mode="NULLABLE"),
+    ]
+  audiences_log = [
+      bigquery.SchemaField(name="name", field_type="STRING", mode="REQUIRED", description="Audience name from audiences table"),
+      bigquery.SchemaField(name="date", field_type="TIMESTAMP", mode="REQUIRED", description="Date when segment was uploaded to Google Ads"),
+      bigquery.SchemaField(name="job", field_type="STRING", mode="NULLABLE", description="Google Ads offline job resource name"),
+      bigquery.SchemaField(name="user_count", field_type="INT64", mode="REQUIRED"),
+      bigquery.SchemaField(name="new_user_count", field_type="INT64", mode="REQUIRED"),
+      bigquery.SchemaField(name="new_control_user_count", field_type="INT64", mode="REQUIRED"),
+      bigquery.SchemaField(name="test_user_count", field_type="INT64", mode="REQUIRED"),
+      bigquery.SchemaField(name="control_user_count", field_type="INT64", mode="REQUIRED"),
+      bigquery.SchemaField(name="total_user_count", field_type="INT64", mode="REQUIRED"),
+      bigquery.SchemaField(name="total_control_user_count", field_type="INT64", mode="REQUIRED"),
+    ]
+  daily_test_users = [
+      bigquery.SchemaField(name="user", field_type="STRING"),
+      bigquery.SchemaField(name="status", field_type="INT64"),
+      bigquery.SchemaField(name="ttl", field_type="INT64"),
+    ]
 
 
 class DataGateway:
@@ -148,45 +146,14 @@ class DataGateway:
                                     location=bq_dataset_location)
 
     ds = self._recreate_dataset(bq_dataset_id, bq_dataset_location, True)
-    schema = [
-       bigquery.SchemaField(name="name", field_type="STRING", mode="REQUIRED"),
-       bigquery.SchemaField(name="app_id", field_type="STRING", mode="REQUIRED"),
-       bigquery.SchemaField(name="table_name", field_type="STRING", mode="NULLABLE"),
-       bigquery.SchemaField(name="countries", field_type="STRING", mode="REPEATED"),
-       bigquery.SchemaField(name="events_include", field_type="STRING", mode="REPEATED"),
-       bigquery.SchemaField(name="events_exclude", field_type="STRING", mode="REPEATED"),
-       bigquery.SchemaField(name="days_ago_start", field_type="INT64", mode="REQUIRED"),
-       bigquery.SchemaField(name="days_ago_end", field_type="INT64", mode="REQUIRED"),
-       bigquery.SchemaField(name="user_list", field_type="STRING"),
-       bigquery.SchemaField(name="created", field_type="TIMESTAMP"),
-       bigquery.SchemaField(name="mode", field_type="STRING"),
-       bigquery.SchemaField(name="query", field_type="STRING", mode="NULLABLE"),
-       bigquery.SchemaField(name="ttl", field_type="INT64", mode="NULLABLE"),
-    ]
+
     table_name = f"{bq_dataset_id}.audiences"
-    self._ensure_table(table_name, schema)
+    self._ensure_table(table_name, TableSchemas.audiences)
 
     table_name = f"{bq_dataset_id}.audiences_log"
-    schema = [
-      bigquery.SchemaField(name="name", field_type="STRING", mode="REQUIRED", description="Audience name from audiences table"),
-      bigquery.SchemaField(name="date", field_type="TIMESTAMP", mode="REQUIRED", description="Date when segment was uploaded to Google Ads"),
-      bigquery.SchemaField(name="job", field_type="STRING", mode="REQUIRED", description="Google Ads offline job resource name"),
-      bigquery.SchemaField(name="user_count", field_type="INT64", mode="REQUIRED"),
-      bigquery.SchemaField(name="new_user_count", field_type="INT64", mode="REQUIRED"),
-      bigquery.SchemaField(name="new_control_user_count", field_type="INT64", mode="REQUIRED"),
-      bigquery.SchemaField(name="test_user_count", field_type="INT64", mode="REQUIRED"),
-      bigquery.SchemaField(name="control_user_count", field_type="INT64", mode="REQUIRED"),
-      bigquery.SchemaField(name="total_user_count", field_type="INT64", mode="REQUIRED"),
-      bigquery.SchemaField(name="total_control_user_count", field_type="INT64", mode="REQUIRED"),
-    ]
-    self._ensure_table(table_name, schema)
+    self._ensure_table(table_name, TableSchemas.audiences_log)
 
     # update user segments tables for test users (adding ttl)
-    schema = [
-        bigquery.SchemaField(name="user", field_type="STRING"),
-        bigquery.SchemaField(name="status", field_type="INT64"),
-        bigquery.SchemaField(name="ttl", field_type="INT64"),
-    ]
     audiences = self.get_audiences(target)
     for audience in audiences:
       if audience.table_name:
@@ -194,7 +161,7 @@ class DataGateway:
         rows = self.execute_query(query)
         for row in rows:
           table_name = row['table_name']
-          self._ensure_table(f"{bq_dataset_id}.{table_name}", schema, strict=False)
+          self._ensure_table(f"{bq_dataset_id}.{table_name}", TableSchemas.daily_test_users, strict=False)
 
 
   def _ensure_table(self, table_name, expected_schema: list[bigquery.SchemaField], strict = False):
@@ -633,55 +600,8 @@ WHEN NOT MATCHED THEN
     all_events_list = ", ".join([f"'{event}'" for event in all_events])
     audience_events_list = ", ".join([f"'{event}'" for event in events_include])
 
-    query = """
-WITH
-  event_table AS (
-    SELECT
-      device.advertising_id AS user,
-      event_name,
-      event_date,
-    FROM
-      `{source_table}`
-    WHERE
-      _TABLE_SUFFIX BETWEEN '{date_start}' AND '{date_end}'
-      AND app_info.id = '{app_id}'
-      AND event_name IN ({all_events_list})
-  ),
-  audience_users AS (
-    SELECT
-      distinct f.user
-    FROM
-      `{all_users_table}` f
-    WHERE
-      {countries_clause}
-      AND app_id = '{app_id}'
-      AND EXISTS (
-        SELECT user from event_table WHERE user=f.user AND event_name IN ({audience_events_list})
-          AND event_date BETWEEN '{date_audience_start}' AND '{date_audience_end}'
-      )
-      AND NOT EXISTS (SELECT user from event_table WHERE user=f.user AND event_name = 'app_remove')
-  ),
-  converted_users AS (
-    SELECT
-      distinct f.user
-    FROM
-      `{all_users_table}` f
-    WHERE
-      {countries_clause}
-      AND app_id = '{app_id}'
-      AND EXISTS (
-        SELECT user from event_table WHERE user=f.user AND event_name IN ({conversion_events_list})
-          AND event_date BETWEEN '{date_conversion_start}' AND  '{date_conversion_end}'
-      )
-      AND NOT EXISTS (SELECT user from event_table WHERE user=f.user AND event_name = 'app_remove')
-  )
-  SELECT
-    count(a.user) as audience,
-    count(c.user) as converted,
-    safe_divide(count(c.user), count(a.user)) as cr
-  FROM audience_users a
-    LEFT JOIN converted_users c USING(user)
-"""
+    query = self._read_file('base_conversion.sql')
+
     try:
       query = query.format(**{
         "source_table": self.get_ga4_table_name(target, True),
@@ -850,12 +770,7 @@ FROM `{audience_table_name}`
     # either users_test or users_control dataframes
     test_table_name = self._get_user_segment_table_full_name(target, audience.table_name, 'test', suffix)
     if len(users_test) == 0:
-      schema = [
-        bigquery.SchemaField(name="user", field_type="STRING"),
-        bigquery.SchemaField(name="status", field_type="INT64"),
-        bigquery.SchemaField(name="ttl", field_type="INT64"),
-      ]
-      self._ensure_table(test_table_name, schema)
+      self._ensure_table(test_table_name, TableSchemas.daily_test_users)
     else:
       # add 'status' column (empty for all rows)
       users_test = users_test.assign(status=None).astype({"status": 'Int64'})
@@ -955,7 +870,11 @@ WHERE t1.user = t2.user
     # load test and control user counts
     test_table_name = self._get_user_segment_table_full_name(target, audience.table_name, 'test', suffix)
     query = f"SELECT COUNT(1) as count FROM `{test_table_name}` WHERE status = 1"
-    test_user_count = self.execute_query(query)[0]["count"]
+    try:
+      test_user_count = self.execute_query(query)[0]["count"]
+    except exceptions.NotFound:
+      logger.info(f"Table '{test_table_name}' does not exist, skipping loading a user segment for {suffix}")
+      return 0, 0, 0, 0
     control_table_name = self._get_user_segment_table_full_name(target, audience.table_name, 'control', suffix)
     query = f"SELECT COUNT(1) as count FROM `{control_table_name}`"
     control_user_count = self.execute_query(query)[0]["count"]
@@ -966,7 +885,7 @@ WHERE t1.user = t2.user
     query = f"""SELECT count(DISTINCT t.user) as user_count FROM `{test_table_name}` t
 WHERE status = 1 AND NOT EXISTS (
   SELECT * FROM `{table_name_prev}` t0
-  WHERE t0._TABLE_SUFFIX != '{suffix}' AND t.user=t0.user
+  WHERE t0._TABLE_SUFFIX < '{suffix}' AND t.user = t0.user AND t0.status = 1
 )
     """
     res = self.execute_query(query)
@@ -976,7 +895,7 @@ WHERE status = 1 AND NOT EXISTS (
     query = f"""SELECT count(DISTINCT t.user) as user_count FROM `{control_table_name}` t
 WHERE NOT EXISTS (
   SELECT * FROM `{control_table_name_prev}` t0
-  WHERE t0._TABLE_SUFFIX != '{suffix}' AND t.user=t0.user
+  WHERE t0._TABLE_SUFFIX < '{suffix}' AND t.user = t0.user
 )
     """
     res = self.execute_query(query)
@@ -985,12 +904,11 @@ WHERE NOT EXISTS (
 
 
   def update_audiences_log(self, target: ConfigTarget, logs: list[AudienceLog]):
-    #result[user_list_name] = { "job_resource_name": job_resource_name, "user_count": len(uploaded_users) }
     table_name = f"{target.bq_dataset_id}.audiences_log"
     table = self.bq_client.get_table(table_name)
     rows = [ {
         "name": i.name,
-        "date": datetime.now(),
+        "date": i.date if i.date else datetime.now(),
         "job": i.job_resource_name,
         "user_count": i.uploaded_user_count,
         "new_user_count": i.new_test_user_count,
@@ -1072,11 +990,7 @@ ORDER BY name, date
     if date_end is None:
       date_end = date.today() - timedelta(days=1)
 
-    script_path = os.path.realpath(__file__)
-    script_dir = os.path.dirname(script_path)
-    filename = os.path.join(script_dir, 'results.sql')
-    with open(filename) as f:
-      query = f.read()
+    query = self._read_file('results.sql')
 
     # NOTE: all events that we ignored for sampling (we picked users for whom those events didn't happen)
     # now are our conversions, but except "app_remove"
@@ -1107,3 +1021,71 @@ ORDER BY name, date
     # expect columns: date, cum_test_regs, cum_control_regs, total_user_count, total_control_user_count
     result = self.execute_query(query)
     return result, date_start, date_end
+
+
+  def rebuilt_audiences_log(self, target: ConfigTarget):
+    audiences = self.get_audiences(target)
+    audiences_log = self.get_audiences_log(target, include_duplicates=True)
+
+    # drop audiences_log table (because 'delete from' can fail with error:
+    #   UPDATE or DELETE statement over table 'table_name' would affect rows in the streaming buffer, which is not supported.
+    table_name = f"{target.bq_dataset_id}.audiences_log"
+    query = f"DROP TABLE `{table_name}`"
+    self.execute_query(query)
+    self._ensure_table(table_name, TableSchemas.audiences_log)
+
+    # recreate log entries for each audience
+    for audience in audiences:
+      # we load existing log entries to restore relations with jobs
+      audience_log_existing = audiences_log.get(audience.name, None)
+      audience_log = self.recalculate_audience_log(target, audience, audience_log_existing)
+      if audience_log:
+        self.update_audiences_log(target, audience_log)
+
+
+  def recalculate_audience_log(self, target: ConfigTarget, audience: Audience, audience_log_existing: list[AudienceLog] = []):
+    logger.info(f"Recalculating log for audience '{audience.name}'")
+    audience_log_existing = audience_log_existing or []
+    table_users = self._get_user_segment_table_full_name(target, audience.table_name, 'test', "*")
+    query = f"SELECT MIN(_TABLE_SUFFIX) AS start_day, MAX(_TABLE_SUFFIX) AS end_day FROM `{table_users}`"
+    # TODO: try to restore a JOB relation
+    try:
+      res = self.execute_query(query)
+    except exceptions.NotFound:
+      return
+    if not res:
+      return
+    res = res[0]
+    start_day = res["start_day"]
+    end_day = res["end_day"]
+    start_date = datetime.strptime(start_day, "%Y%m%d")
+    end_date = datetime.strptime(end_day, "%Y%m%d")
+    num_days = (end_date - start_date).days
+    total_test_user_count = 0
+    total_control_user_count = 0
+    logs = []
+    for day in range(num_days + 1):
+      current_day = start_date + timedelta(days=day)
+      test_user_count, control_user_count, new_test_user_count, new_control_user_count = \
+        self.load_user_segment_stat(target, audience, current_day.strftime("%Y%m%d") )
+      if not test_user_count:
+        continue
+      total_test_user_count += new_test_user_count
+      total_control_user_count += new_control_user_count
+      existing_same_day_entries = list([i for i in audience_log_existing if i.date.strftime("%Y%m%d") == current_day.strftime("%Y%m%d")])
+      entry = AudienceLog(
+        name=audience.name,
+        date=current_day,
+        job_resource_name=existing_same_day_entries[0].job_resource_name if existing_same_day_entries and len(existing_same_day_entries) == 1 else '',
+        uploaded_user_count=test_user_count,
+        new_test_user_count=new_test_user_count,
+        new_control_user_count=new_control_user_count,
+        test_user_count=test_user_count,
+        control_user_count=control_user_count,
+        total_test_user_count=total_test_user_count,
+        total_control_user_count=total_control_user_count,
+        failed_user_count=0,
+      )
+      logs.append(entry)
+      logger.debug(entry)
+    return logs

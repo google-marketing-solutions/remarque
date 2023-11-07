@@ -204,6 +204,17 @@
                 <q-icon name="check" color="red" size="sm" v-if="props.row.query" />
               </q-td>
             </template>
+            <template v-slot:body-cell-countries="props">
+              <q-td :props="props">
+                <div v-if="data.audiences_wrap">
+                  {{ formatArray(props.row.countries) }}
+                </div>
+                <div class="limited-width" v-if="!data.audiences_wrap">
+                  {{ formatArray(props.row.countries) }}
+                  <q-tooltip>{{ formatArray(props.row.countries) }}</q-tooltip>
+                </div>
+              </q-td>
+            </template>
           </q-table>
         </div>
       </q-card-section>
@@ -791,7 +802,8 @@ export default defineComponent({
       onAudienceListEdit,
       onAudienceListDelete,
       onAudiencesUpload,
-      onAudiencesDownload
+      onAudiencesDownload,
+      formatArray,
     };
   }
 });

@@ -18,13 +18,13 @@ from enum import Enum
 from typing import Union
 from google.ads.googleads.errors import GoogleAdsException
 #from google.ads.googleads.client import GoogleAdsClient  # type: ignore
-import smart_open
 
 from gaarf.api_clients import GoogleAdsApiClient
 from gaarf.query_executor import AdsReportFetcher
 
 from logger import logger
-from config import Config, ConfigTarget, Audience
+from config import Config, ConfigTarget
+from models import Audience
 from queries import UserListQuery, OfflineJobQuery
 
 _MEMBERSHIP_LIFESPAN = 10000

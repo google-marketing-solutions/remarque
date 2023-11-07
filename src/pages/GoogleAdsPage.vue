@@ -25,8 +25,9 @@
         </q-card-section>
         <q-card-actions class="q-pa-md">
           <q-btn label="Load" icon="download" size="md" @click="onFetchAudiencesStatus" color="primary"
-            style="width:130px" class="q-mr-lg"/>
-          <q-toggle v-model="data.include_log_duplicates" label="Include duplicates" />
+            style="width:130px" class="q-mr-lg" />
+          <q-toggle v-model="data.include_log_duplicates" label="Include duplicates" class="q-mx-md" />
+          <q-toggle v-model="data.skip_ads" label="Skip Jobs info" />
         </q-card-actions>
 
         <q-card-section>
@@ -58,7 +59,10 @@
               </template>
               <template v-slot:body-cell-countries="props">
                 <q-td :props="props">
-                  <div class="limited-width">
+                  <div v-if="data.audiences_wrap">
+                    {{ formatArray(props.row.countries) }}
+                  </div>
+                  <div class="limited-width" v-if="!data.audiences_wrap">
                     {{ formatArray(props.row.countries) }}
                     <q-tooltip>{{ formatArray(props.row.countries) }}</q-tooltip>
                   </div>
@@ -68,6 +72,12 @@
           </div>
         </q-card-section>
         <q-card-section>
+          <div class="row">
+            <div class="col" align="right">
+              <q-btn label="Recalculate" @click="onReclculateAudiencesLog" color="secondary" icon="repeat" class="q-my-md"
+                align="right"></q-btn>
+            </div>
+          </div>
           <div class="">
             <q-table title="Upload history" class="qtable-sticky-header" style="height: 300px" flat bordered
               :rows="data.audience_log" row-key="name" :columns="data.audience_status_columns" virtual-scroll
@@ -78,7 +88,6 @@
                 <q-btn flat round dense :icon="props.inFullscreen ? 'fullscreen_exit' : 'fullscreen'"
                   @click="props.toggleFullscreen" class="q-ml-md" />
               </template>
-
             </q-table>
           </div>
         </q-card-section>
@@ -136,7 +145,8 @@
               </div>
 
             </div>
-            <q-btn label="Load conversions" @click="onLoadConversions" color="primary" icon="query_stats" class="q-my-md"></q-btn>
+            <q-btn label="Load conversions" @click="onLoadConversions" color="primary" icon="query_stats"
+              class="q-my-md"></q-btn>
           </q-banner>
           <apexchart v-if="data.chart.series.length" style="width:100%" :options="data.chart.options"
             :series="data.chart.series"></apexchart>
@@ -158,14 +168,7 @@
   </q-dialog>
 </template>
 
-<style>
-.limited-width {
-  max-width: 100px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-</style>
+<style></style>
 
 <script lang="ts">
 import { computed, defineComponent, ref, watch } from 'vue';
@@ -231,6 +234,7 @@ export default defineComponent({
       ],
       audiences_wrap: true,
       include_log_duplicates: false,
+      skip_ads: false,
       audience_status_columns: [
         //{ name: 'status', label: 'Status', field: 'status', sortable: true },
         { name: 'date', label: 'Date', field: 'date', sortable: true },
@@ -264,7 +268,7 @@ export default defineComponent({
             },
           },
           markers: {
-            size: 1
+            size: 2
           },
           labels: [],
           xaxis: {
@@ -385,7 +389,7 @@ export default defineComponent({
       try {
         data.value.audiences = [];
         data.value.audience_log = [];
-        let res = await getApi('audiences/status', { include_log_duplicates: data.value.include_log_duplicates }, loading);
+        let res = await getApi('audiences/status', { include_log_duplicates: data.value.include_log_duplicates, skip_ads: data.value.skip_ads }, loading);
         console.log(res.data);
         const result = res.data.result;
         data.value.audiences_data = result;
@@ -417,6 +421,17 @@ export default defineComponent({
           message: e.message,
         });
       }
+    };
+
+    const onReclculateAudiencesLog = async () => {
+      $q.dialog({
+        title: 'Confirm',
+        message: 'Are you sure you want to rebuild audiences log?',
+        cancel: true,
+        persistent: true
+      }).onOk(async () => {
+        await postApiUi('audiences/recalculate_log', {}, $q, 'Recalculating...');
+      });
     };
 
     const onLoadConversions = async () => {
@@ -501,6 +516,7 @@ export default defineComponent({
       onSampling,
       onAudiencesUpload,
       onFetchAudiencesStatus,
+      onReclculateAudiencesLog,
       onLoadConversions,
       onOpenChart,
       formatArray,

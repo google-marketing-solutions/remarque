@@ -7,10 +7,10 @@ import numpy as np
 import statsmodels.stats.proportion as proportion
 
 from context import Context
-from config import Config, ConfigTarget, Audience, parse_arguments, get_config, save_config, AppNotInitializedError
+from config import Config, ConfigTarget, parse_arguments, get_config, save_config, AppNotInitializedError
 from sampling import do_sampling
 from ads_gateway import AdsGateway
-from data_gateway import AudienceLog
+from models import Audience, AudienceLog
 from cloud_scheduler_gateway import Job
 from mailer import send_email
 from logger import logger
@@ -138,6 +138,7 @@ def upload_customer_match_audience(context: Context,
   else:
     # take a AudienceLog entry for the previous day (not for today!)
     today = datetime.now().strftime("%Y-%m-%d")
+    audience_log.sort(key=lambda i: i.date, reverse=True)
     previous_day_log = next((obj for obj in audience_log if obj.date.strftime("%Y-%m-%d") != today), None)
     if previous_day_log:
       total_test_user_count = previous_day_log.total_test_user_count + new_test_user_count
