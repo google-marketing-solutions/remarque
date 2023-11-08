@@ -1,21 +1,14 @@
-from datetime import datetime, date
-from gaarf.api_clients import GoogleAdsApiClient
-from gaarf.query_executor import AdsReportFetcher
+from datetime import datetime
 import pandas as pd
 import pandas_gbq
-import numpy as np
-import statsmodels.stats.proportion as proportion
 
 from context import Context
 from config import Config, ConfigTarget, parse_arguments, get_config, save_config, AppNotInitializedError
 from sampling import do_sampling
-from ads_gateway import AdsGateway
 from models import Audience, AudienceLog
-from cloud_scheduler_gateway import Job
-from mailer import send_email
 from logger import logger
 
-def run_sampling_for_audience(context: Context, audience: Audience):
+def run_sampling_for_audience(context: Context, audience: Audience) -> tuple[list[str], list[str]] | None:
   """
   Samples an audience (assuming it's in test or prod mode):
     - fetch users according to the audience definition
@@ -64,14 +57,15 @@ def run_sampling_for_audience(context: Context, audience: Audience):
     users_control = pd.DataFrame(columns=['user'])
 
   context.data_gateway.save_sampled_users(context.target, audience, users_test, users_control)
+  reloaded_users = context.data_gateway.add_yesterdays_users(context.target, audience)
+  # NOTE: number of test users can change because we added users with ttl>1 from yesterday
+  if not reloaded_users:
+    reloaded_users = users_test['user'].tolist()
 
-  return users_test, users_control
+  return reloaded_users, users_control['user'].tolist()
 
 
 def update_customer_match_mappings(context: Context, audiences: list[Audience]):
-  #ads_gateway = AdsGateway(context.config, context.target, ads_client)
-  logger.info(f"Creating or loading existing user lists from Google Ads")
-  #audiences: list[Audience] = context.data_gateway.get_audiences(context.target)
   user_lists = context.ads_gateway.create_customer_match_user_lists(audiences)
   logger.debug(user_lists)
   # update user list resource names for audiences

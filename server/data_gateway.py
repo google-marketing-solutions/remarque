@@ -787,10 +787,13 @@ FROM `{audience_table_name}`
     else:
       pandas_gbq.to_gbq(users_control[['user']], control_table_name, project_id, if_exists='replace')
 
-    logger.info(f'Sampled users for audience {audience.name} saved to {test_table_name}/{control_table_name} tables')
+    logger.info(f'Sampled users for audience {audience.name} saved to {test_table_name} ({len(users_test)})/{control_table_name} ({len(users_control)}) tables')
 
+
+  def add_yesterdays_users(self, target: ConfigTarget, audience: Audience, suffix: str = None):
     # add test users from yesterday with TTL>1 into today's test users
     if audience.ttl > 1:
+      test_table_name = self._get_user_segment_table_full_name(target, audience.table_name, 'test', suffix)
       tables = self._get_user_segment_tables(target, audience.table_name, 'test', suffix, include_dataset=True)
       if tables:
         try:
@@ -807,8 +810,11 @@ FROM `{audience_table_name}`
   """
             res = self.execute_query(query)
             logger.debug(f"Added test users from previous day with TTL>1")
+            # reload test users after the addition of yesterday's ones
+            return self.load_audience_segment(target, audience, 'test')
         except ValueError:
           pass
+    return None
 
 
   def load_audience_segment(self, target: ConfigTarget, audience: Audience, group_name: Literal['test'] | Literal['control'] = 'test', suffix: str = None) -> list[str]:

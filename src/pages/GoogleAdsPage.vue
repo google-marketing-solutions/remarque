@@ -237,7 +237,7 @@ export default defineComponent({
       skip_ads: false,
       audience_status_columns: [
         //{ name: 'status', label: 'Status', field: 'status', sortable: true },
-        { name: 'date', label: 'Date', field: 'date', sortable: true },
+        { name: 'date', label: 'Date', field: 'date', sortable: true, format: (v: any) => formatDate(v, true) },
         { name: 'test_user_count', label: 'Test Users', field: 'test_user_count', sortable: true },
         { name: 'control_user_count', label: 'Control Users', field: 'control_user_count', sortable: true },
         { name: 'uploaded_user_count', label: 'Uploaded Users', field: 'user_count', sortable: true },
@@ -384,42 +384,39 @@ export default defineComponent({
     });
 
     const onFetchAudiencesStatus = async () => {
-      $q.loading.show({ message: 'Fetching audiences status...' });
-      const loading = () => $q.loading.hide();
-      try {
-        data.value.audiences = [];
-        data.value.audience_log = [];
-        let res = await getApi('audiences/status', { include_log_duplicates: data.value.include_log_duplicates, skip_ads: data.value.skip_ads }, loading);
-        console.log(res.data);
-        const result = res.data.result;
-        data.value.audiences_data = result;
-        let audiences = <any[]>[];
-        Object.keys(result).map(name => {
-          const audience = result[name];
-          audiences.push({
-            'mode': audience.mode,
-            'name': audience.name,
-            'app_id': audience.app_id,
-            'countries': audience.countries,
-            'events_include': audience.events_include,
-            'events_exclude': audience.events_exclude,
-            'days_ago_start': audience.days_ago_start,
-            'days_ago_end': audience.days_ago_end,
-            'user_list': audience.user_list,
-            'ttl': audience.ttl,
-            'log': audience.log
-          });
-        });
-        data.value.audiences = audiences;
-        if (audiences.length > 0) {
-          data.value.selectedAudience = [audiences[0]];
+      data.value.audiences = [];
+      data.value.audience_log = [];
+      let res = await getApiUi('audiences/status',
+        { include_log_duplicates: data.value.include_log_duplicates, skip_ads: data.value.skip_ads },
+        $q, 'Fetching audiences status...');
+      if (!res?.data.result) return;
+      const result = res.data.result;
+      data.value.audiences_data = result;
+      let audiences = <any[]>[];
+      Object.keys(result).map(name => {
+        const audience = result[name];
+        let logs = audience.log;
+        // convert dates from strings to Date objects
+        if (logs) {
+          logs = logs.map((i: any) => { i.date = new Date(i.date); return i; });
         }
-      }
-      catch (e: any) {
-        $q.dialog({
-          title: 'Error',
-          message: e.message,
+        audiences.push({
+          'mode': audience.mode,
+          'name': audience.name,
+          'app_id': audience.app_id,
+          'countries': audience.countries,
+          'events_include': audience.events_include,
+          'events_exclude': audience.events_exclude,
+          'days_ago_start': audience.days_ago_start,
+          'days_ago_end': audience.days_ago_end,
+          'user_list': audience.user_list,
+          'ttl': audience.ttl,
+          'log': logs
         });
+      });
+      data.value.audiences = audiences;
+      if (audiences.length > 0) {
+        data.value.selectedAudience = [audiences[0]];
       }
     };
 

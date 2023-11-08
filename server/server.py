@@ -326,6 +326,7 @@ def setup_connect_ga4():
   ga_table = f'{ga4_project}.{ga4_dataset}.{ga4_table}_{datetime.today().strftime("%Y")}*'
   query = f"SELECT DISTINCT _TABLE_SUFFIX as table FROM `{ga_table}` ORDER BY 1 DESC LIMIT 10"
   try:
+    # TODO: if the target config has't been configured then we doesn't have a BQ location so we don't know where execute the query, by default it'll use US location
     response = context.data_gateway.execute_query(query)
     tables = [r["table"] for r in response]
     return jsonify({"results": tables})
@@ -479,10 +480,8 @@ def process():
     if audience.mode == 'off':
       continue
     users_test, users_control = run_sampling_for_audience(context, audience)
-
     audience_log = audiences_log.get(audience.name, None)
-    users_test_list = users_test['user'].tolist()
-    log_item = upload_customer_match_audience(context, audience, audience_log, users_test_list)
+    log_item = upload_customer_match_audience(context, audience, audience_log, users_test)
     log.append(log_item)
     result[audience.name] = log_item.to_dict()
 

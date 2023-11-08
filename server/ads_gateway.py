@@ -60,7 +60,7 @@ class AdsGateway:
         Returns:
             dict: a mapping from audience name to customer match user list resource
         """
-        logger.info("Creating customer match user lists")
+        logger.info("Creating customer match user lists if needed")
         # Get the list audiences that already exist to create the new ones only
         query_text = "SELECT user_list.name, user_list.resource_name AS user_list_name FROM user_list"
         existing_lists = self.report_fetcher.fetch(query_text).to_list()
