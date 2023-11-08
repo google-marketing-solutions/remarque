@@ -37,7 +37,7 @@
           </div>
 
           <div class="col">
-            <q-table title="GA4 Events" style="height: 400px" flat bordered :rows="data.events" row-key="event"
+            <q-table title="GA4 Events" class="qtable-sticky-header" style="height: 400px" flat bordered :rows="data.events" row-key="event"
               :columns="data.events_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]"
               :no-data-label="data.app_ids.length ? 'Choose an app id' : 'Load all events'"
               :loading="data.ga_stat_loading" :filter-method="filterEvents" :filter="data.eventsSearch">
@@ -59,7 +59,7 @@
           </div>
 
           <div class="col">
-            <q-table title="GA4 Countries" style="height: 400px" flat bordered :rows="data.countries" row-key="country"
+            <q-table title="GA4 Countries" class="qtable-sticky-header" style="height: 400px" flat bordered :rows="data.countries" row-key="country"
               :columns="data.countries_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }"
               :rows-per-page-options="[0]" selection="multiple"
               :no-data-label="data.app_ids.length ? 'Choose an app id' : 'Load all events'"
@@ -100,8 +100,7 @@
             </template>
             Audience name is crucial, it's used to uniquely identify the audience.
             It will be used as a name for customer match user list and as a prefix for all tables in BigQuery with user
-            ids.<br>
-            As soon as you change the name an audience will be recreated, effectively loosing all accumulated data.
+            ids. As soon as you change the name an audience will be recreated, effectively loosing all accumulated data.<br>
             If you have a lot of audiences you will probably want to use country names/codes in their names.
           </q-banner>
         </div>
@@ -423,12 +422,12 @@ export default defineComponent({
       ],
       events_columns: [
         { name: 'event', label: 'Event name', field: 'event', sortable: true },
-        { name: 'count', label: 'Event count', field: 'count', sortable: true },
+        { name: 'count', label: 'Event count', field: 'count', sortable: true, format: (v: number) => v && v.toLocaleString() },
       ],
       countries_columns: [
         { name: 'country', label: 'Country', field: 'country', sortable: true },
         { name: 'country_code', label: 'Code', field: 'country_code', sortable: true },
-        { name: 'count', label: 'User count', field: 'count', sortable: true },
+        { name: 'count', label: 'User count', field: 'count', sortable: true, format: (v: number) => v && v.toLocaleString() },
       ],
       audiences_columns: [
         { name: 'name', label: 'Name', field: 'name', sortable: true },
@@ -490,14 +489,15 @@ export default defineComponent({
         audience.value.allEventsSelect = audience.value.allEvents;
         audience.value.app_id = app_id;
         audience.value.countries = [];
+        data.value.selectedCountries = [];
       } else {
         data.value.events = [];
         data.value.countries = [];
         audience.value.allCountries = [];
         audience.value.allCountriesSelect = audience.value.allCountries;
         audience.value.allEvents = [];
-        audience.value.allEventsSelect = audience.value.allEvents;
       }
+      audience.value.allEventsSelect = audience.value.allEvents;
     }, { deep: true });
     watch(() => data.value.selectedCountries, (newValue) => {
       console.log(newValue);
