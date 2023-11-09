@@ -152,6 +152,11 @@ class AdsGateway:
         offline_user_data_job =self.googleads_client.get_type("OfflineUserDataJob")
         offline_user_data_job.type_ = self.googleads_client.enums.OfflineUserDataJobTypeEnum.CUSTOMER_MATCH_USER_LIST
         offline_user_data_job.customer_match_user_list_metadata.user_list = user_list_resource_name
+        # TODO: starting v15
+        #offline_user_data_job.customer_match_user_list_metadata.consent = Consent(
+        #   ad_user_data=ConsentStatus.GRANTED,
+        #   ad_personalization=ConsentStatus.GRANTED,
+        #)
 
         logger.debug(f"Creating create_offline_user_data_job for user list '{user_list_resource_name}'")
         # Issues a request to create an offline user data job.

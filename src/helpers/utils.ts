@@ -19,5 +19,6 @@ export function formatDate(val: Date, includeTime = false) {
 }
 
 export function formatFloat(val: number | undefined) {
-  return val ? val.toFixed(5) : '-';
+  val = Number.parseFloat(<any>val);
+  return val >= 0 ? val.toFixed(5) : '-';
 }

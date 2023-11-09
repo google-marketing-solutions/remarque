@@ -250,6 +250,7 @@
             The following macros are available:
             <ul>
               <li><code>source_table</code> - full name of a GA4 table</li>
+              <li><code>dataset</code> - application dataset id (usually 'remarque')</li>
               <li><code>day_start</code> - start date of time window as yyyymmdd</li>
               <li><code>day_end</code> - end date of time windiw as yyyymmdd</li>
               <li><code>app_id</code> - app id from the audience definition</li>
@@ -645,7 +646,7 @@ export default defineComponent({
       $q.loading.show({ message: 'Getting a preview of the audience...' });
       const loading = () => $q.loading.hide();
       try {
-        let res = await postApi('audiences/preview', { audience: obj }, loading);
+        let res = await postApi('audience/preview', { audience: obj }, loading);
         console.log(res.data);
         $q.dialog({
           title: 'Audience preview',
@@ -661,7 +662,7 @@ export default defineComponent({
     };
     const onAudienceGetQuery = async () => {
       const obj = getAudienceFromForm();
-      let res = await postApiUi('audiences/get_query', { audience: obj }, $q, 'Getting query...');
+      let res = await postApiUi('audience/query', { audience: obj }, $q, 'Getting query...');
       if (!res?.data) {
         return;
       }
@@ -680,7 +681,7 @@ export default defineComponent({
       if (!data.value.powerAnalysis.conversion_manual) {
         // calculate baseline conversion rate first
         const obj = getAudienceFromForm();
-        let res = await postApiUi('audiences/base_conversion', {
+        let res = await postApiUi('audience/base_conversion', {
           audience: obj,
           date_start: data.value.powerAnalysis.from,
           date_end: data.value.powerAnalysis.to,
@@ -696,7 +697,7 @@ export default defineComponent({
         data.value.powerAnalysis.query = result.query;
       }
       // calculate power
-      let res = await getApiUi('audiences/power', {
+      let res = await getApiUi('audience/power', {
         cr: data.value.powerAnalysis.conversion_rate,
         power: data.value.powerAnalysis.power,
         alpha: data.value.powerAnalysis.alpha,

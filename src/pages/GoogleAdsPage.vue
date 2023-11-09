@@ -145,11 +145,22 @@
               </div>
 
             </div>
-            <q-btn label="Load conversions" @click="onLoadConversions" color="primary" icon="query_stats"
-              class="q-my-md"></q-btn>
+            <div class="row">
+              <div class="col q-pa-xs">
+                <q-btn label="Load conversions" @click="onLoadConversions" color="primary" icon="query_stats"
+                  class="q-my-md"></q-btn>
+
+                <q-btn-toggle class="q-mx-lg" v-model="data.conversions_mode" no-wrap outline alight="right" :options="[
+                  { label: 'Conv Rate', value: 'cr' },
+                  { label: 'Absolute', value: 'abs' },
+                ]" />
+
+                <q-btn label="Get query" @click="onGetConversionsQuery" class="q-my-md"></q-btn>
+              </div>
+            </div>
           </q-banner>
-          <apexchart v-if="data.chart.series.length" style="width:100%" :options="data.chart.options"
-            :series="data.chart.series"></apexchart>
+          <apexchart v-if="data.chart.series.length" :options="data.chart.options" :series="data.chart.series"
+            height="600"></apexchart>
         </q-card-section>
       </q-card>
     </div>
@@ -171,10 +182,10 @@
 <style></style>
 
 <script lang="ts">
-import { computed, defineComponent, ref, watch } from 'vue';
+import { defineComponent, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { AudienceInfo, configurationStore } from 'stores/configuration';
-import { getApi, postApi, postApiUi, getApiUi } from 'boot/axios';
+import { postApi, postApiUi, getApiUi } from 'boot/axios';
 import { formatArray, formatDate, formatFloat } from '../helpers/utils';
 
 interface AudienceLog {
@@ -208,7 +219,10 @@ interface AudienceWithLog extends AudienceInfo {
   log?: AudienceLog[];
   conversions?: Conversions;
 }
-
+enum GraphMode {
+  cr = 'cr',
+  abs = 'abs',
+}
 export default defineComponent({
   name: 'GoogleAdsPage',
   components: {},
@@ -251,11 +265,15 @@ export default defineComponent({
       chart: {
         options: {
           chart: {
-            height: 100,
             type: 'line',
           },
           stroke: {
             curve: 'straight'
+          },
+          zoom: {
+            enabled: true,
+            type: 'x',
+            autoScaleYaxis: true,
           },
           title: {
             text: 'Conversions',
@@ -287,6 +305,7 @@ export default defineComponent({
       conversions_to: <string | undefined>undefined,
       conversions_selected_countries: <string[]>[],
       conversions_countries: [],
+      conversions_mode: GraphMode.cr,
       pval: <number | undefined>undefined,
     });
 
@@ -383,6 +402,13 @@ export default defineComponent({
       }
     });
 
+    watch(() => data.value.conversions_mode, (newValue: any) => {
+      if (data.value.selectedAudience && data.value.selectedAudience.length) {
+        const audience = data.value.selectedAudience[0];
+        updateConversionsChart(audience.conversions);
+      }
+    });
+
     const onFetchAudiencesStatus = async () => {
       data.value.audiences = [];
       data.value.audience_log = [];
@@ -446,9 +472,36 @@ export default defineComponent({
       }
     };
 
+    const onGetConversionsQuery = async () => {
+      if (data.value.selectedAudience && data.value.selectedAudience.length) {
+        const audience = data.value.selectedAudience[0];
+        let date_start = <string | undefined>data.value.conversions_from;
+        let date_end = <string | undefined>data.value.conversions_to;
+        let country = data.value.conversions_selected_countries;
+        let country_str;
+        if (country && country.length) {
+          country_str = country.join(',');
+        }
+        let res = await getApiUi('conversions/query', { audience: audience.name, date_start, date_end, country: country_str }, $q, 'Fetching the audience conversion uquery...');
+        if (!res?.data) {
+          return;
+        }
+        console.log(res.data.query);
+        $q.dialog({
+          title: 'SQL Query for conversion calculation',
+          message: res.data.query,
+          ok: {
+            push: true
+          },
+          class: 'text-pre',
+          fullWidth: true
+        });
+      }
+    };
+
     const loadConversions = async (audienceName: string, date_start: string | undefined, date_end: string | undefined, country: string | undefined): Promise<Conversions | undefined> => {
       data.value.chart.series = [];
-      let res = await getApiUi('audiences/conversions', { audience: audienceName, date_start, date_end, country }, $q, 'Fetching the audience conversion history...');
+      let res = await getApiUi('conversions', { audience: audienceName, date_start, date_end, country }, $q, 'Fetching the audience conversion history...');
       if (!res) return;
       const results = res.data.results;
       let result;
@@ -468,6 +521,12 @@ export default defineComponent({
       return { data: result.conversions, start_date: result.date_start, end_date: result.date_end, pval: result.pval };
     };
 
+    function formatGraphValue(val: any) {
+      if (Number.isFinite(val)) {
+        return GraphMode.cr ? formatFloat(val) : val;
+      }
+      return 0;
+    }
     const updateConversionsChart = (conversions?: Conversions) => {
       if (!conversions || !conversions.data || !conversions.data.length) {
         data.value.chart.series = [];
@@ -488,12 +547,13 @@ export default defineComponent({
         // NOTE: dates should not repeat otherwise there will be no graph
         graph_data[label] = {
           date: item.date,
-          test: formatFloat(item.cr_test),       //item.cum_test_regs,
-          control: formatFloat(item.cr_control)  //item.cum_control_regs
+          test: data.value.conversions_mode === GraphMode.cr ? item.cr_test : item.cum_test_regs,
+          control: data.value.conversions_mode === GraphMode.cr ? item.cr_control : item.cum_control_regs
         };
       }
-      const test_data = Object.entries(graph_data).map(item => { return { x: item[1].date, y: item[1].test }; });
-      const control_data = Object.entries(graph_data).map(item => { return { x: item[1].date, y: item[1].control }; });
+      const entries = Object.entries(graph_data);
+      const test_data = entries.map(item => { return { x: item[1].date, y: formatGraphValue(item[1].test) }; });
+      const control_data = entries.map(item => { return { x: item[1].date, y: formatGraphValue(item[1].control) }; });
       data.value.chart.series = [
         { name: 'treatment', data: test_data },
         { name: 'control', data: control_data },
@@ -502,8 +562,12 @@ export default defineComponent({
 
     const onOpenChart = async (props: any) => {
       const audience = props.row;
-      audience.conversions = await loadConversions(audience.name, undefined, undefined, undefined);
-      updateConversionsChart(audience.conversions);
+      data.value.selectedAudience = [audience];
+      if (audience.conversions) {
+        updateConversionsChart(audience.conversions);
+      } else {
+        onLoadConversions();
+      }
     }
 
     return {
@@ -515,6 +579,7 @@ export default defineComponent({
       onFetchAudiencesStatus,
       onReclculateAudiencesLog,
       onLoadConversions,
+      onGetConversionsQuery,
       onOpenChart,
       formatArray,
       formatFloat,

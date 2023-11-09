@@ -379,8 +379,8 @@ def update_audiences():
   return jsonify({"results": results})
 
 
-@app.route("/api/audiences/preview", methods=["POST"])
-def calculate_users_for_audiences():
+@app.route("/api/audience/preview", methods=["POST"])
+def calculate_users_for_audience():
   context = create_context()
   pprint(request.args)
   params = request.get_json(force=True)
@@ -393,7 +393,7 @@ def calculate_users_for_audiences():
   return jsonify({"users_count": len(df)})
 
 
-@app.route("/api/audiences/get_query", methods=["POST"])
+@app.route("/api/audience/query", methods=["POST"])
 def get_query_for_audience() -> Response:
   context = create_context()
   params = request.get_json(force=True)
@@ -405,7 +405,7 @@ def get_query_for_audience() -> Response:
   return jsonify({"query": query})
 
 
-@app.route("/api/audiences/base_conversion", methods=["POST", "GET"])
+@app.route("/api/audience/base_conversion", methods=["POST", "GET"])
 def get_base_conversion():
   context = create_context()
   params = request.get_json(force=True)
@@ -425,7 +425,7 @@ def get_base_conversion():
   return jsonify({"result": result})
 
 
-@app.route("/api/audiences/power", methods=["POST", "GET"])
+@app.route("/api/audience/power", methods=["POST", "GET"])
 def get_power_analysis():
   from statsmodels.stats.power import TTestIndPower
 
@@ -685,10 +685,35 @@ def recalculate_audiences_status():
   return jsonify({})
 
 
-@app.route("/api/audiences/conversions", methods=["GET"])
+@app.route("/api/conversions/query", methods=["GET"])
+def get_conversions_query():
+  context = create_context()
+  date_start = request.args.get('date_start')
+  date_start = date.fromisoformat(date_start) if date_start else None
+  date_end = request.args.get('date_end')
+  date_end = date.fromisoformat(date_end) if date_end else None
+  country = request.args.get('country')
+  if country:
+    country = country.split(',')
+  audience_name = request.args.get('audience')
+  if not audience_name:
+    raise ValueError("No audience name was specified")
+  logger.info(f"Generating query for conversions for '{audience_name}' audience and {date_start}-{date_end} timeframe")
+  audiences = context.data_gateway.get_audiences(context.target, audience_name)
+  if not audiences:
+    raise ValueError(f"No audience with name '{audience_name}' found")
+  audience = audiences[0]
+  query, date_start, date_end = context.data_gateway.get_user_conversions_query(context.target, audience, date_start, date_end, country)
+  return jsonify({
+      "query": query,
+      "date_start": date_start.strftime("%Y-%m-%d"),
+      "date_end": date_end.strftime("%Y-%m-%d"),
+  })
+
+
+@app.route("/api/conversions", methods=["GET"])
 def get_user_conversions():
   context = create_context()
-
   date_start = request.args.get('date_start')
   date_start = date.fromisoformat(date_start) if date_start else None
   date_end = request.args.get('date_end')

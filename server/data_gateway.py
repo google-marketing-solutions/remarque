@@ -368,11 +368,13 @@ ORDER BY 1, 3 DESC
       }
 
 
-  def get_audiences(self, target: ConfigTarget) -> list[Audience]:
+  def get_audiences(self, target: ConfigTarget, audience_name: str = None) -> list[Audience]:
+    condition = f"WHERE name='{audience_name}'" if audience_name else ""
     query = f"""
 SELECT
   name, app_id, table_name, countries, events_include, events_exclude, days_ago_start, days_ago_end, user_list, created, mode, query, ttl
 FROM `{target.bq_dataset_id}.audiences`
+{condition}
 ORDER BY created
 """
     rows = self.execute_query(query)
@@ -557,7 +559,8 @@ WHEN NOT MATCHED THEN
         "countries": countries,
         "all_users_table": target.bq_dataset_id + "." + TABLE_USER_NORMALIZED,
         "all_events_list": all_events_list,
-        "SEARCH_CONDITIONS": search_condition
+        "SEARCH_CONDITIONS": search_condition,
+        "dataset": target.bq_dataset_id,
       })
     except KeyError as e:
       raise Exception(f"An error occured during substituting macros into audience query, unknown macro {e} was used")
@@ -981,9 +984,9 @@ ORDER BY name, date
     return result
 
 
-  def get_user_conversions(self, target: ConfigTarget, audience: Audience,
-                           date_start: date = None, date_end: date = None,
-                           country = None):
+  def get_user_conversions_query(self, target: ConfigTarget, audience: Audience,
+                                 date_start: date = None, date_end: date = None,
+                                 country = None):
     if date_start is None:
       log = self.get_audiences_log(target)
       log_rows = log.get(audience.name, None)
@@ -996,11 +999,9 @@ ORDER BY name, date
     if date_end is None:
       date_end = date.today() - timedelta(days=1)
 
-    query = self._read_file('results.sql')
-
     # NOTE: all events that we ignored for sampling (we picked users for whom those events didn't happen)
     # now are our conversions, but except "app_remove"
-    # TODO: if events_exclude has more than one we need to make sure all of them happened not just one!
+    # TODO: if events_exclude has more than one, we need to make sure all of them happened not just one!
     conversion_events = [item for item in audience.events_exclude if item != 'app_remove']
     events_list = ", ".join([f"'{event}'" for event in conversion_events])
     ga_table = self.get_ga4_table_name(target, True)
@@ -1010,6 +1011,7 @@ ORDER BY name, date
       conversions_conditions = f" AND country IN ({country_list})"
     else:
       conversions_conditions = ''
+    query = self._read_file('results.sql')
     query = query.format(**{
       "source_table": ga_table,
       "events": events_list,
@@ -1025,6 +1027,13 @@ ORDER BY name, date
       "audience_name": audience.name
     })
     # expect columns: date, cum_test_regs, cum_control_regs, total_user_count, total_control_user_count
+    return query, date_start, date_end
+
+
+  def get_user_conversions(self, target: ConfigTarget, audience: Audience,
+                           date_start: date = None, date_end: date = None,
+                           country = None):
+    query, date_start, date_end = self.get_user_conversions_query(target, audience, date_start, date_end, country)
     result = self.execute_query(query)
     return result, date_start, date_end
 
