@@ -119,27 +119,13 @@ class AdsGateway:
         return result
 
 
-    def upload_customer_match_audience(self, list_resource_name: str, users: list[str], overwrite=True):
-      if len(users) > _MAX_OPERATIONS_PER_JOB:
-          raise ValueError(f'Too many users ({len(users)}) in the list to upload at once (maximum: {_MAX_OPERATIONS_PER_JOB})')
-      # Create an offline job with all users identities
-      offline_job_resource_name, failed_user_ids, users = self._create_and_run_offline_user_data_job(
-          list_resource_name,
-          users,
-          overwrite
-      )
-      return offline_job_resource_name, failed_user_ids, users
-
-
-    def _create_and_run_offline_user_data_job(self,
-                                              user_list_resource_name: str,
-                                              users: list[str],
-                                              overwrite):
-        """ Creates a offline user data job operation for an audience list and runs it.
+    def upload_customer_match_audience(self, user_list_resource_name: str, users: list[str], overwrite=True):
+        """ Creates a job with offline user data job operations for an audience list and runs it.
 
             Args:
                 user_list_resource_name: user list resource name to add/remove user from
                 user_emails: List of user emails to be added/removed
+                overwrite: to remove previous users from the audiences
 
             Returns:
                 The resource name of the newly created offline job which will be later
@@ -169,21 +155,46 @@ class AdsGateway:
         logger.info(
             f"Created an offline user data job with resource name '{offline_user_data_job_resource_name}' for user list '{user_list_resource_name}'."
         )
+        operations = self._build_offline_user_data_job_operations(users, overwrite)
+        logger.debug(f"Created {len(operations)} operations (OfflineUserDataJobOperation) with overwrite={overwrite}")
+
+        if len(operations) < _MAX_OPERATIONS_PER_JOB:
+          failed_user_ids = self._execute_upload_job(offline_user_data_job_service, operations, offline_user_data_job_resource_name, users)
+        else:
+          chunks = [operations[i:i + _MAX_OPERATIONS_PER_JOB] for i in range(0, len(operations), _MAX_OPERATIONS_PER_JOB)]
+          logger.info(f"Sending OflineUserDataJobOperations in {len(chunks)} chunks")
+          failed_user_ids = None
+          for chunk in chunks:
+             failed_user_ids_chunk = self._execute_upload_job(offline_user_data_job_service, chunk, offline_user_data_job_resource_name, users)
+             if failed_user_ids_chunk:
+                if not failed_user_ids:
+                   failed_user_ids = []
+                failed_user_ids.append(failed_user_ids_chunk)
+
+        # Issues a request to run the offline user data job for executing all added operations.
+        if users:
+            logger.debug("Sending run_offline_user_data_job request to start uploading users")
+            offline_user_data_job_service.run_offline_user_data_job(
+                resource_name=offline_user_data_job_resource_name
+            )
+
+            return offline_user_data_job_resource_name, failed_user_ids, users
+        return None, failed_user_ids, []
+
+
+    def _execute_upload_job(self, offline_user_data_job_service, operations, job_resource_name: str, users: list[str]):
+
         request = self.googleads_client.get_type("AddOfflineUserDataJobOperationsRequest")
-        request.resource_name = offline_user_data_job_resource_name
-        # NOTE: AddOfflineUserDataJobOperationsRequest.operations is limited to 100,000 elements maximum
-        request.operations = self._build_offline_user_data_job_operations(users, overwrite)
+        request.resource_name = job_resource_name
+        # NOTE: AddOfflineUserDataJobOperationsRequest.operations is limited to 100,000 elements per request
+        request.operations = operations
         request.enable_partial_failure = True
         #request.enable_warnings = True?
-        #print(request.operations)
 
-        # Issues a request to add the operations to the offline user data job.
-        logger.debug(f"Sending add_offline_user_data_job_operations request with {len(users)} users and overwrite={overwrite}")
+        logger.debug(f"Sending add_offline_user_data_job_operations request with {len(operations)} operations")
         response = offline_user_data_job_service.add_offline_user_data_job_operations(
             request=request
         )
-
-        # Extracts the partial failure from the response status.
         failed_user_ids = None
         partial_failure = getattr(response, "partial_failure_error", None)
         if getattr(partial_failure, "code", None) != 0:
@@ -213,16 +224,7 @@ class AdsGateway:
                 del users[idx]
             logger.info('Partical failures occured during adding the following user ids to OfflineUserDataJob:')
             logger.info(failed_user_ids)
-
-        # Issues a request to run the offline user data job for executing all added operations.
-        if users:
-            logger.debug("Sending run_offline_user_data_job request to start uploading users")
-            offline_user_data_job_service.run_offline_user_data_job(
-                resource_name=offline_user_data_job_resource_name
-            )
-
-            return offline_user_data_job_resource_name, failed_user_ids, users
-        return None, failed_user_ids, []
+        return failed_user_ids
 
 
     def _build_offline_user_data_job_operations(self,
