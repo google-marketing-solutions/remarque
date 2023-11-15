@@ -54,3 +54,28 @@ FROM offline_user_data_job"""
     else:
       condition = "offline_user_data_job.type = CUSTOMER_MATCH_USER_LIST"
     self.query_text = self.query_text + '\nWHERE\n' + condition
+
+
+class UserListCampaigns(BaseQuery):
+  def __init__(self, list_name: Union[str,list]):
+    self.query_text = f"""
+SELECT
+ad_group_criterion.user_list.user_list as user_list,
+campaign.id,
+campaign.name,
+ad_group.id,
+ad_group.name,
+user_list.name,
+user_list.description
+FROM ad_group_criterion
+"""
+    if list_name and isinstance(list_name, str):
+      condition = f"user_list.name = '{list_name}'"
+    # otherwise return all jobs for customer match lists
+    elif list_name and isinstance(list_name, list):
+      parts = [f"'{i}'" for i in list_name]
+      condition = f"user_list.name IN ({','.join(parts)})"
+    else:
+      condition = "ad_group_criterion.type = USER_LIST AND user_list.description = 'Remarque user list' AND ad_group_criterion.status = ENABLED"
+    self.query_text = self.query_text + '\nWHERE\n' + condition
+

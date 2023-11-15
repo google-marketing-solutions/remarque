@@ -247,7 +247,7 @@ class DataGateway:
               table = bigquery.Table(table_ref, schema=expected_schema)
               self.bq_client.create_table(table)
               return
-          logger.warning(f"It is not a scheme_incompatible error or we failed to parse it")
+          logger.warning(f"The error is not a scheme_incompatible error or we failed to parse it")
           raise
       else:
         logger.debug(f"Table {table_name} has compatible schema")

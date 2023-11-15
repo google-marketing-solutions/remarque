@@ -151,7 +151,7 @@ export default defineComponent({
       store.activeTarget = '';
     };
     const onDeleteTarget = async () => {
-      // we should be able to delete the default target (store.activeTarget)
+      // we should NOT be able to delete the default target (store.activeTarget)
       if (!store.activeTarget || store.activeTarget === 'default') {
         console.error('Trying to delete the default target (which is not allowed)');
         return;

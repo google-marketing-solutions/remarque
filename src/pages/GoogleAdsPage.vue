@@ -32,10 +32,10 @@
 
         <q-card-section>
           <div class="">
-            <q-table title="Audiences" class="qtable-sticky-header" style="height: 300px" flat bordered
+            <q-table title="Audiences" class="qtable-sticky-header" style="height: 400px" flat bordered
               :rows="data.audiences" row-key="name" :columns="data.audiences_columns" virtual-scroll
               :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" v-model:selected="data.selectedAudience"
-              :wrap-cells="data.audiences_wrap" selection="single" hide-bottom>
+              :wrap-cells="data.audiences_wrap" selection="single">
               <template v-slot:top="props">
                 <div class="col-2 q-table__title">Audiences</div>
                 <q-space />
@@ -67,6 +67,25 @@
                     <q-tooltip>{{ formatArray(props.row.countries) }}</q-tooltip>
                   </div>
                 </q-td>
+              </template>
+              <template v-slot:bottom>
+                <!-- <div class="row">
+                  <div v-if="data.selectedAudience.length > 1" class="q-mx-lg col">
+                    <q-icon size="2em" name="warning" color="red"/>You have more than one campaign targeted the audience.<br/>
+                  </div>
+                </div> -->
+                <div v-if="data.selectedAudience.length && data.selectedAudience[0].campaigns.length">
+                  <q-pagination v-if="data.selectedAudience[0].campaigns.length > 1" v-model="data.currentAdgroupIndex"
+                    :min="1" :max="data.selectedAudience[0].campaigns.length" input direction-links />
+                  <div class="row">
+                    <div class="col">
+                      adgroup: <b>{{ data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].ad_group_name }}</b> (id: {{
+                        data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].ad_group_id }}),
+                      campaign: <b>{{ data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].campaign_name }}</b> (id: {{
+                        data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].campaign_id }})
+                    </div>
+                  </div>
+                </div>
               </template>
             </q-table>
           </div>
@@ -132,7 +151,6 @@
                 </q-input>
               </div>
               <div class="col q-pa-xs">
-                <!-- <q-input filled v-model="data.country" label="Country" clearable></q-input> -->
                 <q-select filled v-model="data.conversions_selected_countries" multiple
                   :options="data.conversions_countries" label="Country" style="width: 250px" clearable />
               </div>
@@ -218,6 +236,7 @@ interface ConversionsData {
 interface AudienceWithLog extends AudienceInfo {
   log?: AudienceLog[];
   conversions?: Conversions;
+  campaigns: any[]
 }
 enum GraphMode {
   cr = 'cr',
@@ -234,6 +253,7 @@ export default defineComponent({
       audiences_data: {},
       audience_log: [],
       selectedAudience: [] as AudienceWithLog[],
+      currentAdgroupIndex: 1,
       audiences_columns: [
         { name: 'mode', label: 'Mode', field: 'mode' },
         { name: 'name', label: 'Name', field: 'name', sortable: true },
@@ -393,6 +413,7 @@ export default defineComponent({
     };
 
     watch(() => data.value.selectedAudience, (newValue: any[]) => {
+      data.value.currentAdgroupIndex = 1;
       if (newValue && newValue.length) {
         let newActiveAudience = newValue[0];
         data.value.audience_log = newActiveAudience.log;
@@ -437,9 +458,11 @@ export default defineComponent({
           'days_ago_end': audience.days_ago_end,
           'user_list': audience.user_list,
           'ttl': audience.ttl,
-          'log': logs
+          'log': logs,
+          'campaigns': audience.campaigns,
         });
       });
+      console.log(audiences)
       data.value.audiences = audiences;
       if (audiences.length > 0) {
         data.value.selectedAudience = [audiences[0]];

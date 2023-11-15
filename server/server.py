@@ -31,6 +31,7 @@ from gaarf.api_clients import GoogleAdsApiClient
 from gaarf.query_executor import AdsReportFetcher
 import numpy as np
 import statsmodels.stats.proportion as proportion
+from statsmodels.stats.power import TTestIndPower
 
 from env import IS_GAE
 from auth import get_credentials
@@ -43,7 +44,6 @@ from cloud_scheduler_gateway import Job
 from mailer import send_email
 
 # NOTE: this module's code is executed each time when a new worker started, so keep it small
-# To handle instance start up see `on_instance_start` method
 
 class JsonEncoder(json.JSONEncoder):
   flask_default: Callable[[Any], Any]
@@ -128,30 +128,9 @@ def create_context(target_name: str = None, *, create_ads = False, fail_ok = Fal
 
 @app.route("/api/configuration", methods=["GET"])
 def get_configuration():
-  #context = create_context()
   config = _get_config()
   result = config.to_dict()
 
-  # targets = [t.name for t in config.targets]
-  # result = {
-  #   "project_id": config.project_id,
-  #   "name": target.name,
-  #   "targets": targets,
-  #   "ga4_project": context.target.ga4_project,
-  #   "ga4_dataset": context.target.ga4_dataset,
-  #   "ga4_table": context.target.ga4_table,
-  #   "bq_dataset_id": context.target.bq_dataset_id,
-  #   "bq_dataset_location": context.target.bq_dataset_location,
-  #   "ads_customer_id": context.target.ads_customer_id,
-  #   "ads_developer_token": context.target.ads_developer_token,
-  #   "ads_client_id": context.target.ads_client_id,
-  #   "ads_client_secret": context.target.ads_client_secret,
-  #   "ads_refresh_token": context.target.ads_refresh_token,
-  #   "ads_login_customer_id": context.target.ads_login_customer_id,
-  #   #"scheduled": context.target.scheduled,
-  #   #"schedule": context.target.schedule,
-  #   #"schedule_timezone": context.target.schedule_timezone,
-  # }
   logger.debug(f"returning configuration: {result}")
   return jsonify(result)
 
@@ -427,8 +406,6 @@ def get_base_conversion():
 
 @app.route("/api/audience/power", methods=["POST", "GET"])
 def get_power_analysis():
-  from statsmodels.stats.power import TTestIndPower
-
   # parameters for power analysis
   cr = request.args.get('cr')
   if not cr:
@@ -448,12 +425,11 @@ def get_power_analysis():
   sample_size = float(sample_size)
   logger.info(f"Power analysis calculation for parameters: cr={cr}, power={power}, alpha={alpha}, ratio={ratio}, uplift={uplift}, p1={p1}, p2={p2}, effect_size={effect_size}, the resulted sample_size={sample_size}")
 
-  from statsmodels.stats.proportion import power_proportions_2indep
   # prop2 = cr  # base conversion rate
   # uplift = 0.25  # expect a 25% relative increase in conversion rate
   new_conversion_rate = cr * (1 + uplift)
   diff = new_conversion_rate - cr
-  new_power = power_proportions_2indep(diff=diff, prop2=cr, nobs1=sample_size)
+  new_power = proportion.power_proportions_2indep(diff=diff, prop2=cr, nobs1=sample_size)
   logger.debug(f"new_conversion_rate={new_conversion_rate},diff={diff},new power={new_power}")
 
   return jsonify({
@@ -633,10 +609,13 @@ def get_audiences_status():
   skip_jobs_loading = request.args.get('skip_ads', type=str) == 'true'
   if skip_jobs_loading:
     jobs_status = []
+    campaigns = []
   else:
     jobs_status = context.ads_gateway.get_userlist_jobs_status(user_lists)
-  logger.debug(f"Loaded {len(jobs_status)} offline jobs, showing first 20:")
+    user_lists_names = [i.name for i in audiences if i.user_list]
+    campaigns = context.ads_gateway.get_userlist_campaigns(user_lists_names)
   if logger.isEnabledFor(logger.level):
+    logger.debug(f"Loaded {len(jobs_status)} offline jobs, showing first 20:")
     logger.debug(jobs_status[:20])
   # resource_name, status, failure_reason, user_list
 
@@ -649,9 +628,13 @@ def get_audiences_status():
     audience_dict = audience.to_dict()
     result[name] = audience_dict
     jobs_statuses = []
+    audience_campaigns = []
     if audience.user_list:
       jobs_statuses = [(i['resource_name'], i['status'], i['failure_reason']) for i in jobs_status if i['user_list'] == audience.user_list]
+      audience_campaigns = [i for i in campaigns if i.user_list_name == audience.name]
     audience_dict['log'] = []
+    audience_dict['campaigns'] = [{"campaign_id": i.campaign_id, "campaign_name": i.campaign_name, "ad_group_id": i.ad_group_id, "ad_group_name": i.ad_group_name} for i in audience_campaigns]
+
     if audience_log:
       audience_dict['log'] = []
       for log_item in audience_log:

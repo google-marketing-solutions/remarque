@@ -20,12 +20,12 @@ from google.ads.googleads.errors import GoogleAdsException
 #from google.ads.googleads.client import GoogleAdsClient  # type: ignore
 
 from gaarf.api_clients import GoogleAdsApiClient
-from gaarf.query_executor import AdsReportFetcher
+from gaarf.query_executor import AdsReportFetcher, AdsQueryExecutor
 
 from logger import logger
 from config import Config, ConfigTarget
 from models import Audience
-from queries import UserListQuery, OfflineJobQuery
+from queries import UserListQuery, OfflineJobQuery, UserListCampaigns
 
 _MEMBERSHIP_LIFESPAN = 10000
 _MAX_OPERATIONS_PER_JOB = 100000
@@ -44,10 +44,8 @@ class AdsGateway:
                  googleads_api_client: GoogleAdsApiClient) -> None:
         self.googleads_client = googleads_api_client.client
         self.customer_id = str(target.ads_customer_id)
-        self.report_fetcher = AdsReportFetcher(
-            googleads_api_client,
-            [self.customer_id])
-
+        self.report_fetcher = AdsReportFetcher(googleads_api_client)
+        self.query_executor = AdsQueryExecutor(googleads_api_client)
         self.project_id = config.project_id
 
 
@@ -63,7 +61,7 @@ class AdsGateway:
         logger.info("Creating customer match user lists if needed")
         # Get the list audiences that already exist to create the new ones only
         query_text = "SELECT user_list.name, user_list.resource_name AS user_list_name FROM user_list"
-        existing_lists = self.report_fetcher.fetch(query_text).to_list()
+        existing_lists = self.report_fetcher.fetch(query_text, [self.customer_id]).to_list()
         logger.debug('Existing user lists: ')
         logger.debug(existing_lists)
 
@@ -272,7 +270,7 @@ class AdsGateway:
           userlist - a list of user lists resource names or a resource name of a user list,
                      or None to load all user lists
       """
-      report = self.report_fetcher.fetch(OfflineJobQuery(userlist))
+      report = self.report_fetcher.fetch(OfflineJobQuery(userlist), [self.customer_id])
       jobs = []
       for item in report:
           job_dict = {
@@ -285,3 +283,11 @@ class AdsGateway:
       logger.debug(f"Loaded {len(jobs)} jobs")
       return jobs
 
+
+    def get_userlist_campaigns(self, userlist: Union[str,list] = None):
+       logger.info(f"Getting campaigns and adgroups targeted user lists for Remarque's audiences: {userlist}")
+       cids = self.query_executor.expand_mcc(self.customer_id)
+       logger.debug(f"CID {self.customer_id} expanded to list of customers: {cids}")
+       report = self.report_fetcher.fetch(UserListCampaigns(userlist), cids)
+       logger.debug(report)
+       return report

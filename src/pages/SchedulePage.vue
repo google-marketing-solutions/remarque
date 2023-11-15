@@ -15,7 +15,6 @@
           </div>
           <div class="row">
             <div class="col-4">
-              <!-- <q-time v-model="store.schedule" format24h /> -->
               <q-input filled v-model="store.schedule" mask="time" :rules="['time']">
                 <template v-slot:append>
                   <q-icon name="access_time" class="cursor-pointer">
