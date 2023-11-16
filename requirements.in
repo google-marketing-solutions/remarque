@@ -1,0 +1,28 @@
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+google-cloud-storage
+google-cloud-bigquery
+google-cloud-scheduler
+google-cloud-logging
+# for sampling
+numpy
+pandas
+pandas_gbq
+scipy
+scikit-learn
+matplotlib
+seaborn
+# for server:
+flask
+flask-cors
+gunicorn
+appengine-python-standard>=1.0.0
+smart_open
+smart_open[gcs]
+google-ads-api-report-fetcher>=1.11
+google-ads>=22
+pyyaml
+python-dotenv
+country_converter
+statsmodels
