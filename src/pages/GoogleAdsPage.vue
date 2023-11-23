@@ -27,7 +27,7 @@
           <q-btn label="Load" icon="download" size="md" @click="onFetchAudiencesStatus" color="primary"
             style="width:130px" class="q-mr-lg" />
           <q-toggle v-model="data.include_log_duplicates" label="Include duplicates" class="q-mx-md" />
-          <q-toggle v-model="data.skip_ads" label="Skip Jobs info" />
+          <q-toggle v-model="data.skip_ads" label="Skip Ads info" />
         </q-card-actions>
 
         <q-card-section>
@@ -82,7 +82,8 @@
                       adgroup: <b>{{ data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].ad_group_name }}</b> (id: {{
                         data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].ad_group_id }}),
                       campaign: <b>{{ data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].campaign_name }}</b> (id: {{
-                        data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].campaign_id }})
+                        data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].campaign_id }}),
+                        CID: {{  data.selectedAudience[0].campaigns[data.currentAdgroupIndex-1].customer_id }}
                     </div>
                   </div>
                 </div>
@@ -157,7 +158,7 @@
 
               <div class="col q-pa-xs">
                 <q-banner class="bg-grey-3">
-                  p-val: <q-badge>{{ formatFloat(data.pval) }}</q-badge>
+                  p-val: <q-badge>{{ formatFloat(data.pval, 6) }}</q-badge>
                   <br>If pval &lt;=0.05, then results are statistically significant
                 </q-banner>
               </div>

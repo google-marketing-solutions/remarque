@@ -108,7 +108,7 @@ def create_context(target_name: str = None, *, create_ads = False, fail_ok = Fal
     if not config.targets:
       target = None
     elif len(config.targets) == 1:
-      # target is not provided, but there's onluy one
+      # target is not provided, but there's only one
       target = config.targets[0]
     elif len(config.targets) > 1:
       # take a default one
@@ -117,7 +117,19 @@ def create_context(target_name: str = None, *, create_ads = False, fail_ok = Fal
         # otherwise just the first one
         target = config.targets[0]
   elif target_name:
-    target = next(filter(lambda t: t.name == target_name, config.targets), None)
+    # a target is provided
+    if not config.targets:
+      target = None
+    else:
+      target = next(filter(lambda t: t.name == target_name, config.targets), None)
+      if not target:
+        # but wasn't found in the configuration
+        if len(config.targets) == 1:
+          target = config.targets[0]
+        elif target_name == 'default':
+          target = config.targets[0]
+        else:
+          raise ValueError(f'Unknown configuration name {target_name}')
   else:
     target = None
 
@@ -633,7 +645,12 @@ def get_audiences_status():
       jobs_statuses = [(i['resource_name'], i['status'], i['failure_reason']) for i in jobs_status if i['user_list'] == audience.user_list]
       audience_campaigns = [i for i in campaigns if i.user_list_name == audience.name]
     audience_dict['log'] = []
-    audience_dict['campaigns'] = [{"campaign_id": i.campaign_id, "campaign_name": i.campaign_name, "ad_group_id": i.ad_group_id, "ad_group_name": i.ad_group_name} for i in audience_campaigns]
+    audience_dict['campaigns'] = [{
+      "campaign_id": i.campaign_id,
+      "campaign_name": i.campaign_name,
+      "ad_group_id": i.ad_group_id,
+      "ad_group_name": i.ad_group_name,
+      "customer_id": i.customer_id } for i in audience_campaigns]
 
     if audience_log:
       audience_dict['log'] = []
@@ -716,11 +733,12 @@ def get_user_conversions():
     result, date_start, date_end = context.data_gateway.get_user_conversions(context.target, audience, date_start, date_end, country)
     # the result is a list of columns: date, cum_test_regs, cum_control_regs, total_user_count, total_control_user_count
 
-    array_conversions = [ [i["cum_test_regs"], i["cum_control_regs"]] for i in result]
-    array_users = [ [i["total_user_count"], i["total_control_user_count"]] for i in result]
-
-    logger.debug(f"Calculating pval for\nconversions: {array_conversions}\nnumber of users: {array_users}")
-    chi, pval, res = proportion.proportions_chisquare(array_conversions, array_users)
+    last_day_result = result[-1]
+    logger.debug(f"Calculating pval for {last_day_result}")
+    chi, pval, res = proportion.proportions_chisquare(
+      [int(last_day_result["cum_test_regs"]), int(last_day_result["cum_control_regs"])],
+      [int(last_day_result["total_user_count"]), int(last_day_result["total_control_user_count"])]
+      )
     logger.debug(f"Calculated pval: {pval}, chi: {chi}")
 
     results[audience.name] = {

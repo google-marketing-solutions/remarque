@@ -174,7 +174,6 @@ export const configurationStore = defineStore('configuration', {
 // TODO: this implementation is more flexible than via Options API but it cause TS compilation errors,
 // but the other one via Options API
 export const configurationStore = defineStore('configuration', () => {
-  //const activeTarget = ref(<string | undefined>'');
   const state = ref({
     state: States.Initial,
     debug: false,
@@ -215,7 +214,7 @@ export const configurationStore = defineStore('configuration', () => {
     scheduled: undefined as boolean | undefined,
     schedule: '',
     schedule_timezone: '',
-    schedule_email: <undefined|string>'',
+    schedule_email: <undefined | string>'',
   });
 
   const router = useRouter();
@@ -256,6 +255,16 @@ export const configurationStore = defineStore('configuration', () => {
     }
   }
 
+  function switchTarget(name: string | undefined) {
+    if (this.activeTarget != name) {
+      this.activateTarget(name);
+      window.setTimeout(() => {
+        //alert(document.location.href);
+        document.location.reload();
+      }, 10);
+    }
+  }
+
   async function loadConfiguration() {
     try {
       console.log('loading configuration from server...');
@@ -279,7 +288,6 @@ export const configurationStore = defineStore('configuration', () => {
         target = {};
         this.activeTarget = '';
       }
-      //this.initTarget(target);
       this.activateTarget(this.activeTarget);
 
       this.state = States.Initialized;
@@ -305,10 +313,10 @@ export const configurationStore = defineStore('configuration', () => {
 
   return {
     ...state.value,
-    //activeTarget,
     removeAudience,
     initTarget,
     activateTarget,
+    switchTarget,
     loadConfiguration,
     loadAudiences,
   };

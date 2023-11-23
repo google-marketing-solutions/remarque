@@ -7,7 +7,7 @@
         <q-btn-dropdown stretch flat :label="store.activeTarget" v-if="store.targets?.length > 1">
           <q-list>
             <q-item v-for="t in store.targets" :key="`${t.name}`" clickable v-close-popup tabindex="0"
-              @click="store.activateTarget(t.name)" :active="store.activeTarget == t.name">
+              @click="store.switchTarget(t.name)" :active="store.activeTarget == t.name">
               <q-item-section>
                 <q-item-label>{{ t.name }}</q-item-label>
               </q-item-section>

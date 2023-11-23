@@ -1,7 +1,7 @@
 WITH
   all_conversions AS (
     SELECT
-      DISTINCT device.advertising_id user,
+      device.advertising_id user,
       event_date reg_date,
       rank() over(partition by device.advertising_id order by event_date) rr
     FROM
@@ -22,20 +22,18 @@ WITH
   ),
   test_converted AS (
     SELECT
-      DISTINCT user,
-      reg_date
+      DISTINCT u.user, reg_date
     FROM
-      `{test_users_table}`
-      JOIN conversions USING (user)
+      `{test_users_table}` u
+      JOIN conversions c ON u.user=c.user AND u._TABLE_SUFFIX=c.reg_date
     WHERE _TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
   ),
   control_converted AS (
     SELECT
-      DISTINCT user,
-      reg_date
+      DISTINCT u.user, reg_date
     FROM
-      `{control_users_table}`
-      JOIN conversions USING (user)
+      `{control_users_table}` u
+      JOIN conversions c ON u.user=c.user AND u._TABLE_SUFFIX=c.reg_date
     WHERE _TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
   ),
   test_counts AS (
@@ -66,8 +64,8 @@ WITH
   grouped_conversions AS (
     SELECT
       date,
-      (SELECT count(user) FROM test_converted t WHERE t.reg_date = date_formatted) AS test_regs,
-      (SELECT count(user) FROM control_converted t WHERE t.reg_date = date_formatted) AS control_regs,
+      (SELECT count(DISTINCT user) FROM test_converted t WHERE t.reg_date = date_formatted) AS test_regs,
+      (SELECT count(DISTINCT user) FROM control_converted t WHERE t.reg_date = date_formatted) AS control_regs,
     FROM
       dates_formatted d
     ORDER BY 1 ASC

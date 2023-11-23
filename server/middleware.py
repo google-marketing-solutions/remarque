@@ -49,7 +49,7 @@ def run_sampling_for_audience(context: Context, audience: Audience) -> tuple[lis
     users_control = pd.concat([users_control, old_control_df], ignore_index=True)
     #users_test = users_test.concat(old_test_df, ignore_index=True)
     #users_control = users_control.concat(old_control_df, ignore_index=True)
-    logger.debug(f"The today's test/control groups were updated with previously exposed users: test - {len(users_test)} users, control - {len(users_control)} users")
+    logger.debug(f"The today's test/control groups were updated with previously exposed users: test - {len(users_test)} users (old: {len(old_test_df)}), control - {len(users_control)} users (old: {len(old_control_df)})")
   elif audience.mode == 'prod':
     # in prod mode all users are like test users (to be uploaded to Ads)
     # we don't need control users actually but for simplicity we'll keep them as empty DF

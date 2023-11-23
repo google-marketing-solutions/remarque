@@ -40,10 +40,10 @@ class OfflineJobQuery(BaseQuery):
   def __init__(self, list_name: Union[str,list]):
     self.query_text = f"""
 SELECT
-offline_user_data_job.resource_name AS resource_name,
-offline_user_data_job.status AS status,
-offline_user_data_job.failure_reason AS failure_reason,
-offline_user_data_job.customer_match_user_list_metadata.user_list AS user_list
+  offline_user_data_job.resource_name AS resource_name,
+  offline_user_data_job.status AS status,
+  offline_user_data_job.failure_reason AS failure_reason,
+  offline_user_data_job.customer_match_user_list_metadata.user_list AS user_list
 FROM offline_user_data_job"""
     if list_name and isinstance(list_name, str):
       condition = f"offline_user_data_job.customer_match_user_list_metadata.user_list = '{list_name}'"
@@ -60,13 +60,14 @@ class UserListCampaigns(BaseQuery):
   def __init__(self, list_name: Union[str,list]):
     self.query_text = f"""
 SELECT
-ad_group_criterion.user_list.user_list as user_list,
-campaign.id,
-campaign.name,
-ad_group.id,
-ad_group.name,
-user_list.name,
-user_list.description
+  ad_group_criterion.user_list.user_list as user_list,
+  customer.id,
+  campaign.id,
+  campaign.name,
+  ad_group.id,
+  ad_group.name,
+  user_list.name,
+  user_list.description
 FROM ad_group_criterion
 """
     if list_name and isinstance(list_name, str):
