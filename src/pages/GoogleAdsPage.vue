@@ -79,11 +79,13 @@
                     :min="1" :max="data.selectedAudience[0].campaigns.length" input direction-links />
                   <div class="row">
                     <div class="col">
-                      adgroup: <b>{{ data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].ad_group_name }}</b> (id: {{
+                      adgroup: <b>{{ data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].ad_group_name }}</b>
+                      (id: {{
                         data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].ad_group_id }}),
-                      campaign: <b>{{ data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].campaign_name }}</b> (id: {{
-                        data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].campaign_id }}),
-                        CID: {{  data.selectedAudience[0].campaigns[data.currentAdgroupIndex-1].customer_id }}
+                      campaign: <b>{{ data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].campaign_name
+                      }}</b> (id: {{
+  data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].campaign_id }}),
+                      CID: {{ data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].customer_id }}
                     </div>
                   </div>
                 </div>
@@ -151,9 +153,12 @@
                   </template>
                 </q-input>
               </div>
-              <div class="col q-pa-xs">
+              <div class="col q-pa-xs" style="width: 250px">
                 <q-select filled v-model="data.conversions_selected_countries" multiple
-                  :options="data.conversions_countries" label="Country" style="width: 250px" clearable />
+                  :options="data.conversions_countries" label="Country" clearable />
+              </div>
+              <div class="col q-pa-xs">
+                <q-input filled v-model="data.conversions_events" label="Conv. event" clearable />
               </div>
 
               <div class="col q-pa-xs">
@@ -326,6 +331,7 @@ export default defineComponent({
       conversions_to: <string | undefined>undefined,
       conversions_selected_countries: <string[]>[],
       conversions_countries: [],
+      conversions_events: '',
       conversions_mode: GraphMode.cr,
       pval: <number | undefined>undefined,
     });
@@ -419,6 +425,7 @@ export default defineComponent({
         let newActiveAudience = newValue[0];
         data.value.audience_log = newActiveAudience.log;
         data.value.conversions_selected_countries = [];
+        data.value.conversions_events = '';
         data.value.conversions_countries = newActiveAudience.countries;
         updateConversionsChart(newActiveAudience.conversions);
       }
@@ -491,7 +498,8 @@ export default defineComponent({
         if (country && country.length) {
           country_str = country.join(',');
         }
-        audience.conversions = await loadConversions(audience.name, date_start, date_end, country_str);
+        let events = data.value.conversions_events;
+        audience.conversions = await loadConversions(audience.name, date_start, date_end, country_str, events);
         updateConversionsChart(audience.conversions);
       }
     };
@@ -523,9 +531,9 @@ export default defineComponent({
       }
     };
 
-    const loadConversions = async (audienceName: string, date_start: string | undefined, date_end: string | undefined, country: string | undefined): Promise<Conversions | undefined> => {
+    const loadConversions = async (audienceName: string, date_start: string | undefined, date_end: string | undefined, country: string | undefined, events: string | undefined): Promise<Conversions | undefined> => {
       data.value.chart.series = [];
-      let res = await getApiUi('conversions', { audience: audienceName, date_start, date_end, country }, $q, 'Fetching the audience conversion history...');
+      let res = await getApiUi('conversions', { audience: audienceName, date_start, date_end, country, events }, $q, 'Fetching the audience conversion history...');
       if (!res) return;
       const results = res.data.results;
       let result;

@@ -285,6 +285,27 @@ class DataGateway:
     return ga_fqn
 
 
+  def check_ga4(self, ga4_project: str, ga4_dataset: str, ga4_table = 'events'):
+    query = f"SELECT table_name FROM `{ga4_project}.{ga4_dataset}.INFORMATION_SCHEMA.TABLES` WHERE table_name LIKE '{ga4_table}_%' ORDER BY 1 DESC"
+    try:
+      # TODO: if the target config has't been configured then we don't have a BQ location so we don't know where execute the query, by default it'll use US location
+      response = self.execute_query(query)
+      tables = [r["table_name"] for r in response]
+    except BaseException as e:
+      logger.error(e)
+      sa = f"{self.config.project_id}@appspot.gserviceaccount.com"
+      raise Exception(f"Incorrect GA4 table name or the application's service account ({sa}) doesn't have access permission to the BigQuery dataset. Original error: {e}")
+
+    logger.debug("Found GA4 events tables: ", tables)
+    yesterday = (date.today() - timedelta(days=1)).strftime('%Y%m%d')
+    # first row should be 'events_intraday_yyymmdd' (for today), and previous one 'events_yyyymmdd' for tomorrow
+    found = next((t for t in tables if t == ga4_table + '_' + yesterday), None)
+    if not found:
+      raise Exception(f"The speficied GA4 dataset ({ga4_project}.{ga4_dataset}) does exists but does not seem to be updated as we couldn't find an events table for yesterday ('{ga4_table + '_' + yesterday}')")
+
+    return tables
+
+
   def get_ga4_stats(self, target: ConfigTarget, days_ago_start: int, days_ago_end: int):
     if days_ago_start < days_ago_end:
        raise ValueError('days_ago_start should be greater than days_ago_end')
@@ -986,7 +1007,7 @@ ORDER BY name, date
 
   def get_user_conversions_query(self, target: ConfigTarget, audience: Audience,
                                  date_start: date = None, date_end: date = None,
-                                 country = None):
+                                 country = None, events: list[str] = None):
     if date_start is None:
       log = self.get_audiences_log(target)
       log_rows = log.get(audience.name, None)
@@ -1002,8 +1023,9 @@ ORDER BY name, date
     # NOTE: all events that we ignored for sampling (we picked users for whom those events didn't happen)
     # now are our conversions, but except "app_remove"
     # TODO: if events_exclude has more than one, we need to make sure all of them happened not just one!
-    conversion_events = [item for item in audience.events_exclude if item != 'app_remove']
-    events_list = ", ".join([f"'{event}'" for event in conversion_events])
+    conversion_events = events if events else audience.events_exclude
+    conversion_events = [item for item in conversion_events if item != 'app_remove']
+    events_list = ", ".join([f"'{event}'" for event in conversion_events]) if conversion_events else ""
     ga_table = self.get_ga4_table_name(target, True)
     user_table = target.bq_dataset_id + '.' + audience.table_name
     if country:
@@ -1032,8 +1054,8 @@ ORDER BY name, date
 
   def get_user_conversions(self, target: ConfigTarget, audience: Audience,
                            date_start: date = None, date_end: date = None,
-                           country = None):
-    query, date_start, date_end = self.get_user_conversions_query(target, audience, date_start, date_end, country)
+                           country = None, events: list[str] = None):
+    query, date_start, date_end = self.get_user_conversions_query(target, audience, date_start, date_end, country, events)
     result = self.execute_query(query)
     return result, date_start, date_end
 

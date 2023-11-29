@@ -19,7 +19,7 @@ import json
 import os
 import math
 import yaml
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from pprint import pprint
 import traceback
 from flask import Flask, request, jsonify, abort, send_from_directory, send_file, Response
@@ -314,19 +314,11 @@ def setup_connect_ga4():
   ga4_project = params.get('ga4_project') or context.config.project_id
   ga4_dataset = params.get('ga4_dataset')
   ga4_table = params.get('ga4_table') or 'events'
-  ga_table = f'{ga4_project}.{ga4_dataset}.{ga4_table}_{datetime.today().strftime("%Y")}*'
-  query = f"SELECT DISTINCT _TABLE_SUFFIX as table FROM `{ga_table}` ORDER BY 1 DESC LIMIT 10"
   try:
-    # TODO: if the target config has't been configured then we doesn't have a BQ location so we don't know where execute the query, by default it'll use US location
-    response = context.data_gateway.execute_query(query)
-    tables = [r["table"] for r in response]
+    tables = context.data_gateway.check_ga4(ga4_project, ga4_dataset, ga4_table)
     return jsonify({"results": tables})
   except BaseException as e:
-    logger.error(e)
-    sa = f"{context.config.project_id}@appspot.gserviceaccount.com"
-    return jsonify({"error": {
-      "message": f"Incorrect GA4 table name or the application's service account ({sa}) doesn't have access permission to the BigQuery dataset. Original error: {e}"
-    }}), 400
+    return jsonify({"error": str(e)}), 400
 
 
 @app.route("/api/stat", methods=["GET"])
@@ -695,6 +687,9 @@ def get_conversions_query():
   country = request.args.get('country')
   if country:
     country = country.split(',')
+  events = request.args.get('events')
+  if events:
+    events = events.split(',')
   audience_name = request.args.get('audience')
   if not audience_name:
     raise ValueError("No audience name was specified")
@@ -703,7 +698,7 @@ def get_conversions_query():
   if not audiences:
     raise ValueError(f"No audience with name '{audience_name}' found")
   audience = audiences[0]
-  query, date_start, date_end = context.data_gateway.get_user_conversions_query(context.target, audience, date_start, date_end, country)
+  query, date_start, date_end = context.data_gateway.get_user_conversions_query(context.target, audience, date_start, date_end, country, events)
   return jsonify({
       "query": query,
       "date_start": date_start.strftime("%Y-%m-%d"),
@@ -721,6 +716,9 @@ def get_user_conversions():
   country = request.args.get('country')
   if country:
     country = country.split(',')
+  events = request.args.get('events')
+  if events:
+    events = [e.strip() for e in events.split(',') if e.strip()]
   audiences = context.data_gateway.get_audiences(context.target)
   audience_name = request.args.get('audience')
   logger.info(f"Calculating conversions graph for '{audience_name}' audience and {date_start}-{date_end} timeframe")
@@ -730,7 +728,7 @@ def get_user_conversions():
   for audience in audiences:
     if audience_name and audience.name != audience_name:
       continue
-    result, date_start, date_end = context.data_gateway.get_user_conversions(context.target, audience, date_start, date_end, country)
+    result, date_start, date_end = context.data_gateway.get_user_conversions(context.target, audience, date_start, date_end, country, events)
     # the result is a list of columns: date, cum_test_regs, cum_control_regs, total_user_count, total_control_user_count
 
     last_day_result = result[-1]
