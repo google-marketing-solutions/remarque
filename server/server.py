@@ -42,6 +42,7 @@ from config import Config, ConfigTarget, parse_arguments, get_config, save_confi
 from middleware import run_sampling_for_audience, upload_customer_match_audience, update_customer_match_mappings
 from cloud_scheduler_gateway import Job
 from mailer import send_email
+from utils import format_duration
 
 # NOTE: this module's code is executed each time when a new worker started, so keep it small
 
@@ -184,7 +185,6 @@ def setup():
         else:
           raise Exception(f'Configuration "{name_org}" does not exist')
 
-
   target.name = name
   target.ga4_project = ga4_project or context.config.project_id
   target.ga4_dataset = ga4_dataset
@@ -222,6 +222,10 @@ def setup():
   # save config to the same location where it was read from
   logger.info(f'Saving new configuration:\n{context.config.to_dict()}')
   save_config(context.config, args)
+  # TODO:
+  #if name_org := params.get('name_org', None) and name_org != name:
+  # remove a Schedule Job left
+  #  context.cloud_scheduler.delete_job(context.config, name_org)
 
   return jsonify(context.config.to_dict())
 
@@ -321,6 +325,7 @@ def setup_connect_ga4():
     return jsonify({"error": str(e)}), 400
 
 
+
 @app.route("/api/stat", methods=["GET"])
 def get_stat() -> Response:
   context = create_context()
@@ -371,7 +376,7 @@ def calculate_users_for_audience():
   logger.info("Previewing audience")
   logger.debug(audience_raw)
   audience = Audience.from_dict(audience_raw)
-  df = context.data_gateway.fetch_audience_users(context.target, audience)
+  df = context.data_gateway.sample_audience_users(context.target, audience)
   # NOTE: we can return all users data if needed
   return jsonify({"users_count": len(df)})
 
@@ -447,6 +452,10 @@ def process():
   # it's a method for automated execution (via Cloud Scheduler)
 
   context = create_context(create_ads=True)
+  if not context.target:
+    raise Exception(f"Target was not set, target uri argument: {_get_req_arg_str('target')}, available targets in the configuration: {context.config.get_targets_names()}")
+
+  ts_start = datetime.now()
   logger.info(f"Starting process for target {context.target.name}")
 
   context.data_gateway.ensure_user_normalized(context.target)
@@ -465,9 +474,11 @@ def process():
     log.append(log_item)
     result[audience.name] = log_item.to_dict()
 
-  context.data_gateway.update_audiences_log(context.target, log)
+  if log:
+    context.data_gateway.update_audiences_log(context.target, log)
 
-  if context.target.notification_email:
+  elapsed = datetime.now() - ts_start
+  if IS_GAE and context.target.notification_email:
     subject = f"Remarque {' [' + context.target.name + ']' if context.target.name != 'default' else ''} - sampling completed"
     body = f"Processing of {len(result)} audiences has been completed.\n"
     for val in log:
@@ -482,6 +493,7 @@ def process():
 
       Ads upload job resource name: {val.job_resource_name}
       """
+    body += f"""\n Processing took {format_duration(elapsed)}"""
     send_email(context.config, context.target.notification_email, subject, body)
   return jsonify({"result": result})
 
@@ -513,7 +525,7 @@ def update_schedule():
       "message": "Schedule was not specified"
     }}), 400
   job = Job(enabled, schedule_timezone=schedule_timezone, schedule_time=schedule)
-  logger.info(f'Updating Scheduler Job {job}')
+  logger.info(f'Updating Scheduler Job: {job}')
   context.cloud_scheduler.update_job(context.target, job)
   if context.target.notification_email != schedule_email:
     context.target.notification_email = schedule_email
@@ -539,7 +551,6 @@ def run_sampling() -> Response:
     if audience.mode == 'off':
       continue
     users_test, users_control = run_sampling_for_audience(context, audience)
-
     result[audience.name] = {
       "test_count": len(users_test),
       "control_count": len(users_control),
@@ -731,20 +742,25 @@ def get_user_conversions():
     result, date_start, date_end = context.data_gateway.get_user_conversions(context.target, audience, date_start, date_end, country, events)
     # the result is a list of columns: date, cum_test_regs, cum_control_regs, total_user_count, total_control_user_count
 
-    last_day_result = result[-1]
-    logger.debug(f"Calculating pval for {last_day_result}")
-    chi, pval, res = proportion.proportions_chisquare(
-      [int(last_day_result["cum_test_regs"]), int(last_day_result["cum_control_regs"])],
-      [int(last_day_result["total_user_count"]), int(last_day_result["total_control_user_count"])]
-      )
-    logger.debug(f"Calculated pval: {pval}, chi: {chi}")
+    if result:
+      last_day_result = result[-1]
+      logger.debug(f"Calculating pval for {last_day_result}")
+      chi, pval, res = proportion.proportions_chisquare(
+        [int(last_day_result["cum_test_regs"]), int(last_day_result["cum_control_regs"])],
+        [int(last_day_result["total_user_count"]), int(last_day_result["total_control_user_count"])]
+        )
+      logger.debug(f"Calculated pval: {pval}, chi: {chi}")
+    else:
+      logger.warning(f"get_user_conversions returned an empty result")
+      pval = None
+      chi = None
 
     results[audience.name] = {
       "conversions": result,
       "date_start": date_start.strftime("%Y-%m-%d"),
       "date_end": date_end.strftime("%Y-%m-%d"),
-      "pval": pval if math.isfinite(pval) else None,
-      "chi": chi if math.isfinite(chi) else None,
+      "pval": pval if pval is not None and math.isfinite(pval) else None,
+      "chi": chi if chi is not None and math.isfinite(chi) else None,
     }
     if audience_name and audience.name == audience_name:
       break

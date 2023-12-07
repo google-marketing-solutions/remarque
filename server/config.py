@@ -113,6 +113,9 @@ class Config(ConfigItemBase):
       values["targets"].append(target_json)
     return values
 
+  def get_targets_names(self):
+    return [t.name for t in self.targets]
+
 
 def parse_arguments(
     only_known: bool = False) -> argparse.Namespace:

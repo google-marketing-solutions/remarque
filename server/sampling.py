@@ -298,7 +298,7 @@ def pred_data_for_test(df: pd.DataFrame, test_ids: list[str], test_frac):
   return users_test, users_control
 
 
-def process_df(df: pd.DataFrame, frac_test=.5, max_test_share=30):
+def process_df(df: pd.DataFrame, split_ratio: float, max_test_share=30):
 
   bins = binsify(df, 'n_sessions')
   df['num_sessions_bins'] = np.searchsorted(bins, df['n_sessions'].values)
@@ -311,7 +311,9 @@ def process_df(df: pd.DataFrame, frac_test=.5, max_test_share=30):
   cols = df.drop(columns=['user', 'n_sessions']).columns
   encoded['labels'] = encoded.apply(lambda x: list(map(str, [x[c] for c in cols])), axis =1)
 
-  encoded_ids, encoded_data = stratify(data=encoded.labels.values, classes=list(map(str,all_classes)), ratios=[frac_test, 1 - frac_test], one_hot=False)
+  if not split_ratio:
+    split_ratio = 0.5
+  encoded_ids, encoded_data = stratify(data=encoded.labels.values, classes=list(map(str,all_classes)), ratios=[split_ratio, 1 - split_ratio], one_hot=False)
 
   # for i in range(max_test_share):
   #   logger.debug(f'fraction test: {i}')
@@ -331,15 +333,15 @@ def process_df(df: pd.DataFrame, frac_test=.5, max_test_share=30):
   users_test = encoded.loc[test_ids, ['user']]
   users_control = encoded.loc[~(encoded['user'].isin(users_test['user'])), ['user']]
 
-  return users_test, users_control, frac_test
+  return users_test, users_control, split_ratio
 
 
-def do_sampling(df: pd.DataFrame):
-  users_test, users_control, frac_test = process_df(df, max_test_share=16)
-  #   frac_test - integer, test group fraction (the fraction of users in the test group of the total number of the users)
+def split_via_stratification(df: pd.DataFrame, split_ratio: float = 0.5):
+  users_test, users_control, split_ratio = process_df(df, split_ratio=split_ratio)
+  #   frac_test - integer, test group split ratio (the fraction of users in the test group of the total number of the users)
   user_count = df.shape[0]
   user_count_test = users_test.shape[0]
   user_count_control = users_control.shape[0]
-  logger.info(f'Data sampling completed (user count: {user_count}, test count: {user_count_test}, control count: {user_count_control}, test fraction: {frac_test:2})')
+  logger.info(f'Data sampling completed (user count: {user_count}, test count: {user_count_test}, control count: {user_count_control}, test split_ratio: {split_ratio:2})')
 
   return users_test, users_control

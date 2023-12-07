@@ -16,6 +16,7 @@ class Audience:
   created = None
   mode: Literal['off']|Literal['test']|Literal['prod'] = 'off'
   ttl: 1
+  split_ratio: float = None
   query = ''
 
   def __init__(self) -> None:
@@ -43,6 +44,7 @@ class Audience:
       "mode": self.mode,
       "query": self.query,
       "ttl": self.ttl,
+      "split_ratio": self.split_ratio,
     }
     return res
 
@@ -70,6 +72,7 @@ class Audience:
     self.mode = dict.get("mode", 'off')
     self.query = dict.get("query", None)
     self.ttl = dict.get("ttl", None)
+    self.split_ratio = dict.get("split_ratio", None)
     return self
 
 

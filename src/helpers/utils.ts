@@ -22,3 +22,7 @@ export function formatFloat(val: number | undefined, digits = 5) {
   val = Number.parseFloat(<any>val);
   return val >= 0 ? val.toFixed(digits) : '-';
 }
+
+export function isFinite(value: any) {
+  return typeof value == 'number' && Number.isFinite(value);
+}

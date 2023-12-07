@@ -22,6 +22,9 @@ export interface AudienceInfo {
   mode: AudienceMode;
   query: string;
   ttl: number;
+  split_ratio: number | undefined | null;
+  isNew: boolean;
+  isChanged: boolean;
 }
 
 export interface ConfigTarget {
@@ -210,6 +213,7 @@ export const configurationStore = defineStore('configuration', () => {
     },
 
     audiences: [] as AudienceInfo[],
+    deletedAudiences: [] as AudienceInfo[],
 
     scheduled: undefined as boolean | undefined,
     schedule: '',
@@ -222,7 +226,8 @@ export const configurationStore = defineStore('configuration', () => {
   function removeAudience(name: string) {
     const idx = this.audiences.findIndex((val: any) => val.name === name);
     if (idx >= 0) {
-      this.audiences.splice(idx, 1);
+      const deleted = this.audiences.splice(idx, 1);
+      this.deletedAudiences.push(...deleted);
     }
   }
 

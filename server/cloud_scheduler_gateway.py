@@ -97,88 +97,50 @@ class CloudSchedulerGateway:
     job_name = f'projects/{project_id}/locations/{location_id}/jobs/{job_id}'
     try:
       cloud_job = self.client.get_job(scheduler_v1.GetJobRequest(name=job_name))
-      if job.enabled and (
-        cloud_job.state != scheduler_v1.Job.State.ENABLED or
-        cloud_job.schedule != job.schedule or
-        cloud_job.time_zone != job.schedule_timezone):
-        # to enable
-        gae_service = os.getenv('GAE_SERVICE')
-        routing = scheduler_v1.AppEngineRouting()
-        routing.service = gae_service
-        job = scheduler_v1.Job(
-          name=job_name,
-          app_engine_http_target=scheduler_v1.AppEngineHttpTarget(
-            app_engine_routing=routing,
-            relative_uri="/api/process",
-            http_method=scheduler_v1.HttpMethod.POST,
-            body=b"{}",
-          ),
-          schedule = job.schedule,
-          time_zone = job.schedule_timezone,
-        )
+    except exceptions.NotFound:
+      if not job.enabled:
+        # no job exists and we're asked to remove, done
+        return
+
+    if cloud_job and not job.enabled:
+      # to disable we delete the job
+      self._delete_scheduler_job(project_id, location_id, job_id)
+    elif job.enabled:
+      #and (
+      #cloud_job.state != scheduler_v1.Job.State.ENABLED or
+      #cloud_job.schedule != job.schedule or
+      #cloud_job.time_zone != job.schedule_timezone):
+      gae_service = os.getenv('GAE_SERVICE')
+      routing = scheduler_v1.AppEngineRouting()
+      routing.service = gae_service
+      uri = "/api/process?target=" + (target.name if target.name and target.name != 'default' else '')
+      print(f"Setting up scheduler for AppEngine at {uri}")
+      job = scheduler_v1.Job(
+        name=job_name,
+        app_engine_http_target=scheduler_v1.AppEngineHttpTarget(
+          app_engine_routing=routing,
+          relative_uri=uri,
+          http_method=scheduler_v1.HttpMethod.POST,
+          body=b"{}",
+        ),
+        schedule = job.schedule,
+        time_zone = job.schedule_timezone,
+      )
+      if cloud_job:
         self.client.update_job(scheduler_v1.UpdateJobRequest(
           job = job,
           #update_mask = ['schedule','timeZone'],
         ))
-      elif not job.enabled:
-        # to disable
-        self.delete_scheduler_job(project_id, location_id, job_id)
-    except exceptions.NotFound:
-      if job.enabled:
-        # there's no Job in GCP but we'are asked to have one
-        self.create_scheduler_job(project_id, location_id, target.name, job)
-      # otherwise there's no job but it's not needed, that's ok
+      else:
+        self.client.create_job(
+          scheduler_v1.CreateJobRequest(
+            parent=self.client.common_location_path(project_id, location_id),
+            job=job,
+          )
+        )
 
 
-  # def get_scheduler_jobs(
-  #       self, project_id: str, location_id: str,):
-  #   client = scheduler_v1.CloudSchedulerClient()
-  #   jobs = client.list_jobs(
-  #     request=scheduler_v1.ListJobsRequest(
-  #       client.common_location_path(project_id, location_id)
-  #     ),
-  #   )
-  #   for job in jobs:
-  #     print(job)
-  #     print(job.schedule, job.schedule_time, job.state, job.status, job.name, job.time_zone)
-  #   return jobs
-
-
-  def create_scheduler_job(
-      self, project_id: str, location_id: str, target_name: str, job: Job) -> scheduler_v1.Job:
-    """Create a job with an App Engine target via the Cloud Scheduler API.
-
-    Args:
-      project_id: The Google Cloud project id.
-      location_id: The location for the job.
-      service_id: An unique service id for the job.
-
-    Returns:
-      The created job.
-    """
-    job_id = self._get_job_id(target_name)
-    job_name = f'projects/{project_id}/locations/{location_id}/jobs/{job_id}'
-    job = scheduler_v1.Job(
-      name=job_name,
-      app_engine_http_target=scheduler_v1.AppEngineHttpTarget(
-        app_engine_routing=scheduler_v1.AppEngineRouting(),
-        relative_uri="/api/process",
-        http_method=scheduler_v1.HttpMethod.POST,
-        body=b"{}",
-      ),
-      schedule = job.schedule,
-      time_zone = job.schedule_timezone,
-    )
-    response = self.client.create_job(
-      scheduler_v1.CreateJobRequest(
-        parent=self.client.common_location_path(project_id, location_id),
-        job=job,
-      )
-    )
-    return response
-
-
-  def delete_scheduler_job(
+  def _delete_scheduler_job(
       self, project_id: str, location_id: str, job_id: str) -> None:
     """Delete a job via the Cloud Scheduler API.
 
@@ -197,3 +159,16 @@ class CloudSchedulerGateway:
         name=client.job_path(project_id, location_id, job_id)
       )
     )
+
+  # def get_scheduler_jobs(
+  #       self, project_id: str, location_id: str,):
+  #   client = scheduler_v1.CloudSchedulerClient()
+  #   jobs = client.list_jobs(
+  #     request=scheduler_v1.ListJobsRequest(
+  #       client.common_location_path(project_id, location_id)
+  #     ),
+  #   )
+  #   for job in jobs:
+  #     print(job)
+  #     print(job.schedule, job.schedule_time, job.state, job.status, job.name, job.time_zone)
+  #   return jobs

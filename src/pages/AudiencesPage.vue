@@ -37,8 +37,9 @@
           </div>
 
           <div class="col">
-            <q-table title="GA4 Events" class="qtable-sticky-header" style="height: 400px" flat bordered :rows="data.events" row-key="event"
-              :columns="data.events_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]"
+            <q-table title="GA4 Events" class="qtable-sticky-header" style="height: 400px" flat bordered
+              :rows="data.events" row-key="event" :columns="data.events_columns" virtual-scroll
+              :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]"
               :no-data-label="data.app_ids.length ? 'Choose an app id' : 'Load all events'"
               :loading="data.ga_stat_loading" :filter-method="filterEvents" :filter="data.eventsSearch">
               <template v-slot:top>
@@ -59,9 +60,9 @@
           </div>
 
           <div class="col">
-            <q-table title="GA4 Countries" class="qtable-sticky-header" style="height: 400px" flat bordered :rows="data.countries" row-key="country"
-              :columns="data.countries_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }"
-              :rows-per-page-options="[0]" selection="multiple"
+            <q-table title="GA4 Countries" class="qtable-sticky-header" style="height: 400px" flat bordered
+              :rows="data.countries" row-key="country" :columns="data.countries_columns" virtual-scroll
+              :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" selection="multiple"
               :no-data-label="data.app_ids.length ? 'Choose an app id' : 'Load all events'"
               :loading="data.ga_stat_loading" v-model:selected="data.selectedCountries" :filter-method="filterCountries"
               :filter="data.countriesSearch">
@@ -98,9 +99,10 @@
             <template v-slot:avatar>
               <q-icon name="warning" color="warning" />
             </template>
-            Audience name is crucial, it's used to uniquely identify the audience.
+            Audience name is crucial, it's used to uniquely identify an audience.
             It will be used as a name for customer match user list and as a prefix for all tables in BigQuery with user
-            ids. As soon as you change the name an audience will be recreated, effectively loosing all accumulated data.<br>
+            ids. As soon as you change the name an audience will be recreated, effectively loosing all accumulated
+            data.<br>
             If you have a lot of audiences you will probably want to use country names/codes in their names.
           </q-banner>
         </div>
@@ -117,7 +119,7 @@
               ]" />
 
               <q-select filled v-model="audience.countries" :options="audience.allCountriesSelect" use-input use-chips
-                multiple @filter="onAudienceFilterCountries" input-debounce="0" label="Countries"
+                multiple @filter="onAudienceFilterCountries" input-debounce="0" label="Countries" clearable
                 hint="Countries to include in the audience. To see available countries load your GA4 statistics"
                 new-value-mode="add-unique" />
 
@@ -140,7 +142,7 @@
               <div>
                 <q-select filled v-model="audience.events_exclude" :options="audience.allEventsSelect"
                   @filter="onAudienceFilterEvents" use-input use-chips multiple input-debounce="0"
-                  label="Events to exclude" hint="GA4 events that did NOT happen for users (app_remove always included)"
+                  label="Events to exclude *" hint="GA4 events that did NOT happen for users (app_remove always included)"
                   new-value-mode="add-unique" />
               </div>
               <div class="">
@@ -152,6 +154,14 @@
                   <q-input class="col-3" outlined v-model="audience.ttl" type="number" min="1"
                     @blur="() => audience.ttl = audience.ttl < 1 ? 1 : audience.ttl" label="Time to live" placeholder=""
                     hint="Days to stay in treatment group" />
+                  <div class="col-3">
+                    <q-badge>Split ratio: {{ isFinite(<any>audience.split_ratio) ? audience.split_ratio : "default (0.5)"
+                    }}</q-badge>
+                    <q-checkbox label="Custom ratio" v-model="data.isSplitRatioChecked"
+                      @update:model-value="(val: any) => { audience.split_ratio = val ? 0.5 : undefined }" />
+                    <q-slider v-model="audience.split_ratio" :min="0" :max="1" :step=0.01 label
+                      @update:model-value="(val: any) => data.isSplitRatioChecked = val !== undefined" />
+                  </div>
                 </div>
               </div>
               <div class="row">
@@ -176,7 +186,7 @@
             :rows="data.audiences" row-key="name" :columns="data.audiences_columns" virtual-scroll
             :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" :wrap-cells="data.audiences_wrap">
             <template v-slot:top="props">
-              <div class="col-2 q-table__title">Audiences</div>
+              <div class="q-table__title">Audiences</div>
               <q-space />
               <div class="col" align="right">
                 <q-toggle v-model="data.audiences_wrap" label="Word wrap" />
@@ -221,6 +231,7 @@
         <q-btn label="Save" icon="upload" size="md" @click="onAudiencesUpload" color="primary" style="width:130px" />
         <q-btn label="Reload" icon="download" size="md" @click="onAudiencesDownload" color="primary"
           style="width:130px" />
+        <q-badge color="grey" class="q-ml-md">{{ getAudiencesChangeStatus() }}</q-badge>
       </q-card-actions>
     </q-card>
   </q-page>
@@ -382,7 +393,7 @@ import { defineComponent, ref, watch, computed } from 'vue';
 import { AudienceInfo, AudienceMode, configurationStore } from 'stores/configuration';
 import { getApi, postApi, postApiUi, getApiUi } from 'boot/axios';
 import { useQuasar, QForm } from 'quasar';
-import { formatArray } from '../helpers/utils';
+import { formatArray, isFinite } from '../helpers/utils';
 
 export default defineComponent({
   name: 'AudiencesPage',
@@ -418,6 +429,7 @@ export default defineComponent({
       app_ids: [] as any[],
       events: [] as any[],
       countries: [] as any[],
+      isSplitRatioChecked: false,
       appid_columns: [
         { name: 'id', label: 'app_id', field: (row: any) => row }
       ],
@@ -439,6 +451,7 @@ export default defineComponent({
         { name: 'events_exclude', label: 'Exclude events', field: 'events_exclude', sortable: true, format: formatArray },
         { name: 'days_ago_start', label: 'Start', field: 'days_ago_start' },
         { name: 'days_ago_end', label: 'End', field: 'days_ago_end' },
+        { name: 'ratio', label: 'Ratio', field: 'split_ratio' },
         { name: 'ttl', label: 'TTL', field: 'ttl' },
         { name: 'mode', label: 'Mode', field: 'mode' },
         { name: 'actions', label: 'Actions', field: '', align: 'center' },
@@ -465,7 +478,8 @@ export default defineComponent({
       days_ago_end: undefined,
       user_list: '',
       query: '',
-      ttl: 1
+      ttl: 1,
+      split_ratio: <number | undefined>undefined,
     });
     const audienceForm = ref(null as unknown as QForm);
 
@@ -567,6 +581,7 @@ export default defineComponent({
         mode: <AudienceMode>audience.value.mode,
         query: audience.value.query,
         ttl: audience.value.ttl,
+        split_ratio: audience.value.split_ratio,
       }
       return obj;
     }
@@ -579,10 +594,13 @@ export default defineComponent({
           const days_ago_start = audience.value.days_ago_start || store.days_ago_start || audience.value.days_ago_start;
           const days_ago_end = audience.value.days_ago_end || store.days_ago_end || audience.value.days_ago_end;
           if (!days_ago_start || !days_ago_end && days_ago_end !== 0) {
-            $q.dialog({ message: 'You need to set a time period for the audience' })
+            $q.dialog({ message: 'You need to set a time period for the audience', title: 'Warning' })
             return;
           }
-
+          if (!audience.value.events_exclude || !audience.value.events_exclude.length) {
+            $q.dialog({ message: 'You need to specify some event(s) in exclude_events field. Even with custom query it will be used for conversions calculation', title: 'Warning' })
+            return;
+          }
           // check countries - w/o countries we'll create audience for ALL users of an app,
           // so such an audience should be the only one.
           if (audience.value.countries.length == 0) {
@@ -602,14 +620,16 @@ export default defineComponent({
       });
     }
     const saveAudience = () => {
-      let idx = data.value.audiences.findIndex(val => val.name === audience.value.name);
+      let idx = store.audiences.findIndex(val => val.name === audience.value.name);
       const obj = getAudienceFromForm();
       if (idx >= 0) {
         // updating
         Object.assign(store.audiences[idx], obj);
+        store.audiences[idx].isChanged = true;
       } else {
         // creating new
         store.audiences.push(obj);
+        obj.isNew = true;
       }
       // clear the form
       onAudienceFormReset();
@@ -625,7 +645,9 @@ export default defineComponent({
       audience.value.mode = 'off';
       audience.value.query = '';
       audience.value.ttl = 1;
+      audience.value.split_ratio = undefined;
       audienceForm.value.resetValidation();
+      data.value.isSplitRatioChecked = false;
     }
     const onAudienceFilterCountries = (val: string, doneFn: (callbackFn: () => void) => void, abortFn: () => void) => {
       doneFn(() => {
@@ -724,16 +746,16 @@ export default defineComponent({
 
     const onAudienceListEdit = (props: any) => {
       Object.assign(audience.value, props.row);
+      data.value.isSplitRatioChecked = isFinite(audience.value.split_ratio);
     }
     const onAudienceListDelete = (props: any) => {
-      console.log(props);
       store.removeAudience(props.key);
     }
     const onAudiencesUpload = async () => {
       $q.loading.show({ message: 'Uploading audiences...' });
       const loading = () => $q.loading.hide();
 
-      const audiences = data.value.audiences.map((row) => {
+      const audiences = store.audiences.map((row) => {
         return {
           name: row.name,
           app_id: row.app_id,
@@ -745,6 +767,7 @@ export default defineComponent({
           mode: row.mode,
           query: row.query,
           ttl: row.ttl,
+          split_ratio: row.split_ratio,
           // NOTE: we're not sending id, user_list
         }
       });
@@ -752,6 +775,11 @@ export default defineComponent({
         let res = await postApi('audiences', { audiences }, loading);
         $q.notify({ message: 'Audiences successfully updated', icon: 'success', timeout: 1000 });
         //store.updateAudiencesStat(res.data.results);
+        // TODO: store.commit()
+        store.deletedAudiences = [];
+        store.audiences.map((obj) => {
+          obj.isNew = false; obj.isChanged = false;
+        });
       }
       catch (e: any) {
         $q.dialog({
@@ -773,6 +801,8 @@ export default defineComponent({
           let res = await getApi('audiences', {}, loading);
           const audiences = res.data.results;
           store.audiences = audiences;
+          // TODO: store.resetState();
+          store.deletedAudiences = [];
         }
         catch (e: any) {
           $q.dialog({
@@ -782,6 +812,29 @@ export default defineComponent({
         }
       });
     }
+    const getAudiencesChangeStatus = () => {
+      const deleted = store.deletedAudiences.length;
+      let changed = 0;
+      let created = 0;
+      store.audiences.forEach(obj => obj.isChanged ? changed += 1 : obj.isNew ? created += 1 : null);
+      let str = '';
+      if (created > 0)
+        str += `${created} created`;
+      if (changed > 0) {
+        if (str) str += ', '
+        str += `${changed} changed`;
+      }
+      if (deleted > 0) {
+        if (str) str += ', '
+        str += `${deleted} deleted`;
+      }
+      if (str) {
+        str = 'Pending changes: ' + str;
+      } else {
+        str = 'No pending changes';
+      }
+      return str;
+    };
 
     return {
       store,
@@ -805,6 +858,7 @@ export default defineComponent({
       onAudiencesUpload,
       onAudiencesDownload,
       formatArray,
+      getAudiencesChangeStatus,
     };
   }
 });

@@ -29,7 +29,7 @@ import country_converter as coco
 from itertools import groupby
 
 from logger import logger
-from config import Config, ConfigTarget
+from config import Config, ConfigTarget, AppNotInitializedError
 from models import Audience, AudienceLog
 from bigquery_utils import CloudBigQueryUtils
 from utils import format_duration
@@ -37,6 +37,12 @@ from utils import format_duration
 TABLE_USER_NORMALIZED = 'users_normalized'
 
 country_name_to_code_cache = {}
+
+class QueryExecutionError(Exception):
+  def __init__(self, msg: str = None, query: str = None) -> None:
+    super().__init__(msg)
+    self.query = query
+
 
 class TableSchemas:
   audiences = [
@@ -53,6 +59,7 @@ class TableSchemas:
        bigquery.SchemaField(name="mode", field_type="STRING"),
        bigquery.SchemaField(name="query", field_type="STRING", mode="NULLABLE"),
        bigquery.SchemaField(name="ttl", field_type="INT64", mode="NULLABLE"),
+       bigquery.SchemaField(name="split_ratio", field_type="FLOAT64", mode="NULLABLE"),
     ]
   audiences_log = [
       bigquery.SchemaField(name="name", field_type="STRING", mode="REQUIRED", description="Audience name from audiences table"),
@@ -262,8 +269,15 @@ class DataGateway:
     lines = [f"{i}: {line.strip()}" for i, line in enumerate(query.strip().split('\n'), start=1)]
     query_logged = "\n".join(lines)
     logger.debug(f'Executing SQL query: \n{query_logged}')
-    results = self.bq_client.query(query).result()
-    # TODO: check exception: e.errors[0].reason == 'invalidQuery'
+    try:
+      results = self.bq_client.query(query).result()
+    except exceptions.BadRequest as e:
+      if e.errors and e.errors[0]["reason"] == 'invalidQuery' and e.errors[0]["message"].startswith('Unrecognized name:'):
+        raise AppNotInitializedError(f'Query failed to exucute due to either mistake in the query or schema incompatibility. {e.errors[0]["message"]}. Please reinitialize application')
+      raise QueryExecutionError(f'Query execution error{": " + e.errors[0]["message"] if e.errors else str(e)}', query)
+    except:
+      raise
+
     fields = [field.name for field in results.schema]
     data_list = []
 
@@ -393,7 +407,7 @@ ORDER BY 1, 3 DESC
     condition = f"WHERE name='{audience_name}'" if audience_name else ""
     query = f"""
 SELECT
-  name, app_id, table_name, countries, events_include, events_exclude, days_ago_start, days_ago_end, user_list, created, mode, query, ttl
+  name, app_id, table_name, countries, events_include, events_exclude, days_ago_start, days_ago_end, user_list, created, mode, query, ttl, split_ratio
 FROM `{target.bq_dataset_id}.audiences`
 {condition}
 ORDER BY created
@@ -415,6 +429,7 @@ ORDER BY created
       audience.mode = row['mode']
       audience.query = row['query']
       audience.ttl = row['ttl']
+      audience.split_ratio = row['split_ratio']
       audiences.append(audience)
     return audiences
 
@@ -471,7 +486,8 @@ ORDER BY created
   {"'" + i.user_list + "'" if i.user_list is not None else "CAST(NULL as STRING)"} user_list,
   {"'" + i.mode + "'"} mode,
   @query{idx} query,
-  {i.ttl} ttl
+  {i.ttl} ttl,
+  {"NULL" if not i.split_ratio else i.split_ratio} split_ratio
 """)
     sql_selects = "\nUNION ALL\n".join(selects)
     query = f"""
@@ -493,10 +509,11 @@ WHEN MATCHED THEN
     END,
     t.mode = s.mode,
     t.query = s.query,
-    t.ttl = s.ttl
+    t.ttl = s.ttl,
+    t.split_ratio = s.split_ratio
 WHEN NOT MATCHED THEN
-  INSERT (name, app_id, table_name, countries, events_include, events_exclude, days_ago_start, days_ago_end, created, mode, query, ttl)
-  VALUES (s.name, s.app_id, s.table_name, s.countries, s.events_include, s.events_exclude, s.days_ago_start, s.days_ago_end, CURRENT_TIMESTAMP(), s.mode, s.query, s.ttl)
+  INSERT (name, app_id, table_name, countries, events_include, events_exclude, days_ago_start, days_ago_end, created, mode, query, ttl, split_ratio)
+  VALUES (s.name, s.app_id, s.table_name, s.countries, s.events_include, s.events_exclude, s.days_ago_start, s.days_ago_end, CURRENT_TIMESTAMP(), s.mode, s.query, s.ttl, s.split_ratio)
 """
     logger.debug(query)
     job_config = bigquery.QueryJobConfig()
@@ -521,6 +538,7 @@ WHEN NOT MATCHED THEN
   def _onRemovedAudience(self, target: ConfigTarget, audience: dict):
     table_name = target.bq_dataset_id + '.' + audience.table_name
     self.bq_client.delete_table(table_name, not_found_ok=True)
+    # TODO: should we delete all test/control tables as well?
 
 
   def _read_file(self, filename):
@@ -690,7 +708,7 @@ WHEN NOT MATCHED THEN
       self._create_users_normalized_table(target)
 
 
-  def fetch_audience_users(self, target: ConfigTarget, audience: Audience, suffix: str = None):
+  def sample_audience_users(self, target: ConfigTarget, audience: Audience, suffix: str = None, return_only_new_users = False):
     """Segment an audience - takes an audience desrciption and fetches the users
        from GA4 events according to the conditions.
 
@@ -699,18 +717,33 @@ WHEN NOT MATCHED THEN
     """
     suffix = datetime.now().strftime("%Y%m%d") if suffix is None else suffix
     audience.ensure_table_name()
-    destination_table = target.bq_dataset_id + '.' + audience.table_name + "_all_" + suffix
+    destination_table = self._get_user_segment_table_full_name(target, audience.table_name, 'all', suffix)
     query = self.get_audience_sampling_query(target, audience)
     query = f"CREATE OR REPLACE TABLE `{destination_table}` AS\n" + query
 
-    # TODO: parse error with line:column and add query with numbered lines into exception for easier diagnosis
     self.execute_query(query)
 
-    df = self.load_sampled_users(destination_table)
+    if return_only_new_users:
+      # test/control tables can not yet exist (on the first day of sampling),
+      # so if it's the case we're switching off return_only_new_users flag to prevent feching from them in load_sampled_users
+      query = f"SELECT table_name FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES WHERE table_name like '{audience.table_name}_test_%' LIMIT 1"
+      rows = self.execute_query(query)
+      if not rows:
+        return_only_new_users = False
+      else:
+        query = f"SELECT table_name FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES WHERE table_name like '{audience.table_name}_control_%' LIMIT 1"
+        rows = self.execute_query(query)
+        if not rows:
+          return_only_new_users = False
+
+    df = self.load_sampled_users(target, audience, suffix, only_new_users=return_only_new_users)
     return df
 
 
-  def load_sampled_users(self, audience_table_name: str):
+  def load_sampled_users(self, target: ConfigTarget, audience: Audience, suffix: str = None, only_new_users = False):
+    """Load users of a segment (sampled users of one day). Can be either all users, or only new users or only old users"""
+    suffix = datetime.now().strftime("%Y%m%d") if suffix is None else suffix
+    audience_table_name = self._get_user_segment_table_full_name(target, audience.table_name, 'all', suffix)
     query = f"""
 SELECT
   user,
@@ -719,45 +752,21 @@ SELECT
   days_since_install,
   src,
   n_sessions
-FROM `{audience_table_name}`
+FROM `{audience_table_name}` a
 """
-    #users = self.execute_query(query)
+    if only_new_users:
+      query += f"""WHERE
+  NOT EXISTS (SELECT user FROM `{self._get_user_segment_table_full_name(target, audience.table_name, 'control', '*')}` t WHERE t.user=a.user AND _TABLE_SUFFIX < '{suffix}') AND
+  NOT EXISTS (SELECT user FROM `{self._get_user_segment_table_full_name(target, audience.table_name, 'test', '*')}` t WHERE t.user=a.user AND _TABLE_SUFFIX < '{suffix}')
+      """
+
     logger.debug(f'Executing SQL query: {query}')
     df = pd.read_gbq(
         query=query,
         project_id=self.config.project_id,
         credentials=self.credentials
     )
-
     return df
-
-
-  def load_old_users(self, target: ConfigTarget, audience: Audience):
-    table_name_test = self._get_user_segment_table_full_name(target, audience.table_name, "test", '*')
-    table_name_ctrl = self._get_user_segment_table_full_name(target, audience.table_name, "control", '*')
-    suffix_today = datetime.now().strftime("%Y%m%d")
-    query_test = f"""SELECT user FROM `{table_name_test}` WHERE _TABLE_SUFFIX != '{suffix_today}'"""
-    query_ctrl = f"""SELECT user FROM `{table_name_ctrl}` WHERE _TABLE_SUFFIX != '{suffix_today}'"""
-    # If we're running it for the first time then user segment tables can not exist yet
-    # (BadRequest: 400 remarque.audience_XXX_test_* does not match any table.)
-    try:
-      df_test = pd.read_gbq(
-          query=query_test,
-          project_id=self.config.project_id,
-          credentials=self.credentials
-      )
-      df_ctrl = pd.read_gbq(
-          query=query_ctrl,
-          project_id=self.config.project_id,
-          credentials=self.credentials
-      )
-    except BaseException as e:
-      # we expect an pd.GenericGBQException wrapped an exceptions.BadRequest but better be on the safe side to catch all
-      logger.info(f"Loading of users from previous days failed: {e}")
-      df_test = pd.DataFrame(columns=['user'])
-      df_ctrl = pd.DataFrame(columns=['user'])
-
-    return df_test, df_ctrl
 
 
   def _get_user_segment_tables(self, target: ConfigTarget,
@@ -814,6 +823,31 @@ FROM `{audience_table_name}`
     logger.info(f'Sampled users for audience {audience.name} saved to {test_table_name} ({len(users_test)})/{control_table_name} ({len(users_control)}) tables')
 
 
+  def add_previous_sampled_users(self, target: ConfigTarget, audience: Audience, suffix: str = None):
+    suffix = datetime.now().strftime("%Y%m%d") if suffix is None else suffix
+    segment_table_name = self._get_user_segment_table_full_name(target, audience.table_name, 'all', suffix)
+    # test:
+    group_table_name = self._get_user_segment_table_full_name(target, audience.table_name, 'test', suffix)
+    group_prev_table_name = self._get_user_segment_table_full_name(target, audience.table_name, 'test', '*')
+    query = f"""
+  INSERT INTO `{group_table_name}` (user, ttl)
+  SELECT user, 1 FROM `{segment_table_name}` t1
+  WHERE
+    EXISTS (SELECT user FROM `{group_prev_table_name}` t WHERE t.user=t1.user AND _TABLE_SUFFIX < '{suffix}')
+  """
+    self.execute_query(query)
+    # control:
+    group_table_name = self._get_user_segment_table_full_name(target, audience.table_name, 'control', suffix)
+    group_prev_table_name = self._get_user_segment_table_full_name(target, audience.table_name, 'control', '*')
+    query = f"""
+  INSERT INTO `{group_table_name}` (user)
+  SELECT user FROM `{segment_table_name}` t1
+  WHERE
+    EXISTS (SELECT user FROM `{group_prev_table_name}` t WHERE t.user=t1.user AND _TABLE_SUFFIX < '{suffix}')
+  """
+    self.execute_query(query)
+
+
   def add_yesterdays_users(self, target: ConfigTarget, audience: Audience, suffix: str = None):
     # add test users from yesterday with TTL>1 into today's test users
     if audience.ttl > 1:
@@ -832,10 +866,10 @@ FROM `{audience_table_name}`
     NOT EXISTS (SELECT user FROM `{test_table_name}` WHERE user=t1.user)
     AND ttl>1
   """
-            res = self.execute_query(query)
+            self.execute_query(query)
             logger.debug(f"Added test users from previous day with TTL>1")
             # reload test users after the addition of yesterday's ones
-            return self.load_audience_segment(target, audience, 'test')
+            #return self.load_audience_segment(target, audience, 'test')
         except ValueError:
           pass
     return None
@@ -1026,6 +1060,8 @@ ORDER BY name, date
     conversion_events = events if events else audience.events_exclude
     conversion_events = [item for item in conversion_events if item != 'app_remove']
     events_list = ", ".join([f"'{event}'" for event in conversion_events]) if conversion_events else ""
+    if not events_list:
+      raise Exception(f"Conversions cannot be calculated as audience's conversion events (excluded_event) were not specified")
     ga_table = self.get_ga4_table_name(target, True)
     user_table = target.bq_dataset_id + '.' + audience.table_name
     if country:
