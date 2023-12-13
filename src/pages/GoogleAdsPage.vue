@@ -81,10 +81,10 @@
                     <div class="col">
                       adgroup: <b>{{ data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].ad_group_name }}</b>
                       (id: {{
-                        data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].ad_group_id }}),
+                        data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].ad_group_id }}, {{ data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].ad_group_status }}),
                       campaign: <b>{{ data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].campaign_name
                       }}</b> (id: {{
-  data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].campaign_id }}),
+  data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].campaign_id }}, {{ data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].campaign_status }}),
                       CID: {{ data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].customer_id }}
                     </div>
                   </div>

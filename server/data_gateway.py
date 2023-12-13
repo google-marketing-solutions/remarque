@@ -1057,11 +1057,13 @@ ORDER BY name, date
     # NOTE: all events that we ignored for sampling (we picked users for whom those events didn't happen)
     # now are our conversions, but except "app_remove"
     # TODO: if events_exclude has more than one, we need to make sure all of them happened not just one!
-    conversion_events = events if events else audience.events_exclude
-    conversion_events = [item for item in conversion_events if item != 'app_remove']
+    if events:
+      conversion_events = events
+    else:
+      conversion_events = [item for item in audience.events_exclude if item != 'app_remove']
     events_list = ", ".join([f"'{event}'" for event in conversion_events]) if conversion_events else ""
     if not events_list:
-      raise Exception(f"Conversions cannot be calculated as audience's conversion events (excluded_event) were not specified")
+      raise Exception(f"Conversions cannot be calculated as audience's conversion events (excluded_event or explicitly) were not specified")
     ga_table = self.get_ga4_table_name(target, True)
     user_table = target.bq_dataset_id + '.' + audience.table_name
     if country:

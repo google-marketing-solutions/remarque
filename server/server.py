@@ -621,8 +621,8 @@ def get_audiences_status():
   audiences = context.data_gateway.get_audiences(context.target)
   audiences_log = context.data_gateway.get_audiences_log(context.target, include_duplicates=include_log_duplicates)
   user_lists = [i.user_list for i in audiences if i.user_list and i.mode != 'off']
-  skip_jobs_loading = request.args.get('skip_ads', type=str) == 'true'
-  if skip_jobs_loading:
+  skip_ads_loading = request.args.get('skip_ads', type=str) == 'true'
+  if skip_ads_loading:
     jobs_status = []
     campaigns = []
   else:
@@ -651,8 +651,10 @@ def get_audiences_status():
     audience_dict['campaigns'] = [{
       "campaign_id": i.campaign_id,
       "campaign_name": i.campaign_name,
+      "campaign_status": i.campaign_status,
       "ad_group_id": i.ad_group_id,
       "ad_group_name": i.ad_group_name,
+      "ad_group_status": i.ad_group_status,
       "customer_id": i.customer_id } for i in audience_campaigns]
 
     if audience_log:

@@ -64,8 +64,10 @@ SELECT
   customer.id,
   campaign.id,
   campaign.name,
+  campaign.status,
   ad_group.id,
   ad_group.name,
+  ad_group.status,
   user_list.name,
   user_list.description
 FROM ad_group_criterion
