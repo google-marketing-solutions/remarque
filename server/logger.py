@@ -33,7 +33,7 @@ if IS_GAE:
 logger = logging.getLogger('remarque')
 logger.setLevel(loglevel)
 logging.getLogger('google.ads.googleads.client').setLevel(logging.WARNING)
-logging.getLogger('gaarf.query_executor').setLevel(logging.WARNING)
+logging.getLogger('gaarf').setLevel(loglevel)
 logging.getLogger('googleapiclient.discovery').setLevel(logging.WARNING)
 logging.getLogger('smart_open.gcs').setLevel(logging.WARNING)
 logging.getLogger('smart_open.smart_open_lib').setLevel(logging.WARNING)

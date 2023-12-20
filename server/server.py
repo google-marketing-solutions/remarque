@@ -460,6 +460,7 @@ def process():
   ts_start = datetime.now()
   logger.info(f"Starting automated processing for target '{context.target.name}'")
 
+  # TODO: wrap in try--catch to send any error to email
   context.data_gateway.ensure_user_normalized(context.target)
   audiences = context.data_gateway.get_audiences(context.target)
   audiences_log = context.data_gateway.get_audiences_log(context.target)
@@ -545,11 +546,15 @@ def run_sampling() -> Response:
   """
   logger.info(f"Run sampling for all audiences")
   context = create_context()
+  params = request.get_json(force=True)
+  audience_name = request.args.get('audience', None) or params.get('audience', None)
   context.data_gateway.ensure_user_normalized(context.target)
   audiences = context.data_gateway.get_audiences(context.target)
   result = {}
   logger.debug(f"Loaded {len(audiences)} audiences")
   for audience in audiences:
+    if audience_name and audience.name != audience_name:
+      continue
     if audience.mode == 'off':
       continue
     users_test, users_control = run_sampling_for_audience(context, audience)
@@ -594,6 +599,8 @@ def _get_ads_config(target: ConfigTarget, assert_non_empty=False):
 def update_customer_match_audiences():
   logger.info("Uploading audiences to Google Ads")
   context = create_context(create_ads=True)
+  params = request.get_json(force=True)
+  audience_name = request.args.get('audience', None) or params.get('audience', None)
   audiences = context.data_gateway.get_audiences(context.target)
   audiences_log = context.data_gateway.get_audiences_log(context.target)
   update_customer_match_mappings(context, audiences)
@@ -602,6 +609,8 @@ def update_customer_match_audiences():
   result = {}
   log = []
   for audience in audiences:
+    if audience_name and audience.name != audience_name:
+      continue
     if audience.mode == 'off':
       continue
 
@@ -724,22 +733,26 @@ def get_conversions_query():
   })
 
 
-@app.route("/api/conversions", methods=["GET"])
+@app.route("/api/conversions", methods=["POST"])
 def get_user_conversions():
-  context = create_context()
-  date_start = request.args.get('date_start')
+  context = create_context(create_ads=True)
+  params = request.get_json(force=True)
+
+  date_start = params.get('date_start')
   date_start = date.fromisoformat(date_start) if date_start else None
-  date_end = request.args.get('date_end')
+  date_end = params.get('date_end')
   date_end = date.fromisoformat(date_end) if date_end else None
-  country = request.args.get('country')
+  country = params.get('country')
   if country:
     country = country.split(',')
-  events = request.args.get('events')
+  events = params.get('events')
   if events:
     events = [e.strip() for e in events.split(',') if e.strip()]
   audiences = context.data_gateway.get_audiences(context.target)
-  audience_name = request.args.get('audience')
+  audience_name = params.get('audience')
   logger.info(f"Calculating conversions graph for '{audience_name}' audience and {date_start}-{date_end} timeframe")
+  campaigns = params.get('campaigns', None)
+
   results = {}
   pval = None
   chi = None
@@ -762,8 +775,29 @@ def get_user_conversions():
       pval = None
       chi = None
 
+    # fetch campaign(s) metrics
+    ads_metrics = None
+    if campaigns:
+      logger.debug("Loading Ads campaigns metrics")
+      logger.debug(campaigns)
+      cids = set([c.get('customer_id') for c in campaigns])
+      if cids and len(cids) > 1:
+        logger.warning(f"More than one customer id provided: {cids}")
+      for cid in cids:
+        campaign_ids = set([str(c.get('campaign_id')) for c in campaigns])
+        ads_metrics = context.ads_gateway.get_userlist_campaigns_metrics(cid, campaign_ids, date_start.strftime("%Y-%m-%d"), date_end.strftime("%Y-%m-%d"))
+        ads_metrics = [{
+          "campaign": i['campaign_id'],
+          "date": date.fromisoformat(i['date']),
+          "unique_users": i['unique_users'],
+          "clicks": i['clicks'],
+          "average_impression_frequency_per_user": i['average_impression_frequency_per_user']
+        } for i in ads_metrics]
+    logger.debug(ads_metrics)
+
     results[audience.name] = {
       "conversions": result,
+      "ads_metrics": ads_metrics,
       "date_start": date_start.strftime("%Y-%m-%d"),
       "date_end": date_end.strftime("%Y-%m-%d"),
       "pval": pval if pval is not None and math.isfinite(pval) else None,

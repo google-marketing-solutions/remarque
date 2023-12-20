@@ -47,7 +47,26 @@
               </template>
               <template v-slot:body-cell-actions="props">
                 <q-td :props="props">
-                  <q-btn dense round flat color="grey" @click="onOpenChart(props)" icon="query_stats"></q-btn>
+                  <q-btn dense round flat color="grey" @click="onOpenChart(props.row)" icon="query_stats"></q-btn>
+                  <q-btn-dropdown dense icon="electric_bolt">
+                    <!-- <template v-slot:label>
+                      <div class="row items-center no-wrap" >
+                        <q-icon left name="electric_bolt" style="margin-right: 0;"/>
+                      </div>
+                    </template> -->
+                    <q-list>
+                      <q-item clickable v-close-popup @click="onSampling(props.row)">
+                        <q-item-section>
+                          <q-item-label>Sample &amp; Split</q-item-label>
+                        </q-item-section>
+                      </q-item>
+                      <q-item clickable v-close-popup @click="onAudiencesUpload(props.row)">
+                        <q-item-section>
+                          <q-item-label>Upload</q-item-label>
+                        </q-item-section>
+                      </q-item>
+                    </q-list>
+                  </q-btn-dropdown>
                 </q-td>
               </template>
               <template v-slot:body-cell-mode="props">
@@ -134,16 +153,16 @@
               </div>
             </div>
             <div class="">
-            <q-table title="Upload history" class="qtable-sticky-header" style="height: 300px" flat bordered
-              :rows="data.audience_log" row-key="name" :columns="data.audience_status_columns" virtual-scroll
-              :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" hide-bottom>
-              <template v-slot:top="props">
-                <div class="col-2 q-table__title">Upload history</div>
-                <q-space />
-                <q-btn flat round dense :icon="props.inFullscreen ? 'fullscreen_exit' : 'fullscreen'"
-                  @click="props.toggleFullscreen" class="q-ml-md" />
-              </template>
-            </q-table>
+              <q-table title="Upload history" class="qtable-sticky-header" style="height: 300px" flat bordered
+                :rows="data.audience_log" row-key="name" :columns="data.audience_status_columns" virtual-scroll
+                :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" hide-bottom>
+                <template v-slot:top="props">
+                  <div class="col-2 q-table__title">Upload history</div>
+                  <q-space />
+                  <q-btn flat round dense :icon="props.inFullscreen ? 'fullscreen_exit' : 'fullscreen'"
+                    @click="props.toggleFullscreen" class="q-ml-md" />
+                </template>
+              </q-table>
             </div>
           </q-expansion-item>
         </q-card-section>
@@ -207,7 +226,7 @@
               <div class="col q-pa-xs">
                 <q-btn label="Load conversions" @click="onLoadConversions" color="primary" icon="query_stats"
                   class="q-my-md"></q-btn>
-
+                <q-toggle v-model="data.load_ads_graph" label="Load Ads metrics" :disable="!data.selectedAudience[0].campaigns || !data.selectedAudience[0].campaigns.length"/>
                 <q-btn-toggle class="q-mx-lg" v-model="data.conversions_mode" no-wrap outline alight="right" :options="[
                   { label: 'Conv Rate', value: 'cr' },
                   { label: 'Absolute', value: 'abs' },
@@ -218,6 +237,8 @@
             </div>
           </q-banner>
           <apexchart v-if="data.chart.series.length" :options="data.chart.options" :series="data.chart.series"
+            height="600"></apexchart>
+          <apexchart v-if="data.chartAds.series.length" :options="data.chartAds.options" :series="data.chartAds.series"
             height="600"></apexchart>
         </q-card-section>
       </q-card>
@@ -265,6 +286,7 @@ interface Conversions {
   start_date: string;
   end_date: string;
   pval: number;
+  ads_metrics?: AdsMetric[];
 }
 interface ConversionsData {
   date: string;
@@ -272,6 +294,12 @@ interface ConversionsData {
   cr_control: number;
   cum_test_regs: number;
   cum_control_regs: number;
+}
+interface AdsMetric {
+  date: string;
+  unique_users: number;
+  clicks: number;
+  average_impression_frequency_per_user?: number;
 }
 interface AudienceWithLog extends AudienceInfo {
   log?: AudienceLog[];
@@ -290,7 +318,7 @@ export default defineComponent({
     const store = configurationStore();
     const $q = useQuasar();
     const data = ref({
-      audiences: [] as AudienceWithLog[], //store.audiences,
+      audiences: [] as AudienceWithLog[], //TODO: use store.audiences,
       audiences_data: {},
       audience_log: [],
       selectedAudience: [] as AudienceWithLog[],
@@ -327,6 +355,7 @@ export default defineComponent({
       ],
       audience_adstree_splitter: 70,
       isLogPanelExpanded: true,
+      load_ads_graph: true,
       chart: {
         options: {
           chart: {
@@ -357,7 +386,71 @@ export default defineComponent({
           xaxis: {
             //type: 'category',
             type: 'datetime',
-          }
+          },
+          yaxis: [
+            {
+              title: {
+                text: 'Conversions',
+              },
+              axisBorder: {
+                show: true,
+                color: '#FF1654'
+              }
+            },
+          ],
+        },
+        series: [] as any,
+      },
+      chartAds: {
+        options: {
+          chart: {
+            type: 'line',
+          },
+          stroke: {
+            curve: 'straight'
+          },
+          zoom: {
+            enabled: true,
+            type: 'x',
+            autoScaleYaxis: true,
+          },
+          title: {
+            text: 'Ads campaign metrics',
+            align: 'left'
+          },
+          grid: {
+            row: {
+              colors: ['#f3f3f3', 'transparent'],
+              opacity: 0.5
+            },
+          },
+          markers: {
+            size: 2
+          },
+          xaxis: {
+            type: 'datetime',
+          },
+          yaxis: [
+            {
+              seriesName: 'users',
+              title: {
+                text: 'Unique Users',
+              },
+              axisBorder: {
+                show: true,
+              }
+            },
+            {
+              opposite: true,
+              seriesName: 'clicks',
+              title: {
+                text: 'Clicks',
+              },
+              axisBorder: {
+                show: true,
+              }
+            }
+          ],
         },
         series: [] as any,
       },
@@ -413,8 +506,13 @@ export default defineComponent({
         showExecutionResultDialog(res.data.result);
       }
     };
-    const onSampling = async () => {
-      let res = await postApiUi('sampling/run', {}, $q, 'Running sampling for audiences...');
+    const onSampling = async (audience?: AudienceWithLog) => {
+      let res = await postApiUi(
+        'sampling/run',
+        { 'audience': audience ? audience.name : null },
+        $q,
+        audience ? 'Running sampling for the audience...' : 'Running sampling for audiences...'
+      );
       /* Expect:
         "result": {
           "userlist1": {
@@ -436,16 +534,16 @@ export default defineComponent({
         data.value.resultDialog.show = true;
       }
     };
-    const onAudiencesUpload = async () => {
+    const onAudiencesUpload = async (audience?: AudienceWithLog) => {
       const progressDlg = $q.dialog({
-        message: 'Uploading audiences to Google Ads...',
+        message: audience ? 'Uploading the audience to Google Ads...' : 'Uploading audiences to Google Ads...',
         progress: true, // we enable default settings
         persistent: true, // we want the user to not be able to close it
         ok: false // we want the user to not be able to close it
       });
       const loading = () => progressDlg.hide();
       try {
-        let res = await postApi('ads/upload', {}, loading);
+        let res = await postApi('ads/upload', { 'audience': audience ? audience.name : null }, loading);
         if (res.data && res.data.result) {
           showExecutionResultDialog(res.data.result);
         }
@@ -467,6 +565,7 @@ export default defineComponent({
         data.value.conversions_events = '';
         data.value.conversions_countries = newActiveAudience.countries;
         updateConversionsChart(newActiveAudience.conversions);
+        data.value.load_ads_graph = (newActiveAudience.campaigns && newActiveAudience.campaigns.length > 0);
       }
     });
 
@@ -565,7 +664,13 @@ export default defineComponent({
           country_str = country.join(',');
         }
         let events = data.value.conversions_events;
-        audience.conversions = await loadConversions(audience.name, date_start, date_end, country_str, events);
+        audience.conversions = await loadConversions(
+          audience.name,
+          date_start,
+          date_end,
+          country_str,
+          events,
+          data.value.load_ads_graph ? audience.campaigns : null);
         updateConversionsChart(audience.conversions);
       }
     };
@@ -597,9 +702,20 @@ export default defineComponent({
       }
     };
 
-    const loadConversions = async (audienceName: string, date_start: string | undefined, date_end: string | undefined, country: string | undefined, events: string | undefined): Promise<Conversions | undefined> => {
+    const loadConversions = async (audienceName: string, date_start: string | undefined, date_end: string | undefined, country: string | undefined, events: string | undefined, campaigns?: any): Promise<Conversions | undefined> => {
       data.value.chart.series = [];
-      let res = await getApiUi('conversions', { audience: audienceName, date_start, date_end, country, events }, $q, 'Fetching the audience conversion history...');
+      data.value.chartAds.series = [];
+      // NOTE: if 'campaigns' is specified is the same object that was returned from loading audiences statuses
+      // with Ads objects(customer / campaigns / adgroups) and by passing it
+      // we say that we want to fetch campaign's metrics
+      let res = await postApiUi('conversions', {
+        audience: audienceName,
+        date_start,
+        date_end,
+        country,
+        events,
+        campaigns
+      }, $q, 'Fetching the audience conversion history...');
       if (!res) return;
       const results = res.data.results;
       let result;
@@ -616,7 +732,13 @@ export default defineComponent({
       // 'result' object for a particular audience is expected to be: conversions, date_start, date_end, pval, chi
       // 'result.conversions' is an array of objects with fields: date, cum_test_regs, cum_control_regs
       console.log(result);
-      return { data: result.conversions, start_date: result.date_start, end_date: result.date_end, pval: result.pval };
+      return {
+        data: result.conversions,
+        start_date: result.date_start,
+        end_date: result.date_end,
+        pval: result.pval,
+        ads_metrics: result.ads_metrics
+      };
     };
 
     function formatGraphValue(val: any) {
@@ -628,6 +750,7 @@ export default defineComponent({
     const updateConversionsChart = (conversions?: Conversions) => {
       if (!conversions || !conversions.data || !conversions.data.length) {
         data.value.chart.series = [];
+        data.value.chartAds.series = [];
         data.value.conversions_from = undefined;
         data.value.conversions_to = undefined;
         data.value.pval = undefined;
@@ -655,11 +778,19 @@ export default defineComponent({
       data.value.chart.series = [
         { name: 'treatment', data: test_data },
         { name: 'control', data: control_data },
-      ]
+      ];
+      if (conversions.ads_metrics) {
+        data.value.chartAds.series = [{
+          name: 'users',
+          data: conversions.ads_metrics.map(i => { return { x: i.date, y: i.unique_users }; })
+        }, {
+          name: 'clicks',
+          data: conversions.ads_metrics.map(i => { return { x: i.date, y: i.clicks }; })
+        }];
+      }
     };
 
-    const onOpenChart = async (props: any) => {
-      const audience = props.row;
+    const onOpenChart = async (audience: AudienceWithLog) => {
       data.value.selectedAudience = [audience];
       if (audience.conversions) {
         updateConversionsChart(audience.conversions);

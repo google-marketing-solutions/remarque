@@ -25,7 +25,7 @@ from gaarf.query_executor import AdsReportFetcher, AdsQueryExecutor
 from logger import logger
 from config import Config, ConfigTarget
 from models import Audience
-from queries import UserListQuery, OfflineJobQuery, UserListCampaigns
+from queries import UserListQuery, OfflineJobQuery, UserListCampaigns, UserListCampaignMetrics
 
 _MEMBERSHIP_LIFESPAN = 10000
 _MAX_OPERATIONS_PER_JOB = 100000
@@ -285,9 +285,14 @@ class AdsGateway:
 
 
     def get_userlist_campaigns(self, userlist: Union[str,list] = None):
-       logger.info(f"Getting campaigns and adgroups targeted user lists for Remarque's audiences: {userlist}")
-       cids = self.query_executor.expand_mcc(self.customer_id)
-       logger.debug(f"CID {self.customer_id} expanded to list of customers: {cids}")
-       report = self.report_fetcher.fetch(UserListCampaigns(userlist), cids)
-       logger.debug(report)
-       return report
+      logger.info(f"Getting campaigns and adgroups targeted user lists for Remarque's audiences: {userlist}")
+      cids = self.query_executor.expand_mcc(self.customer_id)
+      logger.debug(f"CID {self.customer_id} expanded to list of customers: {cids}")
+      report = self.report_fetcher.fetch(UserListCampaigns(userlist), cids)
+      logger.debug(report)
+      return report
+
+
+    def get_userlist_campaigns_metrics(self, cid, campaigns, date_start, date_end):
+      report = self.report_fetcher.fetch(UserListCampaignMetrics(campaigns, date_start, date_end), cid)
+      return report

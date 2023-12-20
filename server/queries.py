@@ -85,3 +85,21 @@ FROM ad_group_criterion
       condition = "ad_group_criterion.type = USER_LIST AND user_list.description = 'Remarque user list' AND ad_group_criterion.status = ENABLED"
     self.query_text = self.query_text + '\nWHERE\n' + condition
 
+
+class UserListCampaignMetrics(BaseQuery):
+  def __init__(self, campaigns: list, date_start, date_end):
+    self.query_text = f"""
+SELECT
+  campaign.id,
+  segments.date as date,
+  metrics.unique_users as unique_users,
+  metrics.clicks as clicks,
+  metrics.average_impression_frequency_per_user as average_impression_frequency_per_user
+FROM campaign
+WHERE
+  metrics.unique_users > 0
+"""
+    condition = f"AND campaign.id IN ({','.join(campaigns)})"
+    condition += f"AND segments.date >= '{date_start}' AND segments.date <= '{date_end}'"
+    self.query_text = self.query_text + condition
+
