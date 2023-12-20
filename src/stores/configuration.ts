@@ -23,6 +23,7 @@ export interface AudienceInfo {
   query: string;
   ttl: number;
   split_ratio: number | undefined | null;
+  created: string;
   isNew: boolean;
   isChanged: boolean;
 }

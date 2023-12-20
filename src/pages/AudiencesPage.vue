@@ -6,88 +6,91 @@
 
     <div class="q-mt-md">
       <q-card class="stat-card" flat bordered>
-        <q-card-section>
-          <div class="text-h6">GA4 statistics</div>
-          <div>
-            <q-banner class="bg-grey-3">
-              <template v-slot:avatar>
-                <q-icon name="info" color="primary" />
-              </template>
-              Define time window and load events from Google Analytics. Then choose an app id, you'll see available events
-              and countries,
-              which you can use for defining audiences below.
-            </q-banner>
-          </div>
-        </q-card-section>
-        <q-card-section class="row q-col-gutter-md" style="padding-top: 0; padding-bottom: 0;">
-          <div class="col-2 ">
-            <q-input outlined v-model="store.days_ago_start" label="Period start (days ago)" placeholder="" hint="" />
-          </div>
-          <div class="col-2 ">
-            <q-input outlined v-model="store.days_ago_end" label="Period end (days ago)" placeholder="" hint="" />
-          </div>
-        </q-card-section>
+        <q-expansion-item :default-opened=true label="GA4 statistics" style="font-size: 20px;">
+          <q-card-section>
+            <!-- <div class="text-h6">GA4 statistics</div> -->
+            <div>
+              <q-banner class="bg-grey-3">
+                <template v-slot:avatar>
+                  <q-icon name="info" color="primary" />
+                </template>
+                Define time window and load events from Google Analytics. Then choose an app id, you'll see available
+                events
+                and countries,
+                which you can use for defining audiences below.
+              </q-banner>
+            </div>
+          </q-card-section>
+          <q-card-section class="row q-col-gutter-md" style="padding-top: 0; padding-bottom: 0;">
+            <div class="col-2 ">
+              <q-input outlined v-model="store.days_ago_start" label="Period start (days ago)" placeholder="" hint="" />
+            </div>
+            <div class="col-2 ">
+              <q-input outlined v-model="store.days_ago_end" label="Period end (days ago)" placeholder="" hint="" />
+            </div>
+          </q-card-section>
 
-        <q-card-section class="row q-col-gutter-md" style="padding-top: 0;">
-          <div class="col-md-auto ">
-            <q-table title="GA4 Apps" style="height: 400px" flat bordered :rows="data.app_ids" :row-key="r => r"
-              :columns="data.appid_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]"
-              @row-click="onAppIdSelected" selection="single" v-model:selected="data.selectedAppId"
-              :loading="data.ga_stat_loading" />
-          </div>
+          <q-card-section class="row q-col-gutter-md" style="padding-top: 0;">
+            <div class="col-md-auto ">
+              <q-table title="GA4 Apps" style="height: 400px" flat bordered :rows="data.app_ids" :row-key="r => r"
+                :columns="data.appid_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]"
+                @row-click="onAppIdSelected" selection="single" v-model:selected="data.selectedAppId"
+                :loading="data.ga_stat_loading" />
+            </div>
 
-          <div class="col">
-            <q-table title="GA4 Events" class="qtable-sticky-header" style="height: 400px" flat bordered
-              :rows="data.events" row-key="event" :columns="data.events_columns" virtual-scroll
-              :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]"
-              :no-data-label="data.app_ids.length ? 'Choose an app id' : 'Load all events'"
-              :loading="data.ga_stat_loading" :filter-method="filterEvents" :filter="data.eventsSearch">
-              <template v-slot:top>
-                <div style="width: 100%" class="row">
-                  <div class="col-7">
-                    <div class="q-table__title">GA4 Events</div>
+            <div class="col">
+              <q-table title="GA4 Events" class="qtable-sticky-header" style="height: 400px" flat bordered
+                :rows="data.events" row-key="event" :columns="data.events_columns" virtual-scroll
+                :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]"
+                :no-data-label="data.app_ids.length ? 'Choose an app id' : 'Load all events'"
+                :loading="data.ga_stat_loading" :filter-method="filterEvents" :filter="data.eventsSearch">
+                <template v-slot:top>
+                  <div style="width: 100%" class="row">
+                    <div class="col-7">
+                      <div class="q-table__title">GA4 Events</div>
+                    </div>
+                    <div class="col-5">
+                      <q-input dense debounce="400" color="primary" v-model="data.eventsSearch">
+                        <template v-slot:append>
+                          <q-icon name="search" />
+                        </template>
+                      </q-input>
+                    </div>
                   </div>
-                  <div class="col-5">
-                    <q-input dense debounce="400" color="primary" v-model="data.eventsSearch">
-                      <template v-slot:append>
-                        <q-icon name="search" />
-                      </template>
-                    </q-input>
-                  </div>
-                </div>
-              </template>
-            </q-table>
-          </div>
+                </template>
+              </q-table>
+            </div>
 
-          <div class="col">
-            <q-table title="GA4 Countries" class="qtable-sticky-header" style="height: 400px" flat bordered
-              :rows="data.countries" row-key="country" :columns="data.countries_columns" virtual-scroll
-              :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" selection="multiple"
-              :no-data-label="data.app_ids.length ? 'Choose an app id' : 'Load all events'"
-              :loading="data.ga_stat_loading" v-model:selected="data.selectedCountries" :filter-method="filterCountries"
-              :filter="data.countriesSearch">
-              <template v-slot:top>
-                <div style="width: 100%" class="row">
-                  <div class="col-7">
-                    <div class="q-table__title">GA4 Countries</div>
+            <div class="col">
+              <q-table title="GA4 Countries" class="qtable-sticky-header" style="height: 400px" flat bordered
+                :rows="data.countries" row-key="country" :columns="data.countries_columns" virtual-scroll
+                :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" selection="multiple"
+                :no-data-label="data.app_ids.length ? 'Choose an app id' : 'Load all events'"
+                :loading="data.ga_stat_loading" v-model:selected="data.selectedCountries" :filter-method="filterCountries"
+                :filter="data.countriesSearch">
+                <template v-slot:top>
+                  <div style="width: 100%" class="row">
+                    <div class="col-7">
+                      <div class="q-table__title">GA4 Countries</div>
+                    </div>
+                    <div class="col-5">
+                      <q-input dense debounce="400" color="primary" v-model="data.countriesSearch">
+                        <template v-slot:append>
+                          <q-icon name="search" />
+                        </template>
+                      </q-input>
+                    </div>
                   </div>
-                  <div class="col-5">
-                    <q-input dense debounce="400" color="primary" v-model="data.countriesSearch">
-                      <template v-slot:append>
-                        <q-icon name="search" />
-                      </template>
-                    </q-input>
-                  </div>
-                </div>
-              </template>
+                </template>
 
-            </q-table>
-          </div>
-        </q-card-section>
+              </q-table>
+            </div>
+          </q-card-section>
 
-        <q-card-actions class="q-pa-md">
-          <q-btn color="primary" label="Load" icon="sync" @click="onLoad"></q-btn>
-        </q-card-actions>
+          <q-card-actions class="q-pa-md">
+            <q-btn color="primary" label="Load" icon="sync" @click="onLoad"></q-btn>
+          </q-card-actions>
+        </q-expansion-item>
       </q-card>
     </div>
 
@@ -203,7 +206,7 @@
             </template>
             <template v-slot:body-cell-mode="props">
               <q-td :props="props">
-                <q-chip :color="props.row.mode === 'off' ? 'red' : 'green'" text-color="white" dense
+                <q-chip :color="props.row.mode === 'off' ? 'red' : props.row.mode === 'test' ? 'blue' : 'green'" text-color="white" dense
                   class="text-weight-bolder" square>{{ props.row.mode === 'off' ? 'Off' : props.row.mode === 'test' ?
                     'Test ' : 'Prod' }}</q-chip>
               </q-td>
@@ -393,7 +396,7 @@ import { defineComponent, ref, watch, computed } from 'vue';
 import { AudienceInfo, AudienceMode, configurationStore } from 'stores/configuration';
 import { getApi, postApi, postApiUi, getApiUi } from 'boot/axios';
 import { useQuasar, QForm } from 'quasar';
-import { formatArray, isFinite } from '../helpers/utils';
+import { formatArray, formatDate, isFinite } from '../helpers/utils';
 
 export default defineComponent({
   name: 'AudiencesPage',
@@ -424,6 +427,7 @@ export default defineComponent({
         sample_size: 0,
         new_power: undefined
       },
+      isGA4PanelExpanded: true,
       selectedAppId: [] as string[],
       selectedCountries: [] as any[],
       app_ids: [] as any[],
@@ -454,6 +458,7 @@ export default defineComponent({
         { name: 'ratio', label: 'Ratio', field: 'split_ratio' },
         { name: 'ttl', label: 'TTL', field: 'ttl' },
         { name: 'mode', label: 'Mode', field: 'mode' },
+        { name: 'created', label: 'Created', field: 'created', format: formatDate },
         { name: 'actions', label: 'Actions', field: '', align: 'center' },
       ],
       audiences_wrap: true,
@@ -672,7 +677,7 @@ export default defineComponent({
         console.log(res.data);
         $q.dialog({
           title: 'Audience preview',
-          message: `The audience with current conditions returned ${res.data.users_count} users.\nPlease it doens't take into account TTL (users readded from previous days because of ttl>1)`
+          message: `The audience with current conditions returned ${res.data.users_count} users.\nPlease note that it's a total number of users to be split onto treatment/control groups and it doens't take into account TTL (users readded from previous days because of ttl>1)`
         });
       }
       catch (e: any) {

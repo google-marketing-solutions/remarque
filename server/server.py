@@ -325,7 +325,6 @@ def setup_connect_ga4():
     return jsonify({"error": str(e)}), 400
 
 
-
 @app.route("/api/stat", methods=["GET"])
 def get_stat() -> Response:
   context = create_context()
@@ -373,12 +372,15 @@ def calculate_users_for_audience():
   pprint(request.args)
   params = request.get_json(force=True)
   audience_raw = params["audience"]
-  logger.info("Previewing audience")
-  logger.debug(audience_raw)
+  logger.info("Previewing audience:")
+  logger.info(audience_raw)
+  context.data_gateway.ensure_user_normalized(context.target)
   audience = Audience.from_dict(audience_raw)
-  df = context.data_gateway.sample_audience_users(context.target, audience)
-  # NOTE: we can return all users data if needed
-  return jsonify({"users_count": len(df)})
+  audience.ensure_table_name()
+  query = context.data_gateway.get_audience_sampling_query(context.target, audience)
+  rows = context.data_gateway.execute_query(query)
+
+  return jsonify({"users_count": len(rows)})
 
 
 @app.route("/api/audience/query", methods=["POST"])
@@ -456,7 +458,7 @@ def process():
     raise Exception(f"Target was not set, target uri argument: {_get_req_arg_str('target')}, available targets in the configuration: {context.config.get_targets_names()}")
 
   ts_start = datetime.now()
-  logger.info(f"Starting process for target {context.target.name}")
+  logger.info(f"Starting automated processing for target '{context.target.name}'")
 
   context.data_gateway.ensure_user_normalized(context.target)
   audiences = context.data_gateway.get_audiences(context.target)
@@ -652,10 +654,13 @@ def get_audiences_status():
       "campaign_id": i.campaign_id,
       "campaign_name": i.campaign_name,
       "campaign_status": i.campaign_status,
+      "campaign_start_date": i.campaign_start_date,
+      "campaign_end_date": i.campaign_end_date,
       "ad_group_id": i.ad_group_id,
       "ad_group_name": i.ad_group_name,
       "ad_group_status": i.ad_group_status,
-      "customer_id": i.customer_id } for i in audience_campaigns]
+      "customer_id": i.customer_id,
+      "customer_name": i.customer_name } for i in audience_campaigns]
 
     if audience_log:
       audience_dict['log'] = []

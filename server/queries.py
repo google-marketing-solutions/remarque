@@ -62,9 +62,12 @@ class UserListCampaigns(BaseQuery):
 SELECT
   ad_group_criterion.user_list.user_list as user_list,
   customer.id,
+  customer.descriptive_name as customer_name,
   campaign.id,
   campaign.name,
   campaign.status,
+  campaign.start_date,
+  campaign.end_date,
   ad_group.id,
   ad_group.name,
   ad_group.status,

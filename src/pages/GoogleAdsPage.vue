@@ -52,9 +52,10 @@
               </template>
               <template v-slot:body-cell-mode="props">
                 <q-td :props="props">
-                  <q-chip :color="props.row.mode === 'off' ? 'red' : 'green'" text-color="white" dense
-                    class="text-weight-bolder" square>{{ props.row.mode === 'off' ? 'Off' : props.row.mode === 'test' ?
-                      'Test ' : 'Prod' }}</q-chip>
+                  <q-chip :color="props.row.mode === 'off' ? 'red' : props.row.mode === 'test' ? 'blue' : 'green'"
+                    text-color="white" dense class="text-weight-bolder" square>{{ props.row.mode === 'off' ? 'Off' :
+                      props.row.mode === 'test' ?
+                        'Test ' : 'Prod' }}</q-chip>
                 </q-td>
               </template>
               <template v-slot:body-cell-countries="props">
@@ -74,33 +75,65 @@
                     <q-icon size="2em" name="warning" color="red"/>You have more than one campaign targeted the audience.<br/>
                   </div>
                 </div> -->
-                <div v-if="data.selectedAudience.length && data.selectedAudience[0].campaigns.length">
-                  <q-pagination v-if="data.selectedAudience[0].campaigns.length > 1" v-model="data.currentAdgroupIndex"
-                    :min="1" :max="data.selectedAudience[0].campaigns.length" input direction-links />
-                  <div class="row">
-                    <div class="col">
-                      adgroup: <b>{{ data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].ad_group_name }}</b>
-                      (id: {{
-                        data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].ad_group_id }}, {{ data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].ad_group_status }}),
-                      campaign: <b>{{ data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].campaign_name
-                      }}</b> (id: {{
-  data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].campaign_id }}, {{ data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].campaign_status }}),
-                      CID: {{ data.selectedAudience[0].campaigns[data.currentAdgroupIndex - 1].customer_id }}
-                    </div>
-                  </div>
-                </div>
+
               </template>
             </q-table>
-          </div>
-        </q-card-section>
-        <q-card-section>
-          <div class="row">
-            <div class="col" align="right">
-              <q-btn label="Recalculate" @click="onReclculateAudiencesLog" color="secondary" icon="repeat" class="q-my-md"
-                align="right"></q-btn>
+            <div v-if="data.selectedAudience.length && data.selectedAudience[0].campaigns.length">
+              <q-pagination v-if="data.selectedAudience[0].campaigns.length > 1" v-model="data.currentAdgroupIndex"
+                :min="1" :max="data.selectedAudience[0].campaigns.length" input direction-links />
+              <q-splitter v-model="data.audience_adstree_splitter" class="q-table--bordered">
+                <template v-slot:before>
+                  <div class="q-pa-md">
+                    <q-tree :nodes="[data.selectedAudience[0].adsTree[data.currentAdgroupIndex - 1]]" node-key="type"
+                      selected-color="primary" default-expand-all v-model:selected="data.adsTreeSelecterdNode">
+                      <template v-slot:default-header="prop">
+                        <div v-if="prop.node.status">
+                          <div v-if="prop.node.status == 'ENABLED'">
+                            <div class="text-positive">{{ prop.node.label }}</div>
+                          </div>
+                          <div v-if="prop.node.status == 'PAUSED'">
+                            <div class="text-warning">{{ prop.node.label }}</div>
+                          </div>
+                        </div>
+                        <div v-else>{{ prop.node.label }}</div>
+                      </template>
+                    </q-tree>
+                  </div>
+                </template>
+                <template v-slot:after>
+                  <q-tab-panels v-model="data.adsTreeSelecterdNode">
+                    <q-tab-panel name="campaign">
+                      <div
+                        v-html="renderNodeInfo(data.selectedAudience[0].adsTree[data.currentAdgroupIndex - 1], 'campaign')">
+                      </div>
+                    </q-tab-panel>
+                    <q-tab-panel name="customer">
+                      <div
+                        v-html="renderNodeInfo(data.selectedAudience[0].adsTree[data.currentAdgroupIndex - 1], 'customer')">
+                      </div>
+                    </q-tab-panel>
+                    <q-tab-panel name="adgroup">
+                      <div
+                        v-html="renderNodeInfo(data.selectedAudience[0].adsTree[data.currentAdgroupIndex - 1], 'adgroup')">
+                      </div>
+                    </q-tab-panel>
+                  </q-tab-panels>
+                </template>
+              </q-splitter>
             </div>
           </div>
-          <div class="">
+        </q-card-section>
+
+        <q-card-section>
+          <q-expansion-item :default-opened=true :label="data.isLogPanelExpanded ? '' : 'Upload history'"
+            v-model="data.isLogPanelExpanded" style="font-size: 20px;">
+            <div class="row">
+              <div class="col" align="right">
+                <q-btn label="Recalculate" @click="onReclculateAudiencesLog" color="secondary" icon="repeat"
+                  class="q-my-md" align="right"></q-btn>
+              </div>
+            </div>
+            <div class="">
             <q-table title="Upload history" class="qtable-sticky-header" style="height: 300px" flat bordered
               :rows="data.audience_log" row-key="name" :columns="data.audience_status_columns" virtual-scroll
               :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" hide-bottom>
@@ -111,7 +144,8 @@
                   @click="props.toggleFullscreen" class="q-ml-md" />
               </template>
             </q-table>
-          </div>
+            </div>
+          </q-expansion-item>
         </q-card-section>
 
         <q-card-section v-if="data.selectedAudience.length">
@@ -242,7 +276,8 @@ interface ConversionsData {
 interface AudienceWithLog extends AudienceInfo {
   log?: AudienceLog[];
   conversions?: Conversions;
-  campaigns: any[]
+  campaigns: any[];
+  adsTree: any[];
 }
 enum GraphMode {
   cr = 'cr',
@@ -260,6 +295,7 @@ export default defineComponent({
       audience_log: [],
       selectedAudience: [] as AudienceWithLog[],
       currentAdgroupIndex: 1,
+      adsTreeSelecterdNode: null,
       audiences_columns: [
         { name: 'mode', label: 'Mode', field: 'mode' },
         { name: 'name', label: 'Name', field: 'name', sortable: true },
@@ -270,6 +306,7 @@ export default defineComponent({
         { name: 'days_ago_start', label: 'Start', field: 'days_ago_start' },
         { name: 'days_ago_end', label: 'End', field: 'days_ago_end' },
         { name: 'ttl', label: 'TTL', field: 'ttl' },
+        { name: 'created', label: 'Created', field: 'created', format: formatDate },
         { name: 'actions', label: 'Actions', field: '', align: 'center' },
       ],
       audiences_wrap: true,
@@ -288,6 +325,8 @@ export default defineComponent({
         { name: 'job_status', label: 'Job Status', field: 'job_status', sortable: true },
         { name: 'job_failure', label: 'Job Failure', field: 'job_failure', sortable: true },
       ],
+      audience_adstree_splitter: 70,
+      isLogPanelExpanded: true,
       chart: {
         options: {
           chart: {
@@ -437,7 +476,14 @@ export default defineComponent({
         updateConversionsChart(audience.conversions);
       }
     });
-
+    function getNodeInfo(obj: any, prefix: string) {
+      const keys = Object.keys(obj).filter(n => n.startsWith(prefix + '_') && ['id', 'name', 'status'].indexOf(n.substring(prefix.length + 1)) == -1)
+      let info: any = {};
+      for (let key of keys) {
+        info[key] = obj[key];
+      }
+      return keys.length ? info : null;
+    }
     const onFetchAudiencesStatus = async () => {
       data.value.audiences = [];
       data.value.audience_log = [];
@@ -466,8 +512,28 @@ export default defineComponent({
           'days_ago_end': audience.days_ago_end,
           'user_list': audience.user_list,
           'ttl': audience.ttl,
+          'created': audience.created,
           'log': logs,
           'campaigns': audience.campaigns,
+          'adsTree': audience.campaigns ? audience.campaigns.map(i => {
+            return {
+              label: `${i.customer_id} - ${i.customer_name}`,
+              type: 'customer',
+              selected: true,
+              children: [{
+                label: `${i.campaign_id} - ${i.campaign_name} (${i.campaign_status})`,
+                status: i.campaign_status,
+                type: 'campaign',
+                info: getNodeInfo(i, 'campaign'),
+                children: [{
+                  label: `${i.ad_group_id} - ${i.ad_group_name} (${i.ad_group_status})`,
+                  status: i.ad_group_status,
+                  type: 'adgroup',
+                  info: getNodeInfo(i, 'ad_group'),
+                }]
+              }]
+            };
+          }) : {}
         });
       });
       console.log(audiences)
@@ -602,6 +668,26 @@ export default defineComponent({
       }
     }
 
+    const renderNodeInfo = (node: any, nodeKey: string): string | undefined => {
+      if (node.info && node.type == nodeKey) {
+        let html = '';
+        for (let key of Object.keys(node.info)) {
+          const prop = key.substring(nodeKey.length + 1).replace('_', ' ');
+          html += '<li>' + prop + ': ' + node.info[key] + '</li>';
+        }
+        if (html) {
+          html = '<ul>' + html + '</ul>';
+        }
+        return html;
+      }
+      if (node.children) {
+        for (let child of node.children) {
+          const res = renderNodeInfo(child, nodeKey);
+          if (res) return res;
+        }
+      }
+    }
+
     return {
       store,
       data,
@@ -615,6 +701,7 @@ export default defineComponent({
       onOpenChart,
       formatArray,
       formatFloat,
+      renderNodeInfo
     };
   }
 });

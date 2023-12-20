@@ -1052,7 +1052,16 @@ ORDER BY name, date
         # Start listing conversions makes sense from the day when first segment was uploaded to Google Ads
         date_start = min(log_rows, key=lambda i: i.date).date
     if date_end is None:
-      date_end = date.today() - timedelta(days=1)
+      # take last day of audience_log
+      rows = self.execute_query(
+        f"""SELECT DATE(date) as day FROM `{target.bq_dataset_id}.audiences_log`
+        WHERE NAME = '{audience.name}'
+        ORDER BY date DESC LIMIT 1""")
+      if rows:
+        date_end = rows[0].get('day', None)
+        logger.info(f"Detected date_end from audience_log (as last upload): {date_end}")
+      if not date_end:
+        date_end = date.today() - timedelta(days=1)
 
     # NOTE: all events that we ignored for sampling (we picked users for whom those events didn't happen)
     # now are our conversions, but except "app_remove"
