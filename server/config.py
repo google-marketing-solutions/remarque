@@ -221,5 +221,8 @@ def save_config(config: Config, args: argparse.Namespace):
   config_file_name = get_config_url(args)
   with smart_open.open(config_file_name, 'w') as f:
     config_dict =config.to_dict()
+    # NOTE: we're not saving the following parameters as they can be detected in runtime
+    #       and it's be more reliable than taking them from config
     del config_dict['project_id']
+    del config_dict['scheduler_location_id']
     f.write(json.dumps(config_dict))

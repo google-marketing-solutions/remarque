@@ -95,6 +95,7 @@ class CloudSchedulerGateway:
     location_id = self.config.scheduler_location_id
     job_id = self._get_job_id(target.name)
     job_name = f'projects/{project_id}/locations/{location_id}/jobs/{job_id}'
+    cloud_job = None
     try:
       cloud_job = self.client.get_job(scheduler_v1.GetJobRequest(name=job_name))
     except exceptions.NotFound:

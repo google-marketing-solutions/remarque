@@ -528,7 +528,7 @@ def update_schedule():
       "message": "Schedule was not specified"
     }}), 400
   job = Job(enabled, schedule_timezone=schedule_timezone, schedule_time=schedule)
-  logger.info(f'Updating Scheduler Job: {job}')
+  logger.info(f'Updating Scheduler Job: {job}, location_id: {context.config.scheduler_location_id}')
   context.cloud_scheduler.update_job(context.target, job)
   if context.target.notification_email != schedule_email:
     context.target.notification_email = schedule_email
