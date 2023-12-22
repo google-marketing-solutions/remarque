@@ -8,6 +8,9 @@ WITH
       `{source_table}`
     WHERE
       _TABLE_SUFFIX BETWEEN '{date_start}' AND '{date_end}'
+      AND device.operating_system = 'Android'
+      AND device.advertising_id IS NOT NULL
+      AND device.advertising_id NOT IN ('', '00000000-0000-0000-0000-000000000000')
       AND app_info.id = '{app_id}'
       AND event_name IN ({all_events_list})
   ),

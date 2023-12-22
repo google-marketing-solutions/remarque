@@ -293,6 +293,6 @@ class AdsGateway:
       return report
 
 
-    def get_userlist_campaigns_metrics(self, cid, campaigns, date_start, date_end):
+    def get_userlist_campaigns_metrics(self, cid, campaigns: list[str|int], date_start, date_end):
       report = self.report_fetcher.fetch(UserListCampaignMetrics(campaigns, date_start, date_end), cid)
       return report

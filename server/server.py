@@ -410,8 +410,7 @@ def get_base_conversion():
 
   result = context.data_gateway.get_base_conversion(context.target, audience, conversion_window_days, date_start, date_end)
 
-  cr = float(result["cr"])
-  logger.debug(f"Base conversion for audience is {cr}")
+  logger.debug(f'Base conversion for audience is {result["cr"]}')
   return jsonify({"result": result})
 
 
@@ -780,11 +779,11 @@ def get_user_conversions():
     if campaigns:
       logger.debug("Loading Ads campaigns metrics")
       logger.debug(campaigns)
-      cids = set([c.get('customer_id') for c in campaigns])
+      cids = set([c['customer_id'] for c in campaigns])
       if cids and len(cids) > 1:
         logger.warning(f"More than one customer id provided: {cids}")
       for cid in cids:
-        campaign_ids = set([str(c.get('campaign_id')) for c in campaigns])
+        campaign_ids = set([str(c['campaign_id']) for c in campaigns if c['customer_id'] == cid])
         ads_metrics = context.ads_gateway.get_userlist_campaigns_metrics(cid, campaign_ids, date_start.strftime("%Y-%m-%d"), date_end.strftime("%Y-%m-%d"))
         ads_metrics = [{
           "campaign": i['campaign_id'],
