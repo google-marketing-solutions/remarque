@@ -206,9 +206,10 @@
             </template>
             <template v-slot:body-cell-mode="props">
               <q-td :props="props">
-                <q-chip :color="props.row.mode === 'off' ? 'red' : props.row.mode === 'test' ? 'blue' : 'green'" text-color="white" dense
-                  class="text-weight-bolder" square>{{ props.row.mode === 'off' ? 'Off' : props.row.mode === 'test' ?
-                    'Test ' : 'Prod' }}</q-chip>
+                <q-chip :color="props.row.mode === 'off' ? 'red' : props.row.mode === 'test' ? 'blue' : 'green'"
+                  text-color="white" dense class="text-weight-bolder" square>{{ props.row.mode === 'off' ? 'Off' :
+                    props.row.mode === 'test' ?
+                      'Test ' : 'Prod' }}</q-chip>
               </q-td>
             </template>
             <template v-slot:body-cell-query="props">
@@ -394,7 +395,7 @@
 <script lang="ts">
 import { defineComponent, ref, watch, computed } from 'vue';
 import { AudienceInfo, AudienceMode, configurationStore } from 'stores/configuration';
-import { getApi, postApi, postApiUi, getApiUi } from 'boot/axios';
+import { getApi, postApiUi, getApiUi } from 'boot/axios';
 import { useQuasar, QForm } from 'quasar';
 import { formatArray, formatDate, isFinite } from '../helpers/utils';
 
@@ -535,7 +536,7 @@ export default defineComponent({
         });
         return;
       }
-      const loading = $q.notify('Loading stat');
+      const loading = $q.notify({ message: 'Loading stat', timeout: 0 });
       data.value.ga_stat_loading = true;
       getApi('stat', { days_ago_start, days_ago_end }, loading)
         .then((response) => {
@@ -670,26 +671,19 @@ export default defineComponent({
         $q.dialog({ message: 'Please specify an app_id' });
         return;
       }
-      $q.loading.show({ message: 'Getting a preview of the audience...' });
-      const loading = () => $q.loading.hide();
-      try {
-        let res = await postApi('audience/preview', { audience: obj }, loading);
+
+      let res = await postApiUi('audience/preview', { audience: obj }, 'Getting a preview of the audience...');
+      if (res) {
         console.log(res.data);
         $q.dialog({
           title: 'Audience preview',
           message: `The audience with current conditions returned ${res.data.users_count} users.\nPlease note that it's a total number of users to be split onto treatment/control groups and it doens't take into account TTL (users readded from previous days because of ttl>1)`
         });
       }
-      catch (e: any) {
-        $q.dialog({
-          title: 'Error',
-          message: e.message,
-        });
-      }
     };
     const onAudienceGetQuery = async () => {
       const obj = getAudienceFromForm();
-      let res = await postApiUi('audience/query', { audience: obj }, $q, 'Getting query...');
+      let res = await postApiUi('audience/query', { audience: obj }, 'Getting query...');
       if (!res?.data) {
         return;
       }
@@ -712,7 +706,7 @@ export default defineComponent({
           audience: obj,
           date_start: data.value.powerAnalysis.from,
           date_end: data.value.powerAnalysis.to,
-        }, $q, 'Calculating baseline conversion...');
+        }, 'Calculating baseline conversion...');
         if (!res?.data?.result) {
           return;
         }
@@ -730,7 +724,7 @@ export default defineComponent({
         alpha: data.value.powerAnalysis.alpha,
         ratio: data.value.powerAnalysis.ratio,
         uplift: data.value.powerAnalysis.uplift,
-      }, $q, 'Calculating power...');
+      }, 'Calculating power...');
       if (!res?.data) {
         return;
       }
@@ -757,9 +751,6 @@ export default defineComponent({
       store.removeAudience(props.key);
     }
     const onAudiencesUpload = async () => {
-      $q.loading.show({ message: 'Uploading audiences...' });
-      const loading = () => $q.loading.hide();
-
       const audiences = store.audiences.map((row) => {
         return {
           name: row.name,
@@ -776,22 +767,15 @@ export default defineComponent({
           // NOTE: we're not sending id, user_list
         }
       });
-      try {
-        let res = await postApi('audiences', { audiences }, loading);
+      let res = await postApiUi('audiences', { audiences }, 'Uploading audiences...');
+      if (res) {
         $q.notify({ message: 'Audiences successfully updated', icon: 'success', timeout: 1000 });
-        //store.updateAudiencesStat(res.data.results);
-        // TODO: store.commit()
         store.deletedAudiences = [];
         store.audiences.map((obj) => {
           obj.isNew = false; obj.isChanged = false;
         });
       }
-      catch (e: any) {
-        $q.dialog({
-          title: 'Error',
-          message: e.message,
-        });
-      }
+      // TODO: store.commit()
     }
     const onAudiencesDownload = async () => {
       $q.dialog({
@@ -800,20 +784,12 @@ export default defineComponent({
         cancel: true,
         persistent: true
       }).onOk(async () => {
-        $q.loading.show({ message: 'Loading audiences...' });
-        const loading = () => $q.loading.hide();
-        try {
-          let res = await getApi('audiences', {}, loading);
+        let res = await getApiUi('audiences', {}, 'Loading audiences...');
+        if (res) {
           const audiences = res.data.results;
           store.audiences = audiences;
           // TODO: store.resetState();
           store.deletedAudiences = [];
-        }
-        catch (e: any) {
-          $q.dialog({
-            title: 'Error',
-            message: e.message,
-          });
         }
       });
     }

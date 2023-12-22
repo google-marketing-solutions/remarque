@@ -1,6 +1,6 @@
 import { boot } from 'quasar/wrappers';
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
-import { QVueGlobals } from 'quasar';
+import { QVueGlobals, Loading, QSpinnerGears, Dialog, DialogChainObject } from 'quasar';
 
 declare module '@vue/runtime-core' {
   interface ComponentCustomProperties {
@@ -49,7 +49,7 @@ async function postApi(
   url: string,
   params: any,
   loading?: () => void,
-  options?: AxiosRequestConfig
+  options?: AxiosRequestConfig,
 ) {
   try {
     const res = await api.post(getUrl(url), params, options);
@@ -72,16 +72,34 @@ async function postApi(
 async function postApiUi(
   url: string,
   params: any,
-  $q: QVueGlobals,
   message: string,
-  options?: AxiosRequestConfig
+  options?: AxiosRequestConfig,
 ) {
-  $q.loading.show({ message });
-  const loading = () => $q.loading.hide();
+  const constroller = new AbortController();
+  let progressDlg: DialogChainObject|null = Dialog.create({
+    message,
+    progress: true, // we enable default settings
+    persistent: true, // we want the user to not be able to close it
+    ok: false, // we want the user to not be able to close it
+    cancel: true,
+    focus: 'none',
+  });
+  progressDlg.onCancel(() => {
+    progressDlg = null;
+    constroller.abort();
+  });
+
+  // Loading.show({
+  //   message: message,
+  // });
+  //const loading = () => Loading.hide();
+  const loading = () => progressDlg && progressDlg.hide();
+  options = options || {};
+  options.signal = constroller.signal;
   try {
     return await postApi(url, params, loading, options);
   } catch (e: any) {
-    $q.dialog({
+    Dialog.create({
       title: 'Error',
       message: e.message,
     });
@@ -125,7 +143,7 @@ async function getFile(url: string, params?: any, loading?: () => void) {
     downloadFile(
       res.data,
       res.headers['filename'] || 'google-ads.yaml',
-      'application/text'
+      'application/text',
     );
     return res;
   } catch (e: any) {
@@ -152,19 +170,13 @@ async function getApi(url: string, params?: any, loading?: () => void) {
   }
 }
 
-async function getApiUi(
-  url: string,
-  params: any,
-  $q: QVueGlobals,
-  message: string
-) {
-  //const $q = useQuasar();
-  $q.loading.show({ message });
-  const loading = () => $q.loading.hide();
+async function getApiUi(url: string, params: any, message: string) {
+  Loading.show({ message });
+  const loading = () => Loading.hide();
   try {
     return await getApi(url, params, loading);
   } catch (e: any) {
-    $q.dialog({
+    Dialog.create({
       title: 'Error',
       message: e.message,
     });

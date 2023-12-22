@@ -84,7 +84,8 @@
         <div class="row q-pa-md">
           <q-file class="col-3" v-model="data.file" label="Select google-ads.yaml" accept=".yaml"></q-file>
           <div class="col">
-            <q-btn label="Upload google-ads.yaml" color="primary" @click="uploadGoogleAdsConfig" class="q-ml-md q-my-xs"></q-btn>
+            <q-btn label="Upload google-ads.yaml" color="primary" @click="uploadGoogleAdsConfig"
+              class="q-ml-md q-my-xs"></q-btn>
             <q-btn label="Download google-ads.yaml" color="primary" @click="downloadGoogleAdsConfig"
               class="q-ml-md q-my-xs"></q-btn>
             <q-btn label="Validate" color="primary" @click="validateGoogleAdsConfig" class="q-ml-md q-my-xs"></q-btn>
@@ -112,7 +113,7 @@
 <script lang="ts">
 import { useQuasar } from 'quasar';
 import { onBeforeRouteLeave, useRouter, useRoute } from 'vue-router'
-import { getApiUi, postApi, getFile } from 'boot/axios';
+import { postApiUi, getFile } from 'boot/axios';
 import { States, configurationStore } from 'stores/configuration';
 import { defineComponent, ref } from 'vue';
 
@@ -122,26 +123,14 @@ export default defineComponent({
   setup: () => {
     const store = configurationStore();
     const $q = useQuasar();
-    const router = useRouter();
-    const route = useRoute();
 
     const onGA4Connect = async () => {
-      $q.loading.show({ message: 'Testing GA4 data access...' });
-      const loading = () => $q.loading.hide();
-      try {
-        let res = await postApi('setup/connect_ga4', {
-          ga4_project: store.ga4_project,
-          ga4_dataset: store.ga4_dataset,
-          ga4_table: store.ga4_table,
-        }, loading);
-        $q.dialog({ ok: true, message: 'Successfully connected' });
-      }
-      catch (e: any) {
-        $q.dialog({
-          title: 'Error',
-          message: e.message,
-        });
-      }
+      let res = await postApiUi('setup/connect_ga4', {
+        ga4_project: store.ga4_project,
+        ga4_dataset: store.ga4_dataset,
+        ga4_table: store.ga4_table,
+      }, 'Testing GA4 data access...');
+      $q.dialog({ ok: true, message: 'Successfully connected' });
     };
     const onNewTarget = () => {
       store.initTarget({})

@@ -501,7 +501,7 @@ export default defineComponent({
       data.value.resultDialog.show = true;
     }
     const onExecute = async () => {
-      let res = await postApiUi('process', {}, $q, 'Running sampling and uploading...');
+      let res = await postApiUi('process', {}, 'Running sampling and uploading...');
       if (res?.data.result) {
         showExecutionResultDialog(res.data.result);
       }
@@ -510,7 +510,6 @@ export default defineComponent({
       let res = await postApiUi(
         'sampling/run',
         { 'audience': audience ? audience.name : null },
-        $q,
         audience ? 'Running sampling for the audience...' : 'Running sampling for audiences...'
       );
       /* Expect:
@@ -588,7 +587,7 @@ export default defineComponent({
       data.value.audience_log = [];
       let res = await getApiUi('audiences/status',
         { include_log_duplicates: data.value.include_log_duplicates, skip_ads: data.value.skip_ads },
-        $q, 'Fetching audiences status...');
+        'Fetching audiences status...');
       if (!res?.data.result) return;
       const result = res.data.result;
       data.value.audiences_data = result;
@@ -649,7 +648,7 @@ export default defineComponent({
         cancel: true,
         persistent: true
       }).onOk(async () => {
-        await postApiUi('audiences/recalculate_log', {}, $q, 'Recalculating...');
+        await postApiUi('audiences/recalculate_log', {}, 'Recalculating...');
       });
     };
 
@@ -685,7 +684,7 @@ export default defineComponent({
         if (country && country.length) {
           country_str = country.join(',');
         }
-        let res = await getApiUi('conversions/query', { audience: audience.name, date_start, date_end, country: country_str }, $q, 'Fetching the audience conversion uquery...');
+        let res = await getApiUi('conversions/query', { audience: audience.name, date_start, date_end, country: country_str }, 'Fetching the audience conversion uquery...');
         if (!res?.data) {
           return;
         }
@@ -715,7 +714,7 @@ export default defineComponent({
         country,
         events,
         campaigns
-      }, $q, 'Fetching the audience conversion history...');
+      }, 'Fetching the audience conversion history...');
       if (!res) return;
       const results = res.data.results;
       let result;

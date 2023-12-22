@@ -78,7 +78,7 @@ export default defineComponent({
       });
     }
     const onScheduleLoad = async () => {
-      let res = await getApiUi('schedule', {}, $q, 'Fetching Cloud Scheduler job...');
+      let res = await getApiUi('schedule', {}, 'Fetching Cloud Scheduler job...');
       if (!res) return;
       if (res.data) {
         store.scheduled = res.data.scheduled;
@@ -102,7 +102,7 @@ export default defineComponent({
         schedule: store.schedule,
         schedule_timezone: store.schedule_timezone,
         schedule_email: store.schedule_email,
-      }, $q, 'Updating Cloud Scheduler job...');
+      }, 'Updating Cloud Scheduler job...');
     };
 
     return {
