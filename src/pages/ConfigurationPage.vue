@@ -112,7 +112,7 @@
 
 <script lang="ts">
 import { useQuasar } from 'quasar';
-import { onBeforeRouteLeave, useRouter, useRoute } from 'vue-router'
+import { onBeforeRouteLeave } from 'vue-router'
 import { postApiUi, getFile } from 'boot/axios';
 import { States, configurationStore } from 'stores/configuration';
 import { defineComponent, ref } from 'vue';
@@ -229,12 +229,11 @@ export default defineComponent({
     onBeforeRouteLeave((to, from) => {
       if (store.is_new) {
         const answer = window.confirm(
-          'Do you really want to leave? you have unsaved changes!'
+          'You have unsaved changes. Do you really want to leave?'
         )
         // cancel the navigation and stay on the same page
         if (!answer) return false
         store.activateTarget(store.activeTarget);
-        //store.switchConfiguration(store.activeTarget);
       }
     });
 

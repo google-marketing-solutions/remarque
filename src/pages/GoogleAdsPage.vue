@@ -88,14 +88,6 @@
                   </div>
                 </q-td>
               </template>
-              <template v-slot:bottom>
-                <!-- <div class="row">
-                  <div v-if="data.selectedAudience.length > 1" class="q-mx-lg col">
-                    <q-icon size="2em" name="warning" color="red"/>You have more than one campaign targeted the audience.<br/>
-                  </div>
-                </div> -->
-
-              </template>
             </q-table>
             <div v-if="data.selectedAudience.length && data.selectedAudience[0].campaigns.length">
               <q-pagination v-if="data.selectedAudience[0].campaigns.length > 1" v-model="data.currentAdgroupIndex"
