@@ -289,6 +289,11 @@ class AdsGateway:
       cids = self.query_executor.expand_mcc(self.customer_id)
       logger.debug(f"CID {self.customer_id} expanded to list of customers: {cids}")
       report = self.report_fetcher.fetch(UserListCampaigns(userlist), cids)
+      ocid_report = self.report_fetcher.fetch('SELECT * FROM builtin.ocid_mapping', cids)
+      ocid_mapping = ocid_report.to_dict('account_id', 'ocid', 'scalar')
+      for row in report:
+        ocid = ocid_mapping[row.customer_id]
+        row['ocid'] = ocid
       logger.debug(report)
       return report
 

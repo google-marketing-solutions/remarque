@@ -50,11 +50,6 @@
                 <q-td :props="props">
                   <q-btn dense round flat color="grey" @click="onOpenChart(props.row)" icon="query_stats"></q-btn>
                   <q-btn-dropdown dense icon="electric_bolt">
-                    <!-- <template v-slot:label>
-                      <div class="row items-center no-wrap" >
-                        <q-icon left name="electric_bolt" style="margin-right: 0;"/>
-                      </div>
-                    </template> -->
                     <q-list>
                       <q-item clickable v-close-popup @click="onSampling(props.row)">
                         <q-item-section>
@@ -124,12 +119,17 @@
                         v-html="renderNodeInfo(data.selectedAudience[0].adsTree[data.currentAdgroupIndex - 1], 'customer')">
                       </div>
                     </q-tab-panel>
-                    <q-tab-panel name="adgroup">
+                    <q-tab-panel name="ad_group">
                       <div
-                        v-html="renderNodeInfo(data.selectedAudience[0].adsTree[data.currentAdgroupIndex - 1], 'adgroup')">
+                        v-html="renderNodeInfo(data.selectedAudience[0].adsTree[data.currentAdgroupIndex - 1], 'ad_group')">
                       </div>
                     </q-tab-panel>
-                  </q-tab-panels>
+                      <q-tab-panel name="user_list">
+                        <div
+                          v-html="renderNodeInfo(data.selectedAudience[0].adsTree[data.currentAdgroupIndex - 1], 'user_list')">
+                        </div>
+                      </q-tab-panel>
+                    </q-tab-panels>
                 </template>
               </q-splitter>
             </div>
@@ -611,6 +611,7 @@ export default defineComponent({
               label: `${i.customer_id} - ${i.customer_name}`,
               type: 'customer',
               selected: true,
+              info: getNodeInfo(i, 'customer'),
               children: [{
                 label: `${i.campaign_id} - ${i.campaign_name} (${i.campaign_status})`,
                 status: i.campaign_status,
@@ -619,8 +620,13 @@ export default defineComponent({
                 children: [{
                   label: `${i.ad_group_id} - ${i.ad_group_name} (${i.ad_group_status})`,
                   status: i.ad_group_status,
-                  type: 'adgroup',
+                  type: 'ad_group',
                   info: getNodeInfo(i, 'ad_group'),
+                  children: [{
+                    label: `${i.user_list_id} - ${i.user_list_name}`,
+                    type: 'user_list',
+                    info: getNodeInfo(i, 'user_list')
+                  }]
                 }]
               }]
             };
@@ -796,7 +802,11 @@ export default defineComponent({
         let html = '';
         for (let key of Object.keys(node.info)) {
           const prop = key.substring(nodeKey.length + 1).replace('_', ' ');
-          html += '<li>' + prop + ': ' + node.info[key] + '</li>';
+          if (prop === 'link') {
+            html = `<li><a href='${node.info[key]}' target='_blank'>Open in Google Ads</a></li>` + html;
+          } else {
+            html += '<li>' + prop + ': ' + node.info[key] + '</li>';
+          }
         }
         if (html) {
           html = '<ul>' + html + '</ul>';

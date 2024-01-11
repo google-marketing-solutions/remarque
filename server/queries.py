@@ -60,7 +60,6 @@ class UserListCampaigns(BaseQuery):
   def __init__(self, list_name: Union[str,list]):
     self.query_text = f"""
 SELECT
-  ad_group_criterion.user_list.user_list as user_list,
   customer.id,
   customer.descriptive_name as customer_name,
   campaign.id,
@@ -72,16 +71,21 @@ SELECT
   ad_group.name,
   ad_group.status,
   user_list.name,
-  user_list.description
+  user_list.description,
+  user_list.id,
+  user_list.size_for_search,
+  user_list.size_for_display,
+  user_list.eligible_for_search,
+  user_list.eligible_for_display,
 FROM ad_group_criterion
 """
     if list_name and isinstance(list_name, str):
       condition = f"user_list.name = '{list_name}'"
-    # otherwise return all jobs for customer match lists
     elif list_name and isinstance(list_name, list):
       parts = [f"'{i}'" for i in list_name]
       condition = f"user_list.name IN ({','.join(parts)})"
     else:
+      # get all remarque user list (not actually used at the momemnt)
       condition = "ad_group_criterion.type = USER_LIST AND user_list.description = 'Remarque user list' AND ad_group_criterion.status = ENABLED"
     self.query_text = self.query_text + '\nWHERE\n' + condition
 

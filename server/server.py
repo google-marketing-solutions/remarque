@@ -659,6 +659,8 @@ def get_audiences_status():
       audience_campaigns = [i for i in campaigns if i.user_list_name == audience.name]
     audience_dict['log'] = []
     audience_dict['campaigns'] = [{
+      "customer_id": i.customer_id,
+      "customer_name": i.customer_name,
       "campaign_id": i.campaign_id,
       "campaign_name": i.campaign_name,
       "campaign_status": i.campaign_status,
@@ -667,9 +669,18 @@ def get_audiences_status():
       "ad_group_id": i.ad_group_id,
       "ad_group_name": i.ad_group_name,
       "ad_group_status": i.ad_group_status,
-      "customer_id": i.customer_id,
-      "customer_name": i.customer_name } for i in audience_campaigns]
-
+      "user_list_id": i.user_list_id,
+      "user_list_name": i.user_list_name,
+      "user_list_description": i.user_list_description,
+      "user_list_size_for_search": i.user_list_size_for_search,
+      "user_list_size_for_display": i.user_list_size_for_display,
+      "user_list_eligible_for_search": i.user_list_eligible_for_search,
+      "user_list_eligible_for_display": i.user_list_eligible_for_display,
+      "customer_link": f"https://ads.google.com/aw/overview?ocid={i.ocid}",
+      "campaign_link": f"https://ads.google.com/aw/adgroups?campaignId={i.campaign_id}&ocid={i.ocid}",
+      "ad_group_link": f"https://ads.google.com/aw/audiences/summary?campaignId={i.campaign_id}&adGroupId={i.ad_group_id}&ocid={i.ocid}",
+      "user_list_link": f"https://ads.google.com/aw/audiences/management/details?ocid={i.ocid}&userListId={i.user_list_id}"
+    } for i in audience_campaigns]
     if audience_log:
       audience_dict['log'] = []
       for log_item in audience_log:
