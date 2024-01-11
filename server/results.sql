@@ -11,30 +11,37 @@ WITH
       AND device.advertising_id IS NOT NULL
       AND device.advertising_id NOT IN ('', '00000000-0000-0000-0000-000000000000')
       AND _TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
+      AND app_info.id = '{app_id}'
       AND event_name IN ({events})
   ),
   conversions AS (
     SELECT *
     FROM all_conversions
       JOIN `{all_users_table}` USING(user)
-    WHERE rr = 1
+    WHERE
       {SEARCH_CONDITIONS}
   ),
-  test_converted AS (
-    SELECT
-      DISTINCT u.user, reg_date
+  test_converted_prepare AS (
+    SELECT DISTINCT
+       u.user, reg_date, rank() over(partition by u.user order by reg_date) rr
     FROM
       `{test_users_table}` u
       JOIN conversions c ON u.user=c.user AND u._TABLE_SUFFIX=c.reg_date
     WHERE _TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
   ),
-  control_converted AS (
-    SELECT
-      DISTINCT u.user, reg_date
+  test_converted AS (
+    SELECT * FROM test_converted_prepare WHERE rr=1
+  ),
+  control_converted_prepare AS (
+    SELECT DISTINCT
+      u.user, reg_date, rank() over(partition by u.user order by reg_date) rr
     FROM
       `{control_users_table}` u
       JOIN conversions c ON u.user=c.user AND u._TABLE_SUFFIX=c.reg_date
     WHERE _TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
+  ),
+  control_converted AS (
+    SELECT * FROM control_converted_prepare WHERE rr=1
   ),
   test_counts AS (
     SELECT

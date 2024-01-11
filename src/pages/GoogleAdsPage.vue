@@ -5,8 +5,8 @@
     </div>
     <div class="row" style="margin-top: 20px">
       <q-btn label="Run All" @click="onExecute" :fab="true" color="primary" class="q-mx-md"></q-btn>
-      <q-btn label="Run sampling" @click="onSampling" :fab="true" class="q-mx-md"></q-btn>
-      <q-btn label="Upload audiences" @click="onAudiencesUpload" :fab="true" class="q-mx-md"></q-btn>
+      <q-btn label="Run sampling" @click="onSampling(undefined)" :fab="true" class="q-mx-md"></q-btn>
+      <q-btn label="Upload audiences" @click="onAudiencesUpload(undefined)" :fab="true" class="q-mx-md"></q-btn>
     </div>
 
     <div class="q-mt-md">
@@ -26,8 +26,9 @@
         <q-card-actions class="q-pa-md">
           <q-btn label="Load" icon="download" size="md" @click="onFetchAudiencesStatus" color="primary"
             style="width:130px" class="q-mr-lg" />
-          <q-toggle v-model="data.include_log_duplicates" label="Include duplicates" class="q-mx-md" />
+          <q-toggle v-model="data.include_log_duplicates" label="Include log duplicates" class="q-mx-md" />
           <q-toggle v-model="data.skip_ads" label="Skip Ads info" />
+          <!-- <q-toggle v-model="data.only_active" label="Only active audiences"/> -->
         </q-card-actions>
 
         <q-card-section>
@@ -35,7 +36,7 @@
             <q-table title="Audiences" class="qtable-sticky-header" style="height: 400px" flat bordered
               :rows="data.audiences" row-key="name" :columns="data.audiences_columns" virtual-scroll
               :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" v-model:selected="data.selectedAudience"
-              :wrap-cells="data.audiences_wrap" selection="single">
+              :wrap-cells="data.audiences_wrap" selection="single" :hide-bottom="true">
               <template v-slot:top="props">
                 <div class="col-2 q-table__title">Audiences</div>
                 <q-space />

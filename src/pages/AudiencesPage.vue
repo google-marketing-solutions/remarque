@@ -460,7 +460,7 @@ export default defineComponent({
         { name: 'ttl', label: 'TTL', field: 'ttl' },
         { name: 'mode', label: 'Mode', field: 'mode' },
         { name: 'created', label: 'Created', field: 'created', format: formatDate },
-        { name: 'actions', label: 'Actions', field: '', align: 'center' },
+        { name: 'actions', label: 'Actions', field: '' },
       ],
       audiences_wrap: true,
       ga_stat_loading: false,

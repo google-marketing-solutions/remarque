@@ -1080,9 +1080,9 @@ ORDER BY name, date
     user_table = target.bq_dataset_id + '.' + audience.table_name
     if country:
       country_list = ",".join([f"'{c}'" for c in country])
-      conversions_conditions = f" AND country IN ({country_list})"
+      conversions_conditions = f"country IN ({country_list})"
     else:
-      conversions_conditions = ''
+      conversions_conditions = '1=1'
     query = self._read_file('results.sql')
     query = query.format(**{
       "source_table": ga_table,
@@ -1091,6 +1091,7 @@ ORDER BY name, date
       "day_end": date_end.strftime("%Y%m%d"),
       "all_users_table": target.bq_dataset_id + "." + TABLE_USER_NORMALIZED,
       "SEARCH_CONDITIONS": conversions_conditions,
+      "app_id": audience.app_id,
       "test_users_table": user_table + "_test_*",
       "control_users_table": user_table + "_control_*",
       "date_start": date_start.strftime("%Y-%m-%d"),
