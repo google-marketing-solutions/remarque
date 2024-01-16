@@ -152,9 +152,7 @@ export default defineComponent({
         persistent: true
       }).onOk(async () => {
         // remove on the server
-        $q.loading.show({ message: 'Saving...' });
-        const loading = () => $q.loading.hide();
-        await postApi('setup/delete?target=' + store.activeTarget, {}, loading);
+        await postApiUi('setup/delete?target=' + store.activeTarget, {}, 'Saving...');
         // now remove locally
         let index = store.targets.findIndex(t => t.name === store.activeTarget);
         if (index >= 0) {
@@ -170,24 +168,22 @@ export default defineComponent({
       store.activeTarget = target.name;
     };
     const onSetup = async () => {
-      $q.loading.show({ message: 'Initializing application...' });
-      const loading = () => $q.loading.hide();
-      try {
-        let res = await postApi('setup', {
-          name: store.name,
-          name_org: store.name_org,
-          is_new: store.is_new,
-          ga4_project: store.ga4_project,
-          ga4_dataset: store.ga4_dataset,
-          ga4_table: store.ga4_table,
-          bq_dataset_id: store.bq_dataset_id,
-          ads_client_id: store.ads_client_id,
-          ads_client_secret: store.ads_client_secret,
-          ads_customer_id: store.ads_customer_id,
-          ads_developer_token: store.ads_developer_token,
-          ads_login_customer_id: store.ads_login_customer_id,
-          ads_refresh_token: store.ads_refresh_token,
-        }, loading);
+      let res = await postApiUi('setup', {
+        name: store.name,
+        name_org: store.name_org,
+        is_new: store.is_new,
+        ga4_project: store.ga4_project,
+        ga4_dataset: store.ga4_dataset,
+        ga4_table: store.ga4_table,
+        bq_dataset_id: store.bq_dataset_id,
+        ads_client_id: store.ads_client_id,
+        ads_client_secret: store.ads_client_secret,
+        ads_customer_id: store.ads_customer_id,
+        ads_developer_token: store.ads_developer_token,
+        ads_login_customer_id: store.ads_login_customer_id,
+        ads_refresh_token: store.ads_refresh_token,
+      }, 'Initializing application...');
+      if (res) {
         store.targets = res.data.targets;
         store.is_new = false;
         $q.dialog({
@@ -195,12 +191,6 @@ export default defineComponent({
           message: 'Application successfully initialized',
         }).onDismiss(() => {
           store.activateTarget(store.name);
-        });
-      }
-      catch (e: any) {
-        $q.dialog({
-          title: 'Error',
-          message: e.message,
         });
       }
     }
@@ -244,21 +234,20 @@ export default defineComponent({
     const uploadGoogleAdsConfig = async () => {
       let formData = new FormData();
       formData.append('file', <any>data.value.file);
-      $q.loading.show({ message: 'Saving...' });
-      const loading = () => $q.loading.hide();
-      try {
-        const response = await postApi('setup/upload_ads_cred', formData, loading, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
-        })
-        console.log(response);
-        $q.notify({
-          color: 'green-4',
-          textColor: 'white',
-          icon: 'cloud_upload',
-          message: 'File uploaded successfully'
-        });
+
+      const response = await postApiUi('setup/upload_ads_cred', formData, 'Saving...', {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+      console.log(response);
+      $q.notify({
+        color: 'green-4',
+        textColor: 'white',
+        icon: 'cloud_upload',
+        message: 'File uploaded successfully'
+      });
+      if (response) {
         store.ads_client_id = response.data.client_id;
         store.ads_client_secret = response.data.client_secret;
         store.ads_customer_id = response.data.customer_id;
@@ -275,46 +264,24 @@ export default defineComponent({
           target.ads_refresh_token = store.ads_refresh_token;
         }
       }
-      catch (error: any) {
-        console.error(error);
-        $q.notify({
-          color: 'red-5',
-          textColor: 'white',
-          icon: 'error',
-          message: 'File upload failed: ' + error.message
-        });
-      }
     }
     const validateGoogleAdsConfig = async () => {
-      $q.loading.show({ message: 'Validating...' });
-      const loading = () => $q.loading.hide();
-      try {
-        let config = {
-          ads_client_id: store.ads_client_id,
-          ads_client_secret: store.ads_client_secret,
-          ads_customer_id: store.ads_customer_id,
-          ads_developer_token: store.ads_developer_token,
-          ads_login_customer_id: store.ads_login_customer_id,
-          ads_refresh_token: store.ads_refresh_token,
-        }
-        const response = await postApi('setup/validate_ads_cred', config, loading);
-        console.log(response);
-        $q.notify({
-          color: 'green-4',
-          textColor: 'white',
-          icon: 'cloud_upload',
-          message: 'Ads API credentials validated successfully'
-        });
+      let config = {
+        ads_client_id: store.ads_client_id,
+        ads_client_secret: store.ads_client_secret,
+        ads_customer_id: store.ads_customer_id,
+        ads_developer_token: store.ads_developer_token,
+        ads_login_customer_id: store.ads_login_customer_id,
+        ads_refresh_token: store.ads_refresh_token,
       }
-      catch (error: any) {
-        console.error(error);
-        $q.notify({
-          color: 'red-5',
-          textColor: 'white',
-          icon: 'error',
-          message: 'Credentials are invalid: ' + error.message
-        });
-      }
+      const response = await postApiUi('setup/validate_ads_cred', config, 'Validating Ads credentials');
+      console.log(response);
+      $q.notify({
+        color: 'green-4',
+        textColor: 'white',
+        icon: 'cloud_upload',
+        message: 'Ads API credentials validated successfully'
+      });
     }
     return {
       store,
