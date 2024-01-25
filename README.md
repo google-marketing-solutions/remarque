@@ -1,5 +1,7 @@
 # Remarque
 
+*This is not an officially supported Google product.*
+
 ## Problem
 We often see low adoption of Remarketing Campaigns (ACe) among Google Ads
 customers

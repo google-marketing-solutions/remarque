@@ -130,7 +130,9 @@ export default defineComponent({
         ga4_dataset: store.ga4_dataset,
         ga4_table: store.ga4_table,
       }, 'Testing GA4 data access...');
-      $q.dialog({ ok: true, message: 'Successfully connected' });
+      if (res) {
+        $q.dialog({ ok: true, message: 'Successfully connected' });
+      }
     };
     const onNewTarget = () => {
       store.initTarget({})
