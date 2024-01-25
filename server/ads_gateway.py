@@ -14,6 +14,7 @@
  limitations under the License.
  """
 
+
 from enum import Enum
 from typing import Union
 from google.ads.googleads.errors import GoogleAdsException

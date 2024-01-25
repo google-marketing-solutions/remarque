@@ -4,6 +4,7 @@ __pycache__
 node_modules
 customers/
 
+config.json*
 *.local
 google-ads.yaml
 

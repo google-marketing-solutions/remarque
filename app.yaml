@@ -1,11 +1,16 @@
 runtime: python311
 default_expiration: 0
-instance_class: F4
+
+#uncomment these lines if longer timeout (>10mins) needed 
+#instance_class: B4
 #basic_scaling:
 #  max_instances: 1
+
+instance_class: F4
 automatic_scaling:
   min_instances: 0
   max_instances: 1
+
 # instance classes and free tier quotas (don't forget to adjust gunicorn's --workers flag):
 #   F1: 256MB / 600MHz - 28 free hours per day (default)
 #   F2: 512MB / 1.2GHz - 14 free hours per day
@@ -16,10 +21,11 @@ automatic_scaling:
 # request timeout:
 #   F - 10 minutes
 #   B - 24 hours
+app_engine_apis: true
 
 env_variables:
   CONFIG: gs://$PROJECT_ID/remarque/config.json
-  GIT_COMMIT: 'ae4fba5fb622133a5c3016c458f967af701fedfa'
+  GIT_COMMIT: cc3220bb185d821d2deba14235ad099a3a11a294
   LOG_LEVEL: DEBUG
   PYTHONPATH: server
 
