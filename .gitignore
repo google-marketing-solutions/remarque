@@ -1,6 +1,7 @@
 __pycache__
 .work
 .venv
+.DS_Store
 node_modules
 customers/
 
