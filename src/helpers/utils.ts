@@ -23,8 +23,10 @@ export function formatArray(val: any) {
   return val;
 }
 
-export function formatDate(val: Date, includeTime = false) {
-  //let ret = val.toISOString().substring(0, '2000-01-01'.length);
+export function formatDate(
+  val: Date | string | null | undefined,
+  includeTime = false,
+) {
   if (!val) return '';
   if (typeof val === 'string') {
     val = new Date(val);

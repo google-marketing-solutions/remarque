@@ -1,4 +1,19 @@
 #!/bin/bash
+
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 COLOR='\033[0;36m' # Cyan
 NC='\033[0m'       # No Color
 RED='\033[0;31m'   # Red (error)
@@ -108,7 +123,7 @@ create_iap() {
     echo -e "${RED}OAuth brand (a.k.a. OAuth consent screen) failed to create, please create it manualy in Cloud Console:\n${NC}https://console.cloud.google.com/apis/credentials/consent"
     return -1
   fi
-  
+
   if [[ ! -n $IAP_BRAND ]]; then
     # IAP OAuth brand doesn't exists, creating
     echo -e "${COLOR}Creating oauth brand (consent screen) for IAP...${NC}"

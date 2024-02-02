@@ -85,7 +85,7 @@ FROM ad_group_criterion
       parts = [f"'{i}'" for i in list_name]
       condition = f"user_list.name IN ({','.join(parts)})"
     else:
-      # get all remarque user list (not actually used at the momemnt)
+      # get all remarque user list (not actually used at the moment)
       condition = "ad_group_criterion.type = USER_LIST AND user_list.description = 'Remarque user list' AND ad_group_criterion.status = ENABLED"
     self.query_text = self.query_text + '\nWHERE\n' + condition
 

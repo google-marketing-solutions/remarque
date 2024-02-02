@@ -293,8 +293,7 @@ class AdsGateway:
       ocid_report = self.report_fetcher.fetch('SELECT * FROM builtin.ocid_mapping', cids)
       ocid_mapping = ocid_report.to_dict('account_id', 'ocid', 'scalar')
       for row in report:
-        ocid = ocid_mapping[row.customer_id]
-        row['ocid'] = ocid
+        row['ocid'] = ocid_mapping.get(row.customer_id)
       logger.debug(report)
       return report
 
