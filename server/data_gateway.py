@@ -310,7 +310,8 @@ class DataGateway:
       sa = f"{self.config.project_id}@appspot.gserviceaccount.com"
       raise Exception(f"Incorrect GA4 table name or the application's service account ({sa}) doesn't have access permission to the BigQuery dataset. Original error: {e}")
 
-    logger.debug("Found GA4 events tables: ", tables)
+    if logger.isEnabledFor(logger.level):
+      logger.debug(f"Found GA4 events tables: {tables}")
     yesterday = (date.today() - timedelta(days=1)).strftime('%Y%m%d')
     # first row should be 'events_intraday_yyymmdd' (for today), and previous one 'events_yyyymmdd' for tomorrow
     found = next((t for t in tables if t == ga4_table + '_' + yesterday), None)
@@ -594,7 +595,7 @@ WHEN NOT MATCHED THEN
         "day_start": day_start,
         "day_end": day_end,
         "app_id": audience.app_id,
-        "countries_clause": f"f.country IN ({countries}) " if audience.countries else "1=1",
+        "countries_clause": f"f.country IN ({countries}) " if audience.countries else "TRUE",
         "countries": countries,
         "all_users_table": target.bq_dataset_id + "." + TABLE_USER_NORMALIZED,
         "all_events_list": all_events_list,
@@ -653,7 +654,7 @@ WHEN NOT MATCHED THEN
         "date_end": date_end.strftime("%Y%m%d"),
         "app_id": audience.app_id,
         "countries": countries,
-        "countries_clause": f"country IN ({countries}) " if audience.countries else "1=1",
+        "countries_clause": f"country IN ({countries}) " if audience.countries else "TRUE",
         "all_events_list": all_events_list,
         "audience_events_list": audience_events_list,
         "date_audience_start": date_audience_start.strftime("%Y%m%d"),
@@ -1082,7 +1083,7 @@ ORDER BY name, date
       country_list = ",".join([f"'{c}'" for c in country])
       conversions_conditions = f"country IN ({country_list})"
     else:
-      conversions_conditions = '1=1'
+      conversions_conditions = 'TRUE'
     query = self._read_file('results.sql')
     query = query.format(**{
       "source_table": ga_table,

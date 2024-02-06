@@ -23,7 +23,7 @@ logging.basicConfig(
     level=logging.INFO,
     datefmt='%H:%M:%S')
 
-loglevel = os.getenv('LOG_LEVEL') or 'DEBUG'
+loglevel = logging.getLevelName(os.getenv('LOG_LEVEL') or 'DEBUG')
 
 if IS_GAE:
   import google.cloud.logging
