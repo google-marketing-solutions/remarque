@@ -106,4 +106,3 @@ WHERE
     condition = f"campaign.id IN ({','.join(campaigns)})"
     condition += f"AND segments.date >= '{date_start}' AND segments.date <= '{date_end}'"
     self.query_text = self.query_text + condition
-

@@ -13,11 +13,11 @@
 # limitations under the License.
 
 WITH
-  all_conversions AS (
+  AllConversions AS (
     SELECT
-      device.advertising_id user,
-      event_date reg_date,
-      rank() over(partition by device.advertising_id order by event_date) rr
+      device.advertising_id AS user,
+      event_date AS reg_date,
+      RANK() OVER (PARTITION BY device.advertising_id ORDER BY event_date) AS rr
     FROM
       `{source_table}`
     WHERE
@@ -28,101 +28,90 @@ WITH
       AND app_info.id = '{app_id}'
       AND event_name IN ({events})
   ),
-  conversions AS (
+  Conversions AS (
     SELECT *
-    FROM all_conversions
-      JOIN `{all_users_table}` USING(user)
+    FROM AllConversions
+      INNER JOIN `{all_users_table}` USING(user)
     WHERE
       {SEARCH_CONDITIONS}
   ),
-  test_converted_prepare AS (
+  TestConvertedPrepare AS (
     SELECT DISTINCT
-       u.user, reg_date, rank() over(partition by u.user order by reg_date) rr
+       U.user, reg_date,
+       RANK() OVER (PARTITION BY U.user ORDER BY reg_date) AS rr
     FROM
-      `{test_users_table}` u
-      JOIN conversions c ON u.user=c.user AND u._TABLE_SUFFIX=c.reg_date
+      `{test_users_table}` AS U
+      INNER JOIN Conversions AS C ON U.user = C.user AND U._TABLE_SUFFIX = C.reg_date
     WHERE _TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
   ),
-  test_converted AS (
-    SELECT * FROM test_converted_prepare WHERE rr=1
+  TestConverted AS (
+    SELECT * FROM TestConvertedPrepare WHERE rr = 1
   ),
-  control_converted_prepare AS (
+  ControlConvertedPrepare AS (
     SELECT DISTINCT
-      u.user, reg_date, rank() over(partition by u.user order by reg_date) rr
+      U.user,
+      reg_date,
+      RANK() OVER (PARTITION BY U.user ORDER BY reg_date) AS rr
     FROM
-      `{control_users_table}` u
-      JOIN conversions c ON u.user=c.user AND u._TABLE_SUFFIX=c.reg_date
+      `{control_users_table}` AS U
+      INNER JOIN Conversions AS C ON U.user = C.user AND U._TABLE_SUFFIX = C.reg_date
     WHERE _TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
   ),
-  control_converted AS (
-    SELECT * FROM control_converted_prepare WHERE rr=1
+  ControlConverted AS (
+    SELECT * FROM ControlConvertedPrepare WHERE rr = 1
   ),
-  test_counts AS (
-    SELECT
-      _TABLE_SUFFIX AS date,
-      count(*) AS user_count
-    FROM `{test_users_table}`
-    WHERE LENGTH(_TABLE_SUFFIX) = 8
-    GROUP BY _TABLE_SUFFIX
-    HAVING _TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
-  ),
-  control_counts AS (
-    SELECT
-      _TABLE_SUFFIX AS date,
-      count(*) AS user_count
-    FROM `{control_users_table}`
-    WHERE LENGTH(_TABLE_SUFFIX) = 8
-    GROUP BY _TABLE_SUFFIX
-    HAVING _TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
-  ),
-  dates AS (
+  Dates AS (
     SELECT GENERATE_DATE_ARRAY('{date_start}', '{date_end}', INTERVAL 1 DAY) AS date_array
   ),
-  dates_formatted AS (
-    SELECT date, FORMAT_DATE('%Y%m%d', date) as date_formatted
-    FROM dates, UNNEST(date_array) AS date
-  ),
-  grouped_conversions AS (
+  DatesFormatted AS (
     SELECT
-      date,
-      (SELECT count(DISTINCT user) FROM test_converted t WHERE t.reg_date = date_formatted) AS test_regs,
-      (SELECT count(DISTINCT user) FROM control_converted t WHERE t.reg_date = date_formatted) AS control_regs,
+      `date`,
+      FORMAT_DATE('%Y%m%d',`date`) AS date_formatted
+    FROM Dates, UNNEST(date_array) AS `date`
+  ),
+  GroupedConversions AS (
+    SELECT
+      `date`,
+      (SELECT COUNT(DISTINCT user) FROM TestConverted AS T WHERE T.reg_date = date_formatted) AS test_regs,
+      (SELECT COUNT(DISTINCT user) FROM ControlConverted AS T WHERE T.reg_date = date_formatted) AS control_regs,
     FROM
-      dates_formatted d
+      DatesFormatted
     ORDER BY 1 ASC
   ),
-  total_counts AS (
-    SELECT
-      DISTINCT DATE(date) as day, total_user_count, total_control_user_count,
-      rank() OVER(PARTITION BY name, format_date('%Y%m%d', date) ORDER BY date DESC) r
-    FROM `{audiences_log}` l
+  TotalCounts AS (
+    SELECT DISTINCT
+      DATE(`date`) AS day,
+      total_user_count,
+      total_control_user_count,
+      RANK() OVER (PARTITION BY name, format_date('%Y%m%d', `date`) ORDER BY `date` DESC) AS r
+    FROM `{audiences_log}` AS l
     WHERE NAME = '{audience_name}'
   ),
-  conversions_by_users AS (
+  ConversionsByUsers AS (
     SELECT
-      date,
-      SUM(test_regs) OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cum_test_regs,
-      SUM(control_regs) OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cum_control_regs,
-      coalesce(t.total_user_count,
-        LAST_VALUE(t.total_user_count IGNORE NULLS)
-        OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
+      `date`,
+      SUM(test_regs) OVER (ORDER BY `date` ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cum_test_regs,
+      SUM(control_regs) OVER (ORDER BY `date` ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cum_control_regs,
+      COALESCE(T.total_user_count,
+        LAST_VALUE(T.total_user_count IGNORE NULLS)
+        OVER (ORDER BY `date` ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
         0
       ) AS total_user_count,
-      coalesce(t.total_control_user_count,
-        LAST_VALUE(t.total_control_user_count IGNORE NULLS)
-        OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
+      COALESCE(T.total_control_user_count,
+        LAST_VALUE(T.total_control_user_count IGNORE NULLS)
+        OVER (ORDER BY `date` ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
         0
       ) AS total_control_user_count
-    FROM grouped_conversions c
-      LEFT JOIN (select * from total_counts where r=1) t ON c.date = t.day
+    FROM GroupedConversions AS C
+      LEFT JOIN (SELECT * FROM TotalCounts WHERE r = 1) AS T ON C.date = T.day
   )
 SELECT
-  date,
+  `date`,
   cum_test_regs,
   cum_control_regs,
   total_user_count,
   total_control_user_count,
-  SAFE_DIVIDE(cum_test_regs, total_user_count) as cr_test,
-  SAFE_DIVIDE(cum_control_regs, total_control_user_count) as cr_control
-FROM conversions_by_users
+  SAFE_DIVIDE(cum_test_regs, total_user_count) AS cr_test,
+  SAFE_DIVIDE(cum_control_regs, total_control_user_count) AS cr_control
+FROM ConversionsByUsers
 ORDER BY 1

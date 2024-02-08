@@ -13,11 +13,11 @@
 # limitations under the License.
 
 WITH
-  event_table AS (
+  EventTable AS (
     SELECT
       device.advertising_id AS user,
-      ARRAY_AGG(event_name) events,
-      SUM(IF(event_name = 'session_start', 1, 0)) n_sessions
+      ARRAY_AGG(event_name) AS events,
+      SUM(IF(event_name = 'session_start', 1, 0)) AS n_sessions
     FROM
       `{source_table}`
     WHERE
@@ -27,31 +27,31 @@ WITH
     GROUP BY
       1
   ),
-  filtered_users AS (
+  FilteredUsers AS (
     SELECT
-      f.user,
-      f.mobile_brand_name as brand,
-      f.operating_system_version as osv,
-      f.days_since_install,
-      f.acquisition_source,
-      f.acquisition_medium,
+      F.user,
+      F.mobile_brand_name AS brand,
+      F.operating_system_version AS osv,
+      F.days_since_install,
+      F.acquisition_source,
+      F.acquisition_medium,
       n_sessions,
-      f.country
+      F.country
     FROM
-      event_table
-      INNER JOIN `{all_users_table}` f USING (user)
+      EventTable
+      INNER JOIN `{all_users_table}` AS F USING (user)
     WHERE
-      {countries_clause} AND
-      f.app_id = '{app_id}' AND
-      {SEARCH_CONDITIONS}
+      {countries_clause}
+      AND F.app_id = '{app_id}'
+      AND {SEARCH_CONDITIONS}
   )
-  SELECT
-    DISTINCT user,
-    brand,
-    osv,
-    days_since_install,
-    IFNULL(acquisition_source,'') || '_' || IFNULL(acquisition_medium,'') as src,
-    n_sessions,
-    country
-  FROM
-    filtered_users
+SELECT DISTINCT
+  user,
+  brand,
+  osv,
+  days_since_install,
+  IFNULL(acquisition_source,'') || '_' || IFNULL(acquisition_medium,'') AS src,
+  n_sessions,
+  country
+FROM
+  FilteredUsers

@@ -161,4 +161,3 @@ def upload_customer_match_audience(context: Context,
     total_control_user_count=total_control_user_count,
     failed_user_count=len(failed_users) if failed_users else 0,
   )
-
