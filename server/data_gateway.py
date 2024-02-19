@@ -266,7 +266,7 @@ class DataGateway:
 
   def execute_query(self, query: str) -> list[dict]:
     ts_start = datetime.now()
-    lines = [f"{i}: {line.strip()}" for i, line in enumerate(query.strip().split('\n'), start=1)]
+    lines = [f"{i}: {line.rstrip()}" for i, line in enumerate(query.strip().split('\n'), start=1)]
     query_logged = "\n".join(lines)
     logger.debug(f'Executing SQL query: \n{query_logged}')
     try:
