@@ -950,6 +950,8 @@ WHERE t1.user = t2.user
     # load new user count
     table_name_prev = self._get_user_segment_table_full_name(target, audience.table_name, 'test', "*")
     suffix = datetime.now().strftime("%Y%m%d") if suffix is None else suffix
+    # we're fetching the number of unique users in all test tables with date suffix below the current
+    # NOTE: actually the fact that a user is in a test table doesn't automatically means it was uploaded to
     query = f"""SELECT count(DISTINCT t.user) as user_count FROM `{test_table_name}` t
 WHERE status = 1 AND NOT EXISTS (
   SELECT * FROM `{table_name_prev}` t0
@@ -1082,9 +1084,19 @@ ORDER BY name, date
     if country:
       country_list = ",".join([f"'{c}'" for c in country])
       conversions_conditions = f"country IN ({country_list})"
+      query_TotalCounts = self._read_file('results_parts_TotalCounts_bycountry.sql')
     else:
       conversions_conditions = 'TRUE'
+      query_TotalCounts = self._read_file('results_parts_TotalCounts_all.sql')
+
     query = self._read_file('results.sql')
+    class Default(dict):
+      """Special dict used for `str.format` to tolerate missing args."""
+
+      def __missing__(self, key):
+        return '{' + key + '}'
+
+    query = query.format_map(Default(TotalCounts = query_TotalCounts))
     query = query.format(**{
       "source_table": ga_table,
       "events": events_list,

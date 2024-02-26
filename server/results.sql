@@ -78,15 +78,7 @@ WITH
       DatesFormatted
     ORDER BY 1 ASC
   ),
-  TotalCounts AS (
-    SELECT DISTINCT
-      DATE(`date`) AS day,
-      total_user_count,
-      total_control_user_count,
-      RANK() OVER (PARTITION BY name, format_date('%Y%m%d', `date`) ORDER BY `date` DESC) AS r
-    FROM `{audiences_log}` AS l
-    WHERE NAME = '{audience_name}'
-  ),
+  {TotalCounts}
   ConversionsByUsers AS (
     SELECT
       `date`,
