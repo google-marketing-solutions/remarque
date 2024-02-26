@@ -42,7 +42,9 @@
           <q-btn label="Load" icon="download" size="md" @click="onFetchAudiencesStatus" color="primary"
             style="width:130px" class="q-mr-lg" />
           <q-toggle v-model="data.include_log_duplicates" label="Include log duplicates" class="q-mx-md" />
-          <q-toggle v-model="data.skip_ads" label="Skip Ads info" />
+          <q-toggle v-model="data.skip_ads" label="Skip Ads info"></q-toggle>
+          <q-icon name="info" size="sm" color="grey"><q-tooltip>Enabling can speed up the loading</q-tooltip></q-icon>
+
           <!-- <q-toggle v-model="data.only_active" label="Only active audiences"/> -->
         </q-card-actions>
 
@@ -623,22 +625,22 @@ export default defineComponent({
           'campaigns': audience.campaigns,
           'adsTree': audience.campaigns ? audience.campaigns.map(i => {
             return {
-              label: `${i.customer_id} - ${i.customer_name}`,
+              label: `CID ${i.customer_id} - ${i.customer_name}`,
               type: 'customer',
               selected: true,
               info: getNodeInfo(i, 'customer'),
               children: [{
-                label: `${i.campaign_id} - ${i.campaign_name} (${i.campaign_status})`,
+                label: `Campaign ${i.campaign_id} - ${i.campaign_name} (${i.campaign_status})`,
                 status: i.campaign_status,
                 type: 'campaign',
                 info: getNodeInfo(i, 'campaign'),
                 children: [{
-                  label: `${i.ad_group_id} - ${i.ad_group_name} (${i.ad_group_status})`,
+                  label: `AdGroup ${i.ad_group_id} - ${i.ad_group_name} (${i.ad_group_status})`,
                   status: i.ad_group_status,
                   type: 'ad_group',
                   info: getNodeInfo(i, 'ad_group'),
                   children: [{
-                    label: `${i.user_list_id} - ${i.user_list_name}`,
+                    label: `UserList ${i.user_list_id} - ${i.user_list_name}`,
                     type: 'user_list',
                     info: getNodeInfo(i, 'user_list')
                   }]
