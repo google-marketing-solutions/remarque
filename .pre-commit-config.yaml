@@ -1,0 +1,22 @@
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+    -   id: end-of-file-fixer
+    -   id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+    -   id: mixed-line-ending
+        files: '.*\.sh'
+        args: [--fix=lf]
+    -   id: check-yaml
+    -   id: check-json
+# using 'local' repo means that the pre-commit tool will find tools locally or globally
+-   repo: local
+    hooks:
+    -   id: yapf
+        name: yapf-formatter
+        entry: yapf
+        args: [--style=google]
+        language: system
+        pass_filenames: false
+        always_run: true
