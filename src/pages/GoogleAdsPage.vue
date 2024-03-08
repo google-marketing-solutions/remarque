@@ -13,6 +13,7 @@
  See the License for the specific language governing permissions and
  limitations under the License.
 -->
+
 <template>
   <q-page class="items-center justify-evenly" padding>
     <div class="row">
@@ -54,6 +55,7 @@
               :rows="data.audiences" row-key="name" :columns="data.audiences_columns" virtual-scroll
               :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" v-model:selected="data.selectedAudience"
               :wrap-cells="data.audiences_wrap" selection="single" :hide-bottom="true">
+
               <template v-slot:top="props">
                 <div class="col-2 q-table__title">Audiences</div>
                 <q-space />
@@ -63,6 +65,7 @@
                 <q-btn flat round dense :icon="props.inFullscreen ? 'fullscreen_exit' : 'fullscreen'"
                   @click="props.toggleFullscreen" class="q-ml-md" />
               </template>
+
               <template v-slot:body-cell-actions="props">
                 <q-td :props="props">
                   <q-btn dense round flat color="grey" @click="onOpenChart(props.row)" icon="query_stats"></q-btn>
@@ -82,14 +85,16 @@
                   </q-btn-dropdown>
                 </q-td>
               </template>
+
               <template v-slot:body-cell-mode="props">
                 <q-td :props="props">
                   <q-chip :color="props.row.mode === 'off' ? 'red' : props.row.mode === 'test' ? 'blue' : 'green'"
                     text-color="white" dense class="text-weight-bolder" square>{{ props.row.mode === 'off' ? 'Off' :
-                      props.row.mode === 'test' ?
-                        'Test ' : 'Prod' }}</q-chip>
+        props.row.mode === 'test' ?
+          'Test ' : 'Prod' }}</q-chip>
                 </q-td>
               </template>
+
               <template v-slot:body-cell-countries="props">
                 <q-td :props="props">
                   <div v-if="data.audiences_wrap">
@@ -102,14 +107,16 @@
                 </q-td>
               </template>
             </q-table>
-            <div v-if="data.selectedAudience.length && data.selectedAudience[0].campaigns.length">
-              <q-pagination v-if="data.selectedAudience[0].campaigns.length > 1" v-model="data.currentAdgroupIndex"
-                :min="1" :max="data.selectedAudience[0].campaigns.length" input direction-links />
+            <div
+              v-if="data.selectedAudience.length && data.selectedAudience[0].ads && data.selectedAudience[0].ads.tree.length">
+              <q-pagination v-if="data.selectedAudience[0].ads.tree.length > 1" v-model="data.currentAdgroupIndex"
+                :min="1" :max="data.selectedAudience[0].ads.tree.length" input direction-links />
               <q-splitter v-model="data.audience_adstree_splitter" class="q-table--bordered">
+
                 <template v-slot:before>
                   <div class="q-pa-md">
-                    <q-tree :nodes="[data.selectedAudience[0].adsTree[data.currentAdgroupIndex - 1]]" node-key="type"
-                      selected-color="primary" default-expand-all v-model:selected="data.adsTreeSelecterdNode">
+                    <q-tree :nodes="[data.selectedAudience[0].ads.tree[data.currentAdgroupIndex - 1]]" node-key="type"
+                      selected-color="primary" default-expand-all v-model:selected="data.adsTreeSelectedNode">
                       <template v-slot:default-header="prop">
                         <div v-if="prop.node.status">
                           <div v-if="prop.node.status == 'ENABLED'">
@@ -124,29 +131,30 @@
                     </q-tree>
                   </div>
                 </template>
+
                 <template v-slot:after>
-                  <q-tab-panels v-model="data.adsTreeSelecterdNode">
+                  <q-tab-panels v-model="data.adsTreeSelectedNode">
                     <q-tab-panel name="campaign">
                       <div
-                        v-html="renderNodeInfo(data.selectedAudience[0].adsTree[data.currentAdgroupIndex - 1], 'campaign')">
+                        v-html="renderNodeInfo(data.selectedAudience[0].ads.tree[data.currentAdgroupIndex - 1], 'campaign')">
                       </div>
                     </q-tab-panel>
                     <q-tab-panel name="customer">
                       <div
-                        v-html="renderNodeInfo(data.selectedAudience[0].adsTree[data.currentAdgroupIndex - 1], 'customer')">
+                        v-html="renderNodeInfo(data.selectedAudience[0].ads.tree[data.currentAdgroupIndex - 1], 'customer')">
                       </div>
                     </q-tab-panel>
                     <q-tab-panel name="ad_group">
                       <div
-                        v-html="renderNodeInfo(data.selectedAudience[0].adsTree[data.currentAdgroupIndex - 1], 'ad_group')">
+                        v-html="renderNodeInfo(data.selectedAudience[0].ads.tree[data.currentAdgroupIndex - 1], 'ad_group')">
                       </div>
                     </q-tab-panel>
-                      <q-tab-panel name="user_list">
-                        <div
-                          v-html="renderNodeInfo(data.selectedAudience[0].adsTree[data.currentAdgroupIndex - 1], 'user_list')">
-                        </div>
-                      </q-tab-panel>
-                    </q-tab-panels>
+                    <q-tab-panel name="user_list">
+                      <div
+                        v-html="renderNodeInfo(data.selectedAudience[0].ads.tree[data.currentAdgroupIndex - 1], 'user_list')">
+                      </div>
+                    </q-tab-panel>
+                  </q-tab-panels>
                 </template>
               </q-splitter>
             </div>
@@ -166,6 +174,7 @@
               <q-table title="Upload history" class="qtable-sticky-header" style="height: 300px" flat bordered
                 :rows="data.audience_log" row-key="name" :columns="data.audience_status_columns" virtual-scroll
                 :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" hide-bottom>
+
                 <template v-slot:top="props">
                   <div class="col-2 q-table__title">Upload history</div>
                   <q-space />
@@ -182,6 +191,7 @@
             <div class="row">
               <div class="col q-pa-xs">
                 <q-banner class="bg-grey-3">
+
                   <template v-slot:avatar><q-icon name="info" color="primary" size="md" style="margin-right: 5px;" />
                     If you don't specify the start date then the day of first upload to Google Ads will be used.<br>
                     If you don't specify the end date then yesterday will be used.
@@ -192,6 +202,7 @@
             <div class="row">
               <div class="col q-pa-xs" style="max-width:250px">
                 <q-input filled v-model="data.conversions_from" mask="####-##-##" label="Start date" clearable>
+
                   <template v-slot:append>
                     <q-icon name="event" class="cursor-pointer">
                       <q-popup-proxy ref="qStartProxy" cover transition-show="scale" transition-hide="scale">
@@ -205,6 +216,7 @@
               </div>
               <div class="col q-pa-xs" style="max-width:250px">
                 <q-input filled v-model="data.conversions_to" mask="####-##-##" label="End date" clearable>
+
                   <template v-slot:append>
                     <q-icon name="event" class="cursor-pointer">
                       <q-popup-proxy ref="qEndProxy" cover transition-show="scale" transition-hide="scale">
@@ -223,33 +235,42 @@
               <div class="col q-pa-xs">
                 <q-input filled v-model="data.conversions_events" label="Conv. event" clearable />
               </div>
-
               <div class="col q-pa-xs">
                 <q-banner class="bg-grey-3">
                   p-val: <q-badge>{{ formatFloat(data.pval, 6) }}</q-badge>
                   <br>If pval &lt;=0.05, then results are statistically significant
                 </q-banner>
               </div>
-
             </div>
             <div class="row">
               <div class="col q-pa-xs">
                 <q-btn label="Load conversions" @click="onLoadConversions" color="primary" icon="query_stats"
                   class="q-my-md"></q-btn>
-                <q-toggle v-model="data.load_ads_graph" label="Load Ads metrics" :disable="!data.selectedAudience[0].campaigns || !data.selectedAudience[0].campaigns.length"/>
+                <q-toggle v-model="data.load_ads_graph" label="Load Ads metrics"
+                  :disable="!(data.selectedAudience[0].ads && data.selectedAudience[0].ads.adgroups.length > 0)" />
                 <q-btn-toggle class="q-mx-lg" v-model="data.conversions_mode" no-wrap outline alight="right" :options="[
-                  { label: 'Conv Rate', value: 'cr' },
-                  { label: 'Absolute', value: 'abs' },
-                ]" />
+        { label: 'Conv Rate', value: 'cr' },
+        { label: 'Absolute', value: 'abs' },
+      ]" />
 
                 <q-btn label="Get query" @click="onGetConversionsQuery" class="q-my-md"></q-btn>
               </div>
             </div>
           </q-banner>
           <apexchart v-if="data.chart.series.length" :options="data.chart.options" :series="data.chart.series"
-            height="600"></apexchart>
+            height="600">
+          </apexchart>
           <apexchart v-if="data.chartAds.series.length" :options="data.chartAds.options" :series="data.chartAds.series"
             height="600"></apexchart>
+          <div v-if="data.selectedAudience[0].ads && data.selectedAudience[0].ads.campaigns.length &&
+        data.selectedAudience[0].conversions &&
+        data.selectedAudience[0].conversions.ads_metrics">
+            <q-pagination v-model="data.currentCampaignIndex" :min="1"
+              :max="data.selectedAudience[0].ads.campaigns.length" input direction-links />
+            <div
+              v-html="data.selectedAudience[0].ads.campaigns[data.currentCampaignIndex - 1].campaign_name + ' (' + data.selectedAudience[0].ads.campaigns[data.currentCampaignIndex - 1].campaign_id + ')'">
+            </div>
+          </div>
         </q-card-section>
       </q-card>
     </div>
@@ -271,7 +292,7 @@
 <style></style>
 
 <script lang="ts">
-import { defineComponent, ref, watch } from 'vue';
+import { computed, defineComponent, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { AudienceInfo, configurationStore } from 'stores/configuration';
 import { postApi, postApiUi, getApiUi } from 'boot/axios';
@@ -296,7 +317,7 @@ interface Conversions {
   start_date: string;
   end_date: string;
   pval: number;
-  ads_metrics?: AdsMetric[];
+  ads_metrics?: Record<string, AdsMetric[]>;
 }
 interface ConversionsData {
   date: string;
@@ -314,8 +335,11 @@ interface AdsMetric {
 interface AudienceWithLog extends AudienceInfo {
   log?: AudienceLog[];
   conversions?: Conversions;
-  campaigns: any[];
-  adsTree: any[];
+  ads: {
+    campaigns: any[];
+    adgroups: any[];
+    tree: any
+  };
 }
 enum GraphMode {
   cr = 'cr',
@@ -330,10 +354,11 @@ export default defineComponent({
     const data = ref({
       audiences: [] as AudienceWithLog[], //TODO: use store.audiences,
       audiences_data: {},
-      audience_log: [],
+      audience_log: [] as AudienceLog[] | undefined,
       selectedAudience: [] as AudienceWithLog[],
       currentAdgroupIndex: 1,
-      adsTreeSelecterdNode: null,
+      currentCampaignIndex: 1,
+      adsTreeSelectedNode: null,
       audiences_columns: [
         { name: 'mode', label: 'Mode', field: 'mode' },
         { name: 'name', label: 'Name', field: 'name', sortable: true },
@@ -345,7 +370,7 @@ export default defineComponent({
         { name: 'days_ago_end', label: 'End', field: 'days_ago_end' },
         { name: 'ttl', label: 'TTL', field: 'ttl' },
         { name: 'created', label: 'Created', field: 'created', format: formatDate },
-        { name: 'actions', label: 'Actions', field: '', align: 'center' },
+        { name: 'actions', label: 'Actions', field: '' },
       ],
       audiences_wrap: true,
       include_log_duplicates: false,
@@ -472,7 +497,7 @@ export default defineComponent({
       conversions_from: <string | undefined>undefined,
       conversions_to: <string | undefined>undefined,
       conversions_selected_countries: <string[]>[],
-      conversions_countries: [],
+      conversions_countries: [] as string[],
       conversions_events: '',
       conversions_mode: GraphMode.cr,
       pval: <number | undefined>undefined,
@@ -568,13 +593,22 @@ export default defineComponent({
     watch(() => data.value.selectedAudience, (newValue: any[]) => {
       data.value.currentAdgroupIndex = 1;
       if (newValue && newValue.length) {
-        let newActiveAudience = newValue[0];
+        let newActiveAudience = <AudienceWithLog>newValue[0];
         data.value.audience_log = newActiveAudience.log;
         data.value.conversions_selected_countries = [];
         data.value.conversions_events = '';
         data.value.conversions_countries = newActiveAudience.countries;
         updateConversionsChart(newActiveAudience.conversions);
-        data.value.load_ads_graph = (newActiveAudience.campaigns && newActiveAudience.campaigns.length > 0);
+        data.value.load_ads_graph = (newActiveAudience.ads && newActiveAudience.ads.campaigns.length > 0);
+      }
+    });
+
+    watch(() => data.value.currentCampaignIndex, (newValue: number) => {
+      if (data.value.selectedAudience && data.value.selectedAudience.length) {
+        const audience = data.value.selectedAudience[0];
+        if (audience.ads && audience.conversions && audience.conversions.ads_metrics) {
+          updateAdsMetricsChart(audience.conversions.ads_metrics);
+        }
       }
     });
 
@@ -584,6 +618,7 @@ export default defineComponent({
         updateConversionsChart(audience.conversions);
       }
     });
+
     function getNodeInfo(obj: any, prefix: string) {
       const keys = Object.keys(obj).filter(n => n.startsWith(prefix + '_') && ['id', 'name', 'status'].indexOf(n.substring(prefix.length + 1)) == -1)
       let info: any = {};
@@ -600,7 +635,6 @@ export default defineComponent({
         'Fetching audiences status...');
       if (!res?.data.result) return;
       const result = res.data.result;
-      data.value.audiences_data = result;
       let audiences = <any[]>[];
       Object.keys(result).map(name => {
         const audience = result[name];
@@ -609,45 +643,67 @@ export default defineComponent({
         if (logs) {
           logs = logs.map((i: any) => { i.date = new Date(i.date); return i; });
         }
-        audiences.push({
-          'mode': audience.mode,
-          'name': audience.name,
-          'app_id': audience.app_id,
-          'countries': audience.countries,
-          'events_include': audience.events_include,
-          'events_exclude': audience.events_exclude,
-          'days_ago_start': audience.days_ago_start,
-          'days_ago_end': audience.days_ago_end,
-          'user_list': audience.user_list,
-          'ttl': audience.ttl,
-          'created': audience.created,
-          'log': logs,
-          'campaigns': audience.campaigns,
-          'adsTree': audience.campaigns ? audience.campaigns.map(i => {
-            return {
-              label: `CID ${i.customer_id} - ${i.customer_name}`,
-              type: 'customer',
-              selected: true,
-              info: getNodeInfo(i, 'customer'),
-              children: [{
-                label: `Campaign ${i.campaign_id} - ${i.campaign_name} (${i.campaign_status})`,
-                status: i.campaign_status,
-                type: 'campaign',
-                info: getNodeInfo(i, 'campaign'),
+        let ads = {
+          campaigns: [],
+          adgroups: [],
+          tree: []
+        };
+        if (audience.campaigns) {
+          let campaigns = audience.campaigns.reduce((r: any, a: any) => {
+            r[a.campaign_id] = r[a.campaign_id] || {};
+            r[a.campaign_id].campaign_id = a.campaign_id;
+            r[a.campaign_id].customer_id = a.customer_id;
+            r[a.campaign_id].campaign_name = a.campaign_name;
+            return r;
+          }, Object.create(null));
+          ads = {
+            campaigns: Object.values(campaigns),
+            adgroups: audience.campaigns,
+            tree: audience.campaigns.map(i => {
+              return {
+                label: `CID ${i.customer_id} - ${i.customer_name}`,
+                type: 'customer',
+                id: i.customer_id,
+                selected: true,
+                info: getNodeInfo(i, 'customer'),
                 children: [{
-                  label: `AdGroup ${i.ad_group_id} - ${i.ad_group_name} (${i.ad_group_status})`,
-                  status: i.ad_group_status,
-                  type: 'ad_group',
-                  info: getNodeInfo(i, 'ad_group'),
+                  label: `Campaign ${i.campaign_id} - ${i.campaign_name} (${i.campaign_status})`,
+                  status: i.campaign_status,
+                  id: i.campaign_id,
+                  type: 'campaign',
+                  info: getNodeInfo(i, 'campaign'),
                   children: [{
-                    label: `UserList ${i.user_list_id} - ${i.user_list_name}`,
-                    type: 'user_list',
-                    info: getNodeInfo(i, 'user_list')
+                    label: `AdGroup ${i.ad_group_id} - ${i.ad_group_name} (${i.ad_group_status})`,
+                    status: i.ad_group_status,
+                    id: i.ad_group_id,
+                    type: 'ad_group',
+                    info: getNodeInfo(i, 'ad_group'),
+                    children: [{
+                      label: `UserList ${i.user_list_id} - ${i.user_list_name}`,
+                      id: i.user_list_id,
+                      type: 'user_list',
+                      info: getNodeInfo(i, 'user_list')
+                    }]
                   }]
                 }]
-              }]
-            };
-          }) : {}
+              };
+            }),
+          }
+        }
+        audiences.push({
+          mode: audience.mode,
+          name: audience.name,
+          app_id: audience.app_id,
+          countries: audience.countries,
+          events_include: audience.events_include,
+          events_exclude: audience.events_exclude,
+          days_ago_start: audience.days_ago_start,
+          days_ago_end: audience.days_ago_end,
+          user_list: audience.user_list,
+          ttl: audience.ttl,
+          created: audience.created,
+          log: logs,
+          ads: ads,
         });
       });
       console.log(audiences)
@@ -685,7 +741,7 @@ export default defineComponent({
           date_end,
           country_str,
           events,
-          data.value.load_ads_graph ? audience.campaigns : null);
+          data.value.load_ads_graph ? audience.ads.campaigns : null);
         updateConversionsChart(audience.conversions);
       }
     };
@@ -720,9 +776,7 @@ export default defineComponent({
     const loadConversions = async (audienceName: string, date_start: string | undefined, date_end: string | undefined, country: string | undefined, events: string | undefined, campaigns?: any): Promise<Conversions | undefined> => {
       data.value.chart.series = [];
       data.value.chartAds.series = [];
-      // NOTE: if 'campaigns' is specified is the same object that was returned from loading audiences statuses
-      // with Ads objects(customer / campaigns / adgroups) and by passing it
-      // we say that we want to fetch campaign's metrics
+      // NOTE: if 'campaigns' is specified it says that we want to fetch campaign's metrics
       let res = await postApiUi('conversions', {
         audience: audienceName,
         date_start,
@@ -747,12 +801,18 @@ export default defineComponent({
       // 'result' object for a particular audience is expected to be: conversions, date_start, date_end, pval, chi
       // 'result.conversions' is an array of objects with fields: date, cum_test_regs, cum_control_regs
       console.log(result);
+      let ads_metrics_grouped = result.ads_metrics ? result.ads_metrics.reduce((r: any, a: any) => {
+        r[a.campaign] = r[a.campaign] || [];
+        r[a.campaign].push(a);
+        return r;
+      }, Object.create(null)) : {};
+
       return {
         data: result.conversions,
         start_date: result.date_start,
         end_date: result.date_end,
         pval: result.pval,
-        ads_metrics: result.ads_metrics
+        ads_metrics: ads_metrics_grouped
       };
     };
 
@@ -762,6 +822,7 @@ export default defineComponent({
       }
       return 0;
     }
+
     const updateConversionsChart = (conversions?: Conversions) => {
       if (!conversions || !conversions.data || !conversions.data.length) {
         data.value.chart.series = [];
@@ -774,7 +835,6 @@ export default defineComponent({
       data.value.conversions_from = conversions.start_date;
       data.value.conversions_to = conversions.end_date;
       data.value.pval = conversions.pval;
-
       let graph_data = {} as Record<string, any>;
       // TODO: should we limit graph with on X axis back only N days from the end date?
       for (const item of conversions.data) {
@@ -795,13 +855,28 @@ export default defineComponent({
         { name: 'control', data: control_data },
       ];
       if (conversions.ads_metrics) {
-        data.value.chartAds.series = [{
-          name: 'users',
-          data: conversions.ads_metrics.map(i => { return { x: i.date, y: i.unique_users }; })
-        }, {
-          name: 'clicks',
-          data: conversions.ads_metrics.map(i => { return { x: i.date, y: i.clicks }; })
-        }];
+        updateAdsMetricsChart(conversions.ads_metrics);
+      }
+    };
+
+    const updateAdsMetricsChart = (ads_metrics: Record<string, AdsMetric[]>) => {
+      const audience = data.value.selectedAudience[0];
+      if (!audience.ads) {
+        // TODO: clear graph
+      } else {
+        const campaign = audience.ads.campaigns[data.value.currentCampaignIndex - 1];
+        const ads_metrics_item = ads_metrics[campaign.campaign_id];
+        if (ads_metrics_item) {
+          data.value.chartAds.series = [{
+            name: 'users',
+            data: ads_metrics_item.map(i => { return { x: i.date, y: i.unique_users }; })
+          }, {
+            name: 'clicks',
+            data: ads_metrics_item.map(i => { return { x: i.date, y: i.clicks }; })
+          }];
+        } else {
+          data.value.chartAds.series = [];
+        }
       }
     };
 
@@ -814,8 +889,21 @@ export default defineComponent({
       }
     }
 
+    const getAdsTreeNode = (node: any, nodeKey: string): any | undefined => {
+      if (node.type == nodeKey) {
+        return node;
+      }
+      if (node.children) {
+        for (let child of node.children) {
+          const res = getAdsTreeNode(child, nodeKey);
+          if (res) return res;
+        }
+      }
+    }
+
     const renderNodeInfo = (node: any, nodeKey: string): string | undefined => {
-      if (node.info && node.type == nodeKey) {
+      node = getAdsTreeNode(node, nodeKey);
+      if (node && node.info) {
         let html = '';
         for (let key of Object.keys(node.info)) {
           const prop = key.substring(nodeKey.length + 1).replace('_', ' ');
@@ -829,12 +917,6 @@ export default defineComponent({
           html = '<ul>' + html + '</ul>';
         }
         return html;
-      }
-      if (node.children) {
-        for (let child of node.children) {
-          const res = renderNodeInfo(child, nodeKey);
-          if (res) return res;
-        }
       }
     }
 
