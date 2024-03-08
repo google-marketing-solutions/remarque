@@ -28,7 +28,7 @@ from env import GAE_LOCATION
 
 class AppNotInitializedError(Exception):
   def __init__(self, msg = None) -> None:
-    super().__init__(msg or "Application is not initialized, please go to Configuration page and run setup")
+    super().__init__(msg or 'Application is not initialized, please go to Configuration page and run setup')
 
 
 class ConfigItemBase:
@@ -36,7 +36,7 @@ class ConfigItemBase:
     # copy class atrributes (with values) into the instance
     members = [
         attr for attr in dir(self)
-        if not attr.startswith("__") and attr != 'update' and attr != 'validate'
+        if not attr.startswith('__') and attr != 'update' and attr != 'validate'
     ]
     for attr in members:
       setattr(self, attr, getattr(self, attr))
@@ -50,7 +50,7 @@ class ConfigItemBase:
       if hasattr(cls, k):
         new_val = kw[k]
         def_val = getattr(cls, k)
-        if (new_val == "" and def_val != ""):
+        if (new_val == '' and def_val != ''):
           new_val = def_val
         setattr(self, k, new_val)
 
@@ -87,30 +87,30 @@ class Config(ConfigItemBase):
 
   def to_dict(self) -> dict:
     values = {
-      "project_id": self.project_id,
-      "scheduler_location_id": self.scheduler_location_id,
-      "targets": []
+      'project_id': self.project_id,
+      'scheduler_location_id': self.scheduler_location_id,
+      'targets': []
     }
     for t in self.targets:
       target_json = {
-        "name": t.name,
-        "ga4_project": t.ga4_project,
-        "ga4_dataset": t.ga4_dataset,
-        "ga4_table": t.ga4_table,
-        "ga4_table": t.ga4_table,
-        "bq_dataset_id": t.bq_dataset_id,
-        "bq_dataset_location": t.bq_dataset_location,
-        "notification_email": t.notification_email,
-        "ads_customer_id": t.ads_customer_id,
-        "ads_developer_token": t.ads_developer_token,
-        "ads_client_id": t.ads_client_id,
-        "ads_client_secret": t.ads_client_secret,
-        "ads_refresh_token": t.ads_refresh_token,
-        "ads_login_customer_id": t.ads_login_customer_id
+        'name': t.name,
+        'ga4_project': t.ga4_project,
+        'ga4_dataset': t.ga4_dataset,
+        'ga4_table': t.ga4_table,
+        'ga4_table': t.ga4_table,
+        'bq_dataset_id': t.bq_dataset_id,
+        'bq_dataset_location': t.bq_dataset_location,
+        'notification_email': t.notification_email,
+        'ads_customer_id': t.ads_customer_id,
+        'ads_developer_token': t.ads_developer_token,
+        'ads_client_id': t.ads_client_id,
+        'ads_client_secret': t.ads_client_secret,
+        'ads_refresh_token': t.ads_refresh_token,
+        'ads_login_customer_id': t.ads_login_customer_id
         #"period_start": t.period_start,
         #"period_end": t.period_end
       }
-      values["targets"].append(target_json)
+      values['targets'].append(target_json)
     return values
 
   def get_targets_names(self):
@@ -138,8 +138,8 @@ def parse_arguments(
 
 
 def find_project_id(args: argparse.Namespace):
-  if getattr(args, "project_id", ''):
-    project_id = getattr(args, "project_id")
+  if getattr(args, 'project_id', ''):
+    project_id = getattr(args, 'project_id')
   _, project_id = google.auth.default()
   return project_id
 
@@ -161,13 +161,13 @@ def get_config(args: argparse.Namespace, fail_ok = False) -> Config:
   config_file_name = get_config_url(args)
   logger.info('Using config file %s', config_file_name)
   try:
-    with smart_open.open(config_file_name, "rb") as f:
+    with smart_open.open(config_file_name, 'rb') as f:
       content = f.read()
   except (FileNotFoundError, google.cloud.exceptions.NotFound) as e:
     logger.error(f'Config file {config_file_name} was not found: {e}')
     if fail_ok:
       logger.warning('Config file was not found but proceeding due to fail_ok=True flag')
-      content = "{}"
+      content = '{}'
     else:
       raise AppNotInitializedError()
 
@@ -181,11 +181,11 @@ def get_config(args: argparse.Namespace, fail_ok = False) -> Config:
       config.targets.append(target)
 
   if len(config.targets) == 1 and not config.targets[0].name:
-    config.targets[0].name = "default"
+    config.targets[0].name = 'default'
 
   # project id (CLI arg overwrites config)
-  if getattr(args, "project_id", ''):
-    config.project_id = getattr(args, "project_id")
+  if getattr(args, 'project_id', ''):
+    config.project_id = getattr(args, 'project_id')
   if not config.project_id:
     config.project_id = find_project_id(args)
 

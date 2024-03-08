@@ -52,7 +52,7 @@ FROM offline_user_data_job"""
       parts = [f"'{i}'" for i in list_name]
       condition = f"offline_user_data_job.customer_match_user_list_metadata.user_list IN ({','.join(parts)})"
     else:
-      condition = "offline_user_data_job.type = CUSTOMER_MATCH_USER_LIST"
+      condition = 'offline_user_data_job.type = CUSTOMER_MATCH_USER_LIST'
     self.query_text = self.query_text + '\nWHERE\n' + condition
 
 

@@ -136,9 +136,9 @@ def upload_customer_match_audience(context: Context,
     total_control_user_count = new_control_user_count
   else:
     # take a AudienceLog entry for the previous day (not for today!)
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now().strftime('%Y-%m-%d')
     audience_log.sort(key=lambda i: i.date, reverse=True)
-    previous_day_log = next((obj for obj in audience_log if obj.date.strftime("%Y-%m-%d") != today), None)
+    previous_day_log = next((obj for obj in audience_log if obj.date.strftime('%Y-%m-%d') != today), None)
     if previous_day_log:
       total_test_user_count = previous_day_log.total_test_user_count + new_test_user_count
       total_control_user_count = previous_day_log.total_control_user_count + new_control_user_count

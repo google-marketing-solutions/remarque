@@ -27,5 +27,5 @@ def app() -> FlaskClient:
 
 
 def test_index(app: FlaskClient) -> None:
-    r = app.get("/")
+    r = app.get('/')
     assert r.status_code == 200

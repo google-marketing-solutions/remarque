@@ -59,9 +59,9 @@ class AdsGateway:
         Returns:
             dict: a mapping from audience name to customer match user list resource
         """
-        logger.info("Creating customer match user lists if needed")
+        logger.info('Creating customer match user lists if needed')
         # Get the list audiences that already exist to create the new ones only
-        query_text = "SELECT user_list.name, user_list.resource_name AS user_list_name FROM user_list"
+        query_text = 'SELECT user_list.name, user_list.resource_name AS user_list_name FROM user_list'
         existing_lists = self.report_fetcher.fetch(query_text, [self.customer_id]).to_list()
         logger.debug('Existing user lists: ')
         logger.debug(existing_lists)
@@ -85,16 +85,16 @@ class AdsGateway:
         logger.info(lists_to_add)
 
         # Now we'll create a list of UserListOperation objects for each user list
-        user_list_service_client = self.googleads_client.get_service("UserListService")
+        user_list_service_client = self.googleads_client.get_service('UserListService')
         user_list_operations = []
         for audience in lists_to_add:
           # Creates the user list operation.
-          user_list_op= self.googleads_client.get_type("UserListOperation")
+          user_list_op= self.googleads_client.get_type('UserListOperation')
 
           # Creates the new user list.
           user_list = user_list_op.create
           user_list.name = audience.name
-          user_list.description = "Remarque user list"
+          user_list.description = 'Remarque user list'
           # A string that uniquely identifies a mobile application from which the data was collected.
           # For iOS, the ID string is the 9 digit string that appears at the end of an App Store URL (for example, "476943146" for "Flood-It! 2" whose App Store link is http://itunes.apple.com/us/app/flood-it!-2/id476943146).
           # For Android, the ID string is the application's package name (for example, "com.labpixies.colordrips" for "Color Drips" given Google Play link https://play.google.com/store/apps/details?id=com.labpixies.colordrips).
@@ -131,10 +131,10 @@ class AdsGateway:
                 used for getting operation success/failure
         """
         offline_user_data_job_service = self.googleads_client.get_service(
-            "OfflineUserDataJobService"
+            'OfflineUserDataJobService'
         )
         # Creates a new offline user data job.
-        offline_user_data_job = self.googleads_client.get_type("OfflineUserDataJob")
+        offline_user_data_job = self.googleads_client.get_type('OfflineUserDataJob')
         offline_user_data_job.type_ = self.googleads_client.enums.OfflineUserDataJobTypeEnum.CUSTOMER_MATCH_USER_LIST
         offline_user_data_job.customer_match_user_list_metadata.user_list = user_list_resource_name
         # user consents (mandatory since March 6, 2024)
@@ -170,7 +170,7 @@ class AdsGateway:
 
         # Issues a request to run the offline user data job for executing all added operations.
         if users:
-            logger.debug("Sending run_offline_user_data_job request to start uploading users")
+            logger.debug('Sending run_offline_user_data_job request to start uploading users')
             offline_user_data_job_service.run_offline_user_data_job(
                 resource_name=offline_user_data_job_resource_name
             )
@@ -181,7 +181,7 @@ class AdsGateway:
 
     def _execute_upload_job(self, offline_user_data_job_service, operations, job_resource_name: str, users: list[str]):
 
-        request = self.googleads_client.get_type("AddOfflineUserDataJobOperationsRequest")
+        request = self.googleads_client.get_type('AddOfflineUserDataJobOperationsRequest')
         request.resource_name = job_resource_name
         # NOTE: AddOfflineUserDataJobOperationsRequest.operations is limited to 100,000 elements per request
         request.operations = operations
@@ -193,12 +193,12 @@ class AdsGateway:
             request=request
         )
         failed_user_ids = None
-        partial_failure = getattr(response, "partial_failure_error", None)
-        if getattr(partial_failure, "code", None) != 0:
+        partial_failure = getattr(response, 'partial_failure_error', None)
+        if getattr(partial_failure, 'code', None) != 0:
             failure_idx = []
-            error_details = getattr(partial_failure, "details", [])
+            error_details = getattr(partial_failure, 'details', [])
             for error_detail in error_details:
-                failure_message = self.googleads_client.get_type("GoogleAdsFailure")
+                failure_message = self.googleads_client.get_type('GoogleAdsFailure')
                 # Retrieve the class definition of the GoogleAdsFailure instance
                 failure_object = type(failure_message).deserialize(
                     error_detail.value
@@ -206,7 +206,7 @@ class AdsGateway:
 
                 for error in failure_object.errors:
                     logger.error(
-                        "A partial failure at index "
+                        'A partial failure at index '
                         f"{error.location.field_path_elements[0].index} occurred.\n"
                         f"Error message: {error.message}\n"
                         f"Error code: {error.error_code}"
@@ -237,21 +237,21 @@ class AdsGateway:
         Returns:
           A list containing the operations to be performed.
         """
-        offline_operation = self.googleads_client.get_type("OfflineUserDataJobOperation")
+        offline_operation = self.googleads_client.get_type('OfflineUserDataJobOperation')
         if overwrite:
           offline_operation.remove_all = True
         operations = [offline_operation]
 
         for user_id in users:
             # Create a User Identifier for each device_id
-            user_identifier = self.googleads_client.get_type("UserIdentifier")
+            user_identifier = self.googleads_client.get_type('UserIdentifier')
             user_identifier.mobile_id = user_id
 
             # Creates a UserData object that represents a member of the user list.
-            user_data = self.googleads_client.get_type("UserData")
+            user_data = self.googleads_client.get_type('UserData')
             user_data.user_identifiers.append(user_identifier)
 
-            offline_operation = self.googleads_client.get_type("OfflineUserDataJobOperation")
+            offline_operation = self.googleads_client.get_type('OfflineUserDataJobOperation')
             offline_operation.create = user_data
 
             operations.append(offline_operation)
@@ -273,10 +273,10 @@ class AdsGateway:
       jobs = []
       for item in report:
           job_dict = {
-              "resource_name": item.resource_name,
-              "status": str(item.status),
-              "failure_reason": item.failure_reason,
-              "user_list": item.user_list
+              'resource_name': item.resource_name,
+              'status': str(item.status),
+              'failure_reason': item.failure_reason,
+              'user_list': item.user_list
           }
           jobs.append(job_dict)
       logger.debug(f"Loaded {len(jobs)} jobs")

@@ -39,11 +39,11 @@ class Job:
       parts = schedule_time.split(':')
       # create daily cron schedule for the time
       hours = parts[0]
-      if hours.startswith("0"):
+      if hours.startswith('0'):
         hours = hours[1:]
       minutes = parts[1]
-      if minutes == "00":
-        minutes = "0"
+      if minutes == '00':
+        minutes = '0'
       self.schedule = f"{minutes} {hours} * * *"
     elif schedule:
       # extract time from a croc schedule
@@ -51,15 +51,15 @@ class Job:
       hours = parts[1]
       if hours.isdigit():
         if len(hours) == 1:
-          hours = "0" + hours
+          hours = '0' + hours
       else:
-        hours = "00"
+        hours = '00'
       minutes = parts[0]
       if minutes.isdigit():
         if len(minutes) == 1:
-          minutes = "0" + minutes
+          minutes = '0' + minutes
       else:
-        minutes = "00"
+        minutes = '00'
       self.schedule_time = f"{hours}:{minutes}"
 
 
@@ -114,7 +114,7 @@ class CloudSchedulerGateway:
       gae_service = os.getenv('GAE_SERVICE')
       routing = scheduler_v1.AppEngineRouting()
       routing.service = gae_service
-      uri = "/api/process?target=" + (target.name if target.name and target.name != 'default' else '')
+      uri = '/api/process?target=' + (target.name if target.name and target.name != 'default' else '')
       print(f"Setting up scheduler for AppEngine at {uri}")
       job = scheduler_v1.Job(
         name=job_name,
@@ -122,7 +122,7 @@ class CloudSchedulerGateway:
           app_engine_routing=routing,
           relative_uri=uri,
           http_method=scheduler_v1.HttpMethod.POST,
-          body=b"{}",
+          body=b'{}',
         ),
         schedule = job.schedule,
         time_zone = job.schedule_timezone,
