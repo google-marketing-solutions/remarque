@@ -19,7 +19,7 @@ import json
 import os
 import math
 import yaml
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 from pprint import pprint
 import traceback
 from flask import Flask, request, jsonify, abort, send_from_directory, send_file, Response
@@ -37,7 +37,7 @@ from env import IS_GAE
 from auth import get_credentials
 from logger import logger
 from context import Context, ContextOptions
-from models import Audience, AudienceLog
+from models import Audience
 from config import Config, ConfigTarget, parse_arguments, get_config, save_config, AppNotInitializedError
 from middleware import run_sampling_for_audience, upload_customer_match_audience, update_customer_match_mappings
 from cloud_scheduler_gateway import Job
@@ -50,10 +50,10 @@ from utils import format_duration
 class JsonEncoder(json.JSONEncoder):
   flask_default: Callable[[Any], Any]
 
-  def default(self, obj):
-    if isinstance(obj, Audience):
-      return obj.to_dict()
-    return JsonEncoder.flask_default(obj)
+  def default(self, o):
+    if isinstance(o, Audience):
+      return o.to_dict()
+    return JsonEncoder.flask_default(o)
 
 
 class JSONProvider(DefaultJSONProvider):
@@ -74,9 +74,8 @@ class JSONProvider(DefaultJSONProvider):
     return DefaultJSONProvider.dumps(self, obj, **kwargs)
 
 
-STATIC_DIR = (
-    os.getenv('STATIC_DIR') or '../dist'
-)  # folder for static content relative to the current module
+STATIC_DIR = (os.getenv('STATIC_DIR') or '../dist'
+             )  # folder for static content relative to the current module
 
 Flask.json_provider_class = JSONProvider
 app = Flask(__name__)
@@ -105,12 +104,14 @@ def _get_config(*, fail_ok=False) -> Config:
   return config
 
 
-def create_context(
-    target_name: str = None, *, create_ads=False, fail_ok=False
-) -> Context:
+def create_context(target_name: str = None,
+                   *,
+                   create_ads=False,
+                   fail_ok=False) -> Context:
   credentials = _get_credentials()
   config = _get_config(fail_ok=fail_ok)
-  target_name = _get_req_arg_str('target') if target_name == None else target_name
+  target_name = _get_req_arg_str(
+      'target') if target_name == None else target_name
   if not target_name:
     if not config.targets:
       target = None
@@ -120,8 +121,8 @@ def create_context(
     elif len(config.targets) > 1:
       # take a default one
       target = next(
-          filter(lambda t: not t.name or t.name == 'default', config.targets), None
-      )
+          filter(lambda t: not t.name or t.name == 'default', config.targets),
+          None)
       if not target:
         # otherwise just the first one
         target = config.targets[0]
@@ -130,7 +131,8 @@ def create_context(
     if not config.targets:
       target = None
     else:
-      target = next(filter(lambda t: t.name == target_name, config.targets), None)
+      target = next(
+          filter(lambda t: t.name == target_name, config.targets), None)
       if not target:
         # but wasn't found in the configuration
         if len(config.targets) == 1:
@@ -138,14 +140,13 @@ def create_context(
         elif target_name == 'default':
           target = config.targets[0]
         else:
-          raise ValueError(f"Unknown configuration name {target_name}")
+          raise ValueError(f'Unknown configuration name {target_name}')
   else:
     target = None
 
-  context = Context(
-      config, target, credentials, ContextOptions(create_ads_gateway=create_ads)
-  )
-  logger.debug(f"Created context for target: {target}")
+  context = Context(config, target, credentials,
+                    ContextOptions(create_ads_gateway=create_ads))
+  logger.debug('Created context for target: %s', target)
   return context
 
 
@@ -154,7 +155,7 @@ def get_configuration():
   config = _get_config()
   result = config.to_dict()
 
-  logger.debug(f"returning configuration: {result}")
+  logger.debug('returning configuration: %s', result)
   return jsonify(result)
 
 
@@ -162,7 +163,7 @@ def get_configuration():
 def setup():
   context = create_context(fail_ok=True)
   params = request.get_json(force=True)
-  logger.info(f"Running setup with params:\n {params}")
+  logger.info('Running setup with params:\n %s', params)
   is_new = params.get('is_new', False)
   name = (params.get('name') or 'default').strip().lower()
   ga4_project = params.get('ga4_project', None)
@@ -172,12 +173,12 @@ def setup():
   context.config.targets = context.config.targets or []
 
   if not ga4_dataset:
-    raise Exception(f"Please specify GA4 dataset")
+    raise ValueError('Please specify GA4 dataset')
 
   if is_new:
     # create new
     if next(filter(lambda t: t.name == name, context.config.targets), None):
-      raise Exception(
+      raise ValueError(
           f'Configuration "{name}" already exists, please choose a different name'
       )
     target = ConfigTarget()
@@ -190,9 +191,11 @@ def setup():
       context.config.targets = [target]
     else:
       name_org = params.get('name_org')
-      target = next(filter(lambda t: t.name == name_org, context.config.targets), None)
+      target = next(
+          filter(lambda t: t.name == name_org, context.config.targets), None)
       if not target:
-        if len(context.config.targets) == 1 and (not name_org or name_org == 'default'):
+        if len(context.config.targets) == 1 and (not name_org or
+                                                 name_org == 'default'):
           target: ConfigTarget = context.config.targets[0]
         else:
           raise Exception(f'Configuration "{name_org}" does not exist')
@@ -203,15 +206,14 @@ def setup():
   target.ga4_table = ga4_table or 'events'
   # TODO: validate ga4_* parameters
   try:
-    ds = context.data_gateway.bq_client.get_dataset(
-        target.ga4_project + '.' + target.ga4_dataset
-    )
+    ds = context.data_gateway.bq_client.get_dataset(target.ga4_project + '.' +
+                                                    target.ga4_dataset)
     logger.debug(
-        f"As GA4 dataset was specified ({ga4_dataset}) we'll use its location '{ds.location}' as the location for our dataset"
-    )
+        "As GA4 dataset was specified (%s) we'll use its location '%s' as the location for our dataset",
+        ga4_dataset, ds.location)
     bq_dataset_location = ds.location
   except BaseException as e:
-    raise Exception(f"An error occurred while accessing GA4 dataset: {e}")
+    raise Exception('"An error occurred while accessing GA4 dataset: {e}')
 
   target.bq_dataset_location = bq_dataset_location
   target.bq_dataset_id = bq_dataset_id or 'remarque'
@@ -238,7 +240,7 @@ def setup():
     _validate_googleads_config(ads_cfg, throw=True)
 
   # save config to the same location where it was read from
-  logger.info(f"Saving new configuration:\n{context.config.to_dict()}")
+  logger.info('Saving new configuration:\n%s', context.config.to_dict())
   save_config(context.config, args)
   # TODO:
   # if name_org := params.get('name_org', None) and name_org != name:
@@ -257,14 +259,15 @@ def setup_delete_target():
   credentials = _get_credentials()
   config = _get_config()
   target_name = _get_req_arg_str('target')
-  logger.info(f"Deleting target {target_name}")
+  logger.info('Deleting target %s', target_name)
   target = next(filter(lambda t: t.name == target_name, config.targets), None)
   if target:
     if target.bq_dataset_id:
       context = Context(config, target, credentials)
       fully_qualified_dataset_id = f"{config.project_id}.{target.bq_dataset_id}"
-      context.data_gateway.bq_client.delete_dataset(fully_qualified_dataset_id, True)
-      logger.debug(f"Deleted target's dataset {fully_qualified_dataset_id}")
+      context.data_gateway.bq_client.delete_dataset(fully_qualified_dataset_id,
+                                                    True)
+      logger.debug("Deleted target's dataset %s", fully_qualified_dataset_id)
     config.targets.remove(target)
 
   save_config(config, args)
@@ -279,7 +282,8 @@ def setup_upload_ads_cred():
     raise ValueError('Expected a file in google-ads.yaml format')
   name = next(iter(names))
   cfg = yaml.load(request.files[name].stream, Loader=yaml.SafeLoader)
-  logger.debug(f"Updating Ads API credentials from google-ads.yam file:\n {cfg}")
+  logger.debug('Updating Ads API credentials from google-ads.yam file:\n %s',
+               cfg)
   cfg['use_proto_plus'] = True
   _validate_googleads_config(cfg, throw=True)
 
@@ -308,7 +312,8 @@ def setup_download_ads_cred():
   file_name = '/tmp/google_ads.yaml'
   with open(file_name, mode='w') as f:
     yaml.safe_dump(ads_config, f)
-  return send_file(file_name, as_attachment=True, download_name='google-ads.yaml')
+  return send_file(
+      file_name, as_attachment=True, download_name='google-ads.yaml')
 
 
 @app.route('/api/setup/validate_ads_cred', methods=['POST'])
@@ -356,9 +361,8 @@ def get_stat() -> Response:
     error_message = {'error': 'days_ago_end is missing or not an integer'}
     return abort(400, error_message)
 
-  results = context.data_gateway.get_ga4_stats(
-      context.target, days_ago_start, days_ago_end
-  )
+  results = context.data_gateway.get_ga4_stats(context.target, days_ago_start,
+                                               days_ago_end)
   return jsonify({'results': results})
 
 
@@ -397,7 +401,8 @@ def calculate_users_for_audience():
   context.data_gateway.ensure_user_normalized(context.target)
   audience = Audience.from_dict(audience_raw)
   audience.ensure_table_name()
-  query = context.data_gateway.get_audience_sampling_query(context.target, audience)
+  query = context.data_gateway.get_audience_sampling_query(
+      context.target, audience)
   rows = context.data_gateway.execute_query(query)
 
   return jsonify({'users_count': len(rows)})
@@ -411,7 +416,8 @@ def get_query_for_audience() -> Response:
   logger.info('Previewing audience')
   logger.debug(audience_raw)
   audience = Audience.from_dict(audience_raw)
-  query = context.data_gateway.get_audience_sampling_query(context.target, audience)
+  query = context.data_gateway.get_audience_sampling_query(
+      context.target, audience)
   return jsonify({'query': query})
 
 
@@ -425,18 +431,19 @@ def get_base_conversion():
   date_start = date.fromisoformat(date_start) if date_start else None
   date_end = params.get('date_end', None) or request.args.get('date_end')
   date_end = date.fromisoformat(date_end) if date_end else None
-  conversion_window_days = params.get('conversion_window', None) or request.args.get(
-      'conversion_window'
-  )
+  conversion_window_days = params.get(
+      'conversion_window', None) or request.args.get('conversion_window')
+  if conversion_window_days:
+    conversion_window_days = int(conversion_window_days)
   logger.info(
-      f"Calculating baseline conversion for audience:\n {audience_raw}\nconversion_window={conversion_window_days}, date_start={date_start}, date_end={date_end}"
-  )
+      'Calculating baseline conversion for audience:\n %s\nconversion_window=%s, date_start=%s, date_end=%s',
+      audience_raw, conversion_window_days, date_start, date_end)
 
-  result = context.data_gateway.get_base_conversion(
-      context.target, audience, conversion_window_days, date_start, date_end
-  )
+  result = context.data_gateway.get_base_conversion(context.target, audience,
+                                                    conversion_window_days,
+                                                    date_start, date_end)
 
-  logger.debug(f'Base conversion for audience is {result["cr"]}')
+  logger.debug('Base conversion for audience is %s', result['cr'])
   return jsonify({'result': result})
 
 
@@ -445,40 +452,40 @@ def get_power_analysis():
   # parameters for power analysis
   cr = request.args.get('cr')
   if not cr:
-    raise Exception('conversion rate (cr) was not specified')
+    raise ValueError('conversion rate (cr) was not specified')
   cr = float(cr)
   power = float(request.args.get('power') or 0.8)  # power
   alpha = float(request.args.get('alpha') or 0.05)  # alpha
-  ratio = float(request.args.get('ratio') or 1)  # ratio of test and control groups
+  ratio = float(request.args.get('ratio') or
+                1)  # ratio of test and control groups
   uplift = float(request.args.get('uplift') or 0.25)  # conversion uplift ratio
   p1 = cr
   p2 = cr * (1 + uplift)
   effect_size = (p1 - p2) / np.sqrt(
-      (p1 * (1 - p1) + p2 * (1 - p2)) / 2
-  )  # Cohen's h for proportions
+      (p1 * (1 - p1) + p2 * (1 - p2)) / 2)  # Cohen's h for proportions
   # Here p1 and p2 are the expected conversion rates in the control and treatment groups, respectively.
 
   analysis = TTestIndPower()
   sample_size = analysis.solve_power(
-      effect_size=effect_size, power=power, alpha=alpha, ratio=ratio
-  )
+      effect_size=effect_size, power=power, alpha=alpha, ratio=ratio)
   sample_size = float(sample_size)
   logger.info(
-      f"Power analysis calculation for parameters: cr={cr}, power={power}, alpha={alpha}, ratio={ratio}, uplift={uplift}, p1={p1}, p2={p2}, effect_size={effect_size}, the resulted sample_size={sample_size}"
-  )
+      'Power analysis calculation for parameters: cr=%s, power=%s, alpha=%s, ratio=%s, uplift=%s, p1=%s, p2=%s, effect_size=%s, the resulted sample_size=%s',
+      cr, power, alpha, ratio, uplift, p1, p2, effect_size, sample_size)
 
   # prop2 = cr  # base conversion rate
   # uplift = 0.25  # expect a 25% relative increase in conversion rate
   new_conversion_rate = cr * (1 + uplift)
   diff = new_conversion_rate - cr
   new_power = proportion.power_proportions_2indep(
-      diff=diff, prop2=cr, nobs1=sample_size
-  )
-  logger.debug(
-      f"new_conversion_rate={new_conversion_rate},diff={diff},new power={new_power}"
-  )
+      diff=diff, prop2=cr, nobs1=sample_size)
+  logger.debug('new_conversion_rate=%s, diff=%s, new power=%s',
+               new_conversion_rate, diff, new_power)
 
-  return jsonify({'sample_size': int(sample_size), 'new_power': new_power.power})
+  return jsonify({
+      'sample_size': int(sample_size),
+      'new_power': new_power.power
+  })
 
 
 @app.route('/api/process', methods=['POST'])
@@ -488,11 +495,13 @@ def process():
   context = create_context(create_ads=True)
   if not context.target:
     raise Exception(
-        f"Target was not set, target uri argument: {_get_req_arg_str('target')}, available targets in the configuration: {context.config.get_targets_names()}"
+        f"Target was not set, target uri argument: {_get_req_arg_str('target')},"
+        f"available targets in the configuration: {context.config.get_targets_names()}"
     )
 
   ts_start = datetime.now()
-  logger.info(f"Starting automated processing for target '{context.target.name}'")
+  logger.info("Starting automated processing for target '%s'",
+              context.target.name)
 
   # TODO: wrap in try--catch to send any error to email
   context.data_gateway.ensure_user_normalized(context.target)
@@ -507,9 +516,8 @@ def process():
       continue
     users_test, users_control = run_sampling_for_audience(context, audience)
     audience_log = audiences_log.get(audience.name, None)
-    log_item = upload_customer_match_audience(
-        context, audience, audience_log, users_test
-    )
+    log_item = upload_customer_match_audience(context, audience, audience_log,
+                                              users_test)
     log.append(log_item)
     result[audience.name] = log_item.to_dict()
 
@@ -518,7 +526,7 @@ def process():
 
   elapsed = datetime.now() - ts_start
   if IS_GAE and context.target.notification_email:
-    subject = f"Remarque {' [' + context.target.name + ']' if context.target.name != 'default' else ''} - sampling completed"
+    subject = f"Remarque {'[' + context.target.name + ']' if context.target.name != 'default' else ''} - sampling completed"
     body = f"Processing of {len(result)} audiences has been completed.\n"
     for val in log:
       body += f"""\nAudience '{val.name}':
@@ -542,15 +550,13 @@ def get_schedule():
   context = create_context()
 
   job = context.cloud_scheduler.get_job(context.target.name)
-  logger.info(f"Loaded Schedule Job info: {job}")
-  return jsonify(
-      {
-          'scheduled': job.enabled,
-          'schedule': job.schedule_time,
-          'schedule_timezone': job.schedule_timezone,
-          'schedule_email': context.target.notification_email,
-      }
-  )
+  logger.info('Loaded Schedule Job info: %s', job)
+  return jsonify({
+      'scheduled': job.enabled,
+      'schedule': job.schedule_time,
+      'schedule_timezone': job.schedule_timezone,
+      'schedule_email': context.target.notification_email,
+  })
 
 
 @app.route('/api/schedule/edit', methods=['POST'])
@@ -563,10 +569,10 @@ def update_schedule():
   schedule_email = params.get('schedule_email')
   if enabled and not schedule:
     return jsonify({'error': {'message': 'Schedule was not specified'}}), 400
-  job = Job(enabled, schedule_timezone=schedule_timezone, schedule_time=schedule)
-  logger.info(
-      f"Updating Scheduler Job: {job}, location_id: {context.config.scheduler_location_id}"
-  )
+  job = Job(
+      enabled, schedule_timezone=schedule_timezone, schedule_time=schedule)
+  logger.info('Updating Scheduler Job: %s, location_id: %s', job,
+              context.config.scheduler_location_id)
   context.cloud_scheduler.update_job(context.target, job)
   if context.target.notification_email != schedule_email:
     context.target.notification_email = schedule_email
@@ -582,14 +588,15 @@ def run_sampling() -> Response:
     - fetch users according to the audience definition
     - do sampling, i.e. split users onto test and control groups
   """
-  logger.info(f"Run sampling for all audiences")
+  logger.info('Run sampling for all audiences')
   context = create_context()
   params = request.get_json(force=True)
-  audience_name = request.args.get('audience', None) or params.get('audience', None)
+  audience_name = request.args.get('audience', None) or params.get(
+      'audience', None)
   context.data_gateway.ensure_user_normalized(context.target)
   audiences = context.data_gateway.get_audiences(context.target)
   result = {}
-  logger.debug(f"Loaded {len(audiences)} audiences")
+  logger.debug('Loaded %s audiences', len(audiences))
   for audience in audiences:
     if audience_name and audience.name != audience_name:
       continue
@@ -600,7 +607,7 @@ def run_sampling() -> Response:
         'test_count': len(users_test),
         'control_count': len(users_control),
     }
-  logger.info(f"Sampling completed with result: {result}")
+  logger.info('Sampling completed with result: %s', result)
 
   return jsonify({'result': result})
 
@@ -616,23 +623,29 @@ def _validate_googleads_config(ads_config, *, throw=False):
     return True
   except Exception as e:
     if throw:
-      raise Exception(f"Validation of Ads credentials failed: {e}")
+      raise Exception(f'Validation of Ads credentials failed: {e}') from None
     return False
 
 
 def _get_ads_config(target: ConfigTarget, assert_non_empty=False):
   ads_config = {
-      'developer_token': target.ads_developer_token,
-      'client_id': target.ads_client_id,
-      'client_secret': target.ads_client_secret,
-      'refresh_token': target.ads_refresh_token,
-      'login_customer_id': str(target.ads_login_customer_id or target.ads_customer_id),
-      'customer_id': str(target.ads_customer_id or target.ads_login_customer_id),
-      'use_proto_plus': True,
+      'developer_token':
+          target.ads_developer_token,
+      'client_id':
+          target.ads_client_id,
+      'client_secret':
+          target.ads_client_secret,
+      'refresh_token':
+          target.ads_refresh_token,
+      'login_customer_id':
+          str(target.ads_login_customer_id or target.ads_customer_id),
+      'customer_id':
+          str(target.ads_customer_id or target.ads_login_customer_id),
+      'use_proto_plus':
+          True,
   }
-  if assert_non_empty and (
-      not ads_config['refresh_token'] or not ads_config['developer_token']
-  ):
+  if assert_non_empty and (not ads_config['refresh_token'] or
+                           not ads_config['developer_token']):
     raise AppNotInitializedError(
         'Google Ads API credentials are not specified, please add them on Configuration page'
     )
@@ -645,12 +658,14 @@ def update_customer_match_audiences():
   logger.info('Uploading audiences to Google Ads')
   context = create_context(create_ads=True)
   params = request.get_json(force=True)
-  audience_name = request.args.get('audience', None) or params.get('audience', None)
+  audience_name = request.args.get('audience', None) or params.get(
+      'audience', None)
   audiences = context.data_gateway.get_audiences(context.target)
   audiences_log = context.data_gateway.get_audiences_log(context.target)
   update_customer_match_mappings(context, audiences)
   # upload audiences users to Google Ads as customer match user lists
-  logger.debug(f"Uploading audiences users to Google Ads as customer match userlists")
+  logger.debug(
+      'Uploading audiences users to Google Ads as customer match userlists')
   result = {}
   log = []
   for audience in audiences:
@@ -661,8 +676,10 @@ def update_customer_match_audiences():
 
     audience_log = audiences_log.get(audience.name, None)
     # load of users for 'today' table (audience_{listname}_test_yyyyMMdd)
-    users = context.data_gateway.load_audience_segment(context.target, audience, 'test')
-    log_item = upload_customer_match_audience(context, audience, audience_log, users)
+    users = context.data_gateway.load_audience_segment(context.target, audience,
+                                                       'test')
+    log_item = upload_customer_match_audience(context, audience, audience_log,
+                                              users)
     log.append(log_item)
     result[audience.name] = log_item.to_dict()
 
@@ -674,13 +691,13 @@ def update_customer_match_audiences():
 def get_audiences_status():
   context = create_context(create_ads=True)
   include_log_duplicates = (
-      request.args.get('include_log_duplicates', type=str) == 'true'
-  )
+      request.args.get('include_log_duplicates', type=str) == 'true')
   audiences = context.data_gateway.get_audiences(context.target)
   audiences_log = context.data_gateway.get_audiences_log(
-      context.target, include_duplicates=include_log_duplicates
-  )
-  user_lists = [i.user_list for i in audiences if i.user_list and i.mode != 'off']
+      context.target, include_duplicates=include_log_duplicates)
+  user_lists = [
+      i.user_list for i in audiences if i.user_list and i.mode != 'off'
+  ]
   skip_ads_loading = request.args.get('skip_ads', type=str) == 'true'
   if skip_ads_loading:
     jobs_status = []
@@ -705,39 +722,57 @@ def get_audiences_status():
     jobs_statuses = []
     audience_campaigns = []
     if audience.user_list:
-      jobs_statuses = [
-          (i['resource_name'], i['status'], i['failure_reason'])
-          for i in jobs_status
-          if i['user_list'] == audience.user_list
+      jobs_statuses = [(i['resource_name'], i['status'], i['failure_reason'])
+                       for i in jobs_status
+                       if i['user_list'] == audience.user_list]
+      audience_campaigns = [
+          i for i in campaigns if i.user_list_name == audience.name
       ]
-      audience_campaigns = [i for i in campaigns if i.user_list_name == audience.name]
     audience_dict['log'] = []
-    audience_dict['campaigns'] = [
-        {
-            'customer_id': i.customer_id,
-            'customer_name': i.customer_name,
-            'campaign_id': i.campaign_id,
-            'campaign_name': i.campaign_name,
-            'campaign_status': i.campaign_status,
-            'campaign_start_date': i.campaign_start_date,
-            'campaign_end_date': i.campaign_end_date,
-            'ad_group_id': i.ad_group_id,
-            'ad_group_name': i.ad_group_name,
-            'ad_group_status': i.ad_group_status,
-            'user_list_id': i.user_list_id,
-            'user_list_name': i.user_list_name,
-            'user_list_description': i.user_list_description,
-            'user_list_size_for_search': i.user_list_size_for_search,
-            'user_list_size_for_display': i.user_list_size_for_display,
-            'user_list_eligible_for_search': i.user_list_eligible_for_search,
-            'user_list_eligible_for_display': i.user_list_eligible_for_display,
-            'customer_link': f"https://ads.google.com/aw/overview?ocid={i.ocid}",
-            'campaign_link': f"https://ads.google.com/aw/adgroups?campaignId={i.campaign_id}&ocid={i.ocid}",
-            'ad_group_link': f"https://ads.google.com/aw/audiences/summary?campaignId={i.campaign_id}&adGroupId={i.ad_group_id}&ocid={i.ocid}",
-            'user_list_link': f"https://ads.google.com/aw/audiences/management/details?ocid={i.ocid}&userListId={i.user_list_id}",
-        }
-        for i in audience_campaigns
-    ]
+    audience_dict['campaigns'] = [{
+        'customer_id':
+            i.customer_id,
+        'customer_name':
+            i.customer_name,
+        'campaign_id':
+            i.campaign_id,
+        'campaign_name':
+            i.campaign_name,
+        'campaign_status':
+            i.campaign_status,
+        'campaign_start_date':
+            i.campaign_start_date,
+        'campaign_end_date':
+            i.campaign_end_date,
+        'ad_group_id':
+            i.ad_group_id,
+        'ad_group_name':
+            i.ad_group_name,
+        'ad_group_status':
+            i.ad_group_status,
+        'user_list_id':
+            i.user_list_id,
+        'user_list_name':
+            i.user_list_name,
+        'user_list_description':
+            i.user_list_description,
+        'user_list_size_for_search':
+            i.user_list_size_for_search,
+        'user_list_size_for_display':
+            i.user_list_size_for_display,
+        'user_list_eligible_for_search':
+            i.user_list_eligible_for_search,
+        'user_list_eligible_for_display':
+            i.user_list_eligible_for_display,
+        'customer_link':
+            f'https://ads.google.com/aw/overview?ocid={i.ocid}',
+        'campaign_link':
+            f'https://ads.google.com/aw/adgroups?campaignId={i.campaign_id}&ocid={i.ocid}',
+        'ad_group_link':
+            f'https://ads.google.com/aw/audiences/summary?campaignId={i.campaign_id}&adGroupId={i.ad_group_id}&ocid={i.ocid}',
+        'user_list_link':
+            f'https://ads.google.com/aw/audiences/management/details?ocid={i.ocid}&userListId={i.user_list_id}',
+    } for i in audience_campaigns]
     if audience_log:
       audience_dict['log'] = []
       for log_item in audience_log:
@@ -753,7 +788,9 @@ def get_audiences_status():
             'total_control_user_count': log_item.total_control_user_count,
         }
         job_status = next(
-            ((j[1], j[2]) for j in jobs_statuses if j[0] == log_item.job_resource_name),
+            ((j[1], j[2])
+             for j in jobs_statuses
+             if j[0] == log_item.job_resource_name),
             None,
         )
         if not job_status is None:
@@ -762,8 +799,7 @@ def get_audiences_status():
           status, failure_reason = None, None
         log_item_dict['job_status'] = status
         log_item_dict['job_failure'] = (
-            failure_reason if failure_reason != 'UNSPECIFIED' else ''
-        )
+            failure_reason if failure_reason != 'UNSPECIFIED' else '')
         audience_dict['log'].append(log_item_dict)
 
   return jsonify({'result': result})
@@ -793,22 +829,19 @@ def get_conversions_query():
   if not audience_name:
     raise ValueError('No audience name was specified')
   logger.info(
-      f"Generating query for conversions for '{audience_name}' audience and {date_start}-{date_end} timeframe"
-  )
+      "Generating query for conversions for '%s' audience and %s-%s timeframe",
+      audience_name, date_start, date_end)
   audiences = context.data_gateway.get_audiences(context.target, audience_name)
   if not audiences:
     raise ValueError(f"No audience with name '{audience_name}' found")
   audience = audiences[0]
   query, date_start, date_end = context.data_gateway.get_user_conversions_query(
-      context.target, audience, date_start, date_end, country, events
-  )
-  return jsonify(
-      {
-          'query': query,
-          'date_start': date_start.strftime('%Y-%m-%d'),
-          'date_end': date_end.strftime('%Y-%m-%d'),
-      }
-  )
+      context.target, audience, date_start, date_end, country, events)
+  return jsonify({
+      'query': query,
+      'date_start': date_start.strftime('%Y-%m-%d'),
+      'date_end': date_end.strftime('%Y-%m-%d'),
+  })
 
 
 @app.route('/api/conversions', methods=['POST'])
@@ -843,8 +876,7 @@ def get_user_conversions():
     if audience_name and audience.name != audience_name:
       continue
     result, date_start, date_end = context.data_gateway.get_user_conversions(
-        context.target, audience, date_start, date_end, country, events
-    )
+        context.target, audience, date_start, date_end, country, events)
     # the result is a list of columns: date, cum_test_regs, cum_control_regs,
     # total_user_count, total_control_user_count
 
@@ -876,27 +908,27 @@ def get_user_conversions():
       if cids and len(cids) > 1:
         logger.warning('More than one customer id provided: %s', cids)
       for cid in cids:
-        campaign_ids = set(
-            [str(c['campaign_id']) for c in campaigns if c['customer_id'] == cid]
-        )
+        campaign_ids = set([
+            str(c['campaign_id']) for c in campaigns if c['customer_id'] == cid
+        ])
         ads_metrics = context.ads_gateway.get_userlist_campaigns_metrics(
             cid,
             campaign_ids,
             date_start.strftime('%Y-%m-%d'),
             date_end.strftime('%Y-%m-%d'),
         )
-        ads_metrics = [
-            {
-                'campaign': i['campaign_id'],
-                'date': date.fromisoformat(i['date']),
-                'unique_users': i['unique_users'],
-                'clicks': i['clicks'],
-                'average_impression_frequency_per_user': i[
-                    'average_impression_frequency_per_user'
-                ],
-            }
-            for i in ads_metrics
-        ]
+        ads_metrics = [{
+            'campaign':
+                i['campaign_id'],
+            'date':
+                date.fromisoformat(i['date']),
+            'unique_users':
+                i['unique_users'],
+            'clicks':
+                i['clicks'],
+            'average_impression_frequency_per_user':
+                i['average_impression_frequency_per_user'],
+        } for i in ads_metrics]
     logger.debug(ads_metrics)
 
     results[audience.name] = {
@@ -931,7 +963,7 @@ def catch_all(path):
     response.headers.remove('ETag')
   response.cache_control.no_cache = True
   response.cache_control.no_store = True
-  logger.debug(f"Static file request {path} processed")
+  logger.debug('Static file request %s processed', path)
   return response
 
 
@@ -951,15 +983,13 @@ def handle_exception(e: Exception):
       debug_info = ''.join(traceback.format_tb(e.__traceback__))
 
     # create and return the JSON response
-    response = jsonify(
-        {
-            'error': {
-                'type': error_type,
-                'message': f"{error_type}: {error_message}",
-                'debugInfo': debug_info,
-            }
+    response = jsonify({
+        'error': {
+            'type': error_type,
+            'message': f'{error_type}: {error_message}',
+            'debugInfo': debug_info,
         }
-    )
+    })
     response.status_code = 500
     return response
     # try:

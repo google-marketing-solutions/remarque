@@ -38,7 +38,7 @@ class OfflineJobQuery(BaseQuery):
     * user_list
   """
   def __init__(self, list_name: Union[str,list]):
-    self.query_text = f"""
+    self.query_text = """
 SELECT
   offline_user_data_job.resource_name AS resource_name,
   offline_user_data_job.status AS status,
@@ -57,8 +57,10 @@ FROM offline_user_data_job"""
 
 
 class UserListCampaigns(BaseQuery):
-  def __init__(self, list_name: Union[str,list]):
-    self.query_text = f"""
+  """Query user lists with campaigns/adgroup where they are used."""
+
+  def __init__(self, list_name: Union[str, list]):
+    self.query_text = """
 SELECT
   customer.id,
   customer.descriptive_name as customer_name,
@@ -86,13 +88,17 @@ FROM ad_group_criterion
       condition = f"user_list.name IN ({','.join(parts)})"
     else:
       # get all remarque user list (not actually used at the moment)
-      condition = "ad_group_criterion.type = USER_LIST AND user_list.description = 'Remarque user list' AND ad_group_criterion.status = ENABLED"
+      condition = """ad_group_criterion.type = USER_LIST AND
+user_list.description = 'Remarque user list' AND
+ad_group_criterion.status = ENABLED"""
     self.query_text = self.query_text + '\nWHERE\n' + condition
 
 
 class UserListCampaignMetrics(BaseQuery):
-  def __init__(self, campaigns: list[str|int], date_start, date_end):
-    self.query_text = f"""
+  """Query campaign metrics"""
+
+  def __init__(self, campaigns: list[str | int], date_start, date_end):
+    self.query_text = """
 SELECT
   campaign.id,
   segments.date as date,
