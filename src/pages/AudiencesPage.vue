@@ -48,9 +48,9 @@
           <q-card-section class="row q-col-gutter-md" style="padding-top: 0;">
             <div class="col-md-auto ">
               <q-table title="GA4 Apps" style="height: 400px" flat bordered :rows="data.app_ids" :row-key="r => r"
-                :columns="data.appid_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]"
-                @row-click="onAppIdSelected" selection="single" v-model:selected="data.selectedAppId"
-                :loading="data.ga_stat_loading" />
+                :columns="data.appid_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }"
+                :rows-per-page-options="[0]" @row-click="onAppIdSelected" selection="single"
+                v-model:selected="data.selectedAppId" :loading="data.ga_stat_loading" />
             </div>
 
             <div class="col">
@@ -81,8 +81,8 @@
                 :rows="data.countries" row-key="country" :columns="data.countries_columns" virtual-scroll
                 :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" selection="multiple"
                 :no-data-label="data.app_ids.length ? 'Choose an app id' : 'Load all events'"
-                :loading="data.ga_stat_loading" v-model:selected="data.selectedCountries" :filter-method="filterCountries"
-                :filter="data.countriesSearch">
+                :loading="data.ga_stat_loading" v-model:selected="data.selectedCountries"
+                :filter-method="filterCountries" :filter="data.countriesSearch">
                 <template v-slot:top>
                   <div style="width: 100%" class="row">
                     <div class="col-7">
@@ -129,12 +129,13 @@
         <q-form @reset="onAudienceFormReset" ref="audienceForm">
           <div class="row q-col-gutter-md" style="width: 100%">
             <div class="col q-gutter-md">
-              <q-input filled v-model="audience.name" label="Name *" hint="Audience (a.k.a. user list) name in Google Ads"
-                lazy-rules :rules="[val => val && val.length > 0 || 'Please enter a name']" />
+              <q-input filled v-model="audience.name" label="Name *"
+                hint="Audience (a.k.a. user list) name in Google Ads" lazy-rules
+                :rules="[val => val && val.length > 0 || 'Please enter a name']" />
 
               <q-input filled v-model="audience.app_id" label="App id *" lazy-rules :rules="[
-                val => val !== null && val !== '' || 'Please enter app_id'
-              ]" />
+          val => val !== null && val !== '' || 'Please enter app_id'
+        ]" />
 
               <q-select filled v-model="audience.countries" :options="audience.allCountriesSelect" use-input use-chips
                 multiple @filter="onAudienceFilterCountries" input-debounce="0" label="Countries" clearable
@@ -145,10 +146,10 @@
                 <label class="q-mt-md" style="margin-left: 12px; margin-right: 12px;">Mode</label>
                 <q-btn-toggle class="" v-model="audience.mode" no-wrap outline
                   :toggle-color="audience.mode == 'off' ? 'red' : audience.mode == 'test' ? 'blue' : 'green'" :options="[
-                    { label: 'Off', value: 'off' },
-                    { label: 'Testing', value: 'test' },
-                    { label: 'Always-on', value: 'prod' }
-                  ]" />
+          { label: 'Off', value: 'off' },
+          { label: 'Testing', value: 'test' },
+          { label: 'Always-on', value: 'prod' }
+        ]" />
               </div>
             </div>
             <div class="col q-gutter-md">
@@ -160,7 +161,8 @@
               <div>
                 <q-select filled v-model="audience.events_exclude" :options="audience.allEventsSelect"
                   @filter="onAudienceFilterEvents" use-input use-chips multiple input-debounce="0"
-                  label="Events to exclude *" hint="GA4 events that did NOT happen for users (app_remove always included)"
+                  label="Events to exclude *"
+                  hint="GA4 events that did NOT happen for users (app_remove always included)"
                   new-value-mode="add-unique" />
               </div>
               <div class="">
@@ -173,8 +175,9 @@
                     @blur="() => audience.ttl = audience.ttl < 1 ? 1 : audience.ttl" label="Time to live" placeholder=""
                     hint="Days to stay in treatment group" />
                   <div class="col-3">
-                    <q-badge>Split ratio: {{ isFinite(<any>audience.split_ratio) ? audience.split_ratio : "default (0.5)"
-                    }}</q-badge>
+                    <q-badge>
+                      Split ratio: {{ isFinite(<any>audience.split_ratio) ? audience.split_ratio : "default (0.5)" }}
+                    </q-badge>
                     <q-checkbox label="Custom ratio" v-model="data.isSplitRatioChecked"
                       @update:model-value="(val: any) => { audience.split_ratio = val ? 0.5 : undefined }" />
                     <q-slider v-model="audience.split_ratio" :min="0" :max="1" :step=0.01 label
@@ -223,8 +226,8 @@
               <q-td :props="props">
                 <q-chip :color="props.row.mode === 'off' ? 'red' : props.row.mode === 'test' ? 'blue' : 'green'"
                   text-color="white" dense class="text-weight-bolder" square>{{ props.row.mode === 'off' ? 'Off' :
-                    props.row.mode === 'test' ?
-                      'Test ' : 'Prod' }}</q-chip>
+          props.row.mode === 'test' ?
+            'Test ' : 'Prod' }}</q-chip>
               </q-td>
             </template>
             <template v-slot:body-cell-query="props">
@@ -314,7 +317,8 @@
               <q-icon name="info" color="primary" />
             </template>
             Power analysis tells us the minimum amount of users in a user list for an experiment to make sense.
-            To calculate power we need to calculate baseline conversion first (conversion that usually happens without any
+            To calculate power we need to calculate baseline conversion first (conversion that usually happens without
+            any
             tests).
             To do this we'll take users (device_id's) from your GA4 data by criteria from the current audience and find
             how many of them were converted to the next "conversion window" days. Alternately you can enter the baseline
@@ -377,8 +381,8 @@
             placeholder="" hint="" />
           <q-input class="col " outlined v-model="data.powerAnalysis.uplift" type="number" min="0" max="100"
             label="Uplift" placeholder="" hint="Uplift rate (between 0-1) of conversion (desired/expected)" />
-          <q-input class="col " outlined v-model="data.powerAnalysis.alpha" type="number" min="0" max="100" label="Alpha"
-            placeholder="" hint="" />
+          <q-input class="col " outlined v-model="data.powerAnalysis.alpha" type="number" min="0" max="100"
+            label="Alpha" placeholder="" hint="" />
           <q-input class="col " outlined v-model="data.powerAnalysis.ratio" type="number" min="0" label="ratio"
             placeholder="" hint="" />
         </div>
@@ -721,6 +725,7 @@ export default defineComponent({
           audience: obj,
           date_start: data.value.powerAnalysis.from,
           date_end: data.value.powerAnalysis.to,
+          conversion_window: data.value.powerAnalysis.conversion_window
         }, 'Calculating baseline conversion...');
         if (!res?.data?.result) {
           return;
@@ -730,6 +735,12 @@ export default defineComponent({
         data.value.powerAnalysis.conversion_rate = result.cr;
         data.value.powerAnalysis.users_audience = result.audience;
         data.value.powerAnalysis.users_converted = result.converted;
+        if (!data.value.powerAnalysis.from) {
+          data.value.powerAnalysis.from = result.date_start;
+        }
+        if (!data.value.powerAnalysis.to) {
+          data.value.powerAnalysis.to = result.date_end;
+        }
         data.value.powerAnalysis.query = result.query;
       }
       // calculate power
