@@ -46,6 +46,7 @@ class QueryExecutionError(Exception):
 
 
 class TableSchemas:
+  """Container for DB tables schemas"""
   audiences = [
       bigquery.SchemaField(name='name', field_type='STRING', mode='REQUIRED'),
       bigquery.SchemaField(name='app_id', field_type='STRING', mode='REQUIRED'),
@@ -103,6 +104,10 @@ class TableSchemas:
   daily_test_users = [
       bigquery.SchemaField(name='user', field_type='STRING'),
       bigquery.SchemaField(name='status', field_type='INT64'),
+      bigquery.SchemaField(name='ttl', field_type='INT64'),
+  ]
+  daily_control_users = [
+      bigquery.SchemaField(name='user', field_type='STRING'),
       bigquery.SchemaField(name='ttl', field_type='INT64'),
   ]
 
@@ -208,17 +213,18 @@ class DataGateway:
     table_name = f'{bq_dataset_id}.audiences_log'
     self._ensure_table(table_name, TableSchemas.audiences_log)
 
-    # update user segments tables for test users (adding ttl)
+    # => 2.0
+    # update user segments tables for control users (adding ttl)
     audiences = self.get_audiences(target)
     for audience in audiences:
       if audience.table_name:
-        query = f"SELECT table_name FROM {bq_dataset_id}.INFORMATION_SCHEMA.TABLES WHERE table_name like '{audience.table_name}_test_%' ORDER BY 1"
+        query = f"SELECT table_name FROM {bq_dataset_id}.INFORMATION_SCHEMA.TABLES WHERE table_name like '{audience.table_name}_control_%' ORDER BY 1"
         rows = self.execute_query(query)
         for row in rows:
           table_name = row['table_name']
           self._ensure_table(
               f'{bq_dataset_id}.{table_name}',
-              TableSchemas.daily_test_users,
+              TableSchemas.daily_control_users,
               strict=False)
 
   def _ensure_table(self,
@@ -849,7 +855,7 @@ WHEN NOT MATCHED THEN
                             audience: Audience,
                             suffix: str = None,
                             return_only_new_users=False):
-    """Segment an audience - takes an audience desrciption and fetches the users
+    """Segment an audience - takes an audience description and fetches the users
        from GA4 events according to the conditions.
 
        Returns:
@@ -866,7 +872,8 @@ WHEN NOT MATCHED THEN
 
     if return_only_new_users:
       # test/control tables can not yet exist (on the first day of sampling),
-      # so if it's the case we're switching off return_only_new_users flag to prevent feching from them in load_sampled_users
+      # so if it's the case we're switching off return_only_new_users flag to
+      # prevent feching from them in load_sampled_users
       query = f"SELECT table_name FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES WHERE table_name like '{audience.table_name}_test_%' LIMIT 1"
       rows = self.execute_query(query)
       if not rows:
@@ -886,7 +893,9 @@ WHEN NOT MATCHED THEN
                          audience: Audience,
                          suffix: str = None,
                          only_new_users=False):
-    """Load users of a segment (sampled users of one day). Can be either all users, or only new users or only old users"""
+    """Load users of a segment (sampled users of one day).
+       Can be either all users, or only new users.
+    """
     suffix = datetime.now().strftime('%Y%m%d') if suffix is None else suffix
     audience_table_name = self._get_user_segment_table_full_name(
         target, audience.table_name, 'all', suffix)
@@ -947,9 +956,6 @@ FROM `{audience_table_name}` a
                          suffix: str = None):
     """Save sampled users from two DataFrames into two new tables (_test and _control)"""
     project_id = self.config.project_id
-    # TODO: we might want to update original rows in audience_table
-    # to flip is_test field to true/false basing on existence in
-    # either users_test or users_control dataframes
     test_table_name = self._get_user_segment_table_full_name(
         target, audience.table_name, 'test', suffix)
     if len(users_test) == 0:
@@ -968,20 +974,21 @@ FROM `{audience_table_name}` a
     control_table_name = self._get_user_segment_table_full_name(
         target, audience.table_name, 'control', suffix)
     if len(users_control) == 0:
-      schema = [
-          bigquery.SchemaField(name='user', field_type='STRING'),
-      ]
-      self._ensure_table(control_table_name, schema)
+      self._ensure_table(control_table_name, TableSchemas.daily_control_users)
     else:
+      # add 'ttl' column with audience's initial ttl
+      users_control = users_control.assign(ttl=audience.ttl).astype(
+          {'ttl': 'Int64'})
       pandas_gbq.to_gbq(
-          users_control[['user']],
+          users_control[['user', 'ttl']],
           control_table_name,
           project_id,
           if_exists='replace')
 
-    logger.info('Sampled users for audience %s saved to %s (%s)/%s (%s) tables',
-                audience.name, test_table_name, len(users_test),
-                control_table_name, len(users_control))
+    logger.info(
+        'Sampled users for audience %s saved to %s (%s rows)/%s (%s rows) tables',
+        audience.name, test_table_name, len(users_test), control_table_name,
+        len(users_control))
 
   def add_previous_sampled_users(self,
                                  target: ConfigTarget,
@@ -995,9 +1002,10 @@ FROM `{audience_table_name}` a
         target, audience.table_name, 'test', suffix)
     group_prev_table_name = self._get_user_segment_table_full_name(
         target, audience.table_name, 'test', '*')
+    ttl = audience.ttl
     query = f"""
   INSERT INTO `{group_table_name}` (user, ttl)
-  SELECT user, 1 FROM `{segment_table_name}` t1
+  SELECT user, {ttl} FROM `{segment_table_name}` t1
   WHERE
     EXISTS (SELECT user FROM `{group_prev_table_name}` t WHERE t.user=t1.user AND _TABLE_SUFFIX < '{suffix}')
   """
@@ -1008,41 +1016,50 @@ FROM `{audience_table_name}` a
     group_prev_table_name = self._get_user_segment_table_full_name(
         target, audience.table_name, 'control', '*')
     query = f"""
-  INSERT INTO `{group_table_name}` (user)
-  SELECT user FROM `{segment_table_name}` t1
+  INSERT INTO `{group_table_name}` (user, ttl)
+  SELECT user, {ttl} FROM `{segment_table_name}` t1
   WHERE
     EXISTS (SELECT user FROM `{group_prev_table_name}` t WHERE t.user=t1.user AND _TABLE_SUFFIX < '{suffix}')
   """
     self.execute_query(query)
 
+  def _copy_users_from_previous_day(self, table_name, table_name_yesterday):
+    logger.debug('Adding users with TTL>1 from yesterday (%s)',
+                 table_name_yesterday)
+    query = f"""INSERT INTO `{table_name}` (user, ttl)
+  SELECT user, ttl-1 FROM `{table_name_yesterday}` t1
+  WHERE
+    NOT EXISTS (SELECT user FROM `{table_name}` WHERE user=t1.user)
+    AND ttl>1
+  """
+    self.execute_query(query)
+    logger.debug('Added test users from previous day with TTL>1')
+
   def add_yesterdays_users(self,
                            target: ConfigTarget,
                            audience: Audience,
                            suffix: str = None):
-    # add test users from yesterday with TTL>1 into today's test users
+    """Add test users from yesterday with TTL>1 into today's test users."""
     if audience.ttl > 1:
       test_table_name = self._get_user_segment_table_full_name(
           target, audience.table_name, 'test', suffix)
-      tables = self._get_user_segment_tables(
+      control_table_name = self._get_user_segment_table_full_name(
+          target, audience.table_name, 'control', suffix)
+      test_tables = self._get_user_segment_tables(
           target, audience.table_name, 'test', suffix, include_dataset=True)
-      if tables:
+      control_tables = self._get_user_segment_tables(
+          target, audience.table_name, 'control', suffix, include_dataset=True)
+      if test_tables:
         try:
-          idx = tables.index(test_table_name)
-          if idx != len(tables) - 1:
-            test_table_name_yesterday = tables[idx + 1]
-            logger.debug('Adding users with TTL>1 from yesterday (%s)',
-                         test_table_name_yesterday)
-            query = f"""
-  INSERT INTO `{test_table_name}` (user, ttl)
-  SELECT user, ttl-1 FROM `{test_table_name_yesterday}` t1
-  WHERE
-    NOT EXISTS (SELECT user FROM `{test_table_name}` WHERE user=t1.user)
-    AND ttl>1
-  """
-            self.execute_query(query)
-            logger.debug('Added test users from previous day with TTL>1')
-            # reload test users after the addition of yesterday's ones
-            #return self.load_audience_segment(target, audience, 'test')
+          idx = test_tables.index(test_table_name)
+          if idx != len(test_tables) - 1:
+            test_table_name_yesterday = test_tables[idx + 1]
+            self._copy_users_from_previous_day(test_table_name,
+                                               test_table_name_yesterday)
+            # NOTE: if a previous test table exists then there should be a control one
+            control_table_name_yesterday = control_tables[idx + 1]
+            self._copy_users_from_previous_day(control_table_name,
+                                               control_table_name_yesterday)
         except ValueError:
           pass
     return None

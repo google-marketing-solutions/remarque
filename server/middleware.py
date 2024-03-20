@@ -23,49 +23,63 @@ from models import Audience, AudienceLog
 from logger import logger
 
 
-def run_sampling_for_audience(context: Context, audience: Audience) -> tuple[list[str], list[str]] | None:
+def run_sampling_for_audience(
+    context: Context, audience: Audience) -> tuple[list[str], list[str]] | None:
   """
   Samples an audience (assuming it's in test or prod mode):
     - fetch users according to the audience definition
-    - do sampling, i.e. split users onto test and control groups (for prod mode the control group will be empty)
+    - do sampling, i.e. split users onto test and control groups
+      (for prod mode the control group will be empty)
   Returns:
     - a tuple of two DataFrames with test and control users
   """
   if audience.mode == 'off':
     return
-  logger.debug(f"Starting sampling for '{audience.name}' audience")
+  logger.debug("Starting sampling for '%s' audience", audience.name)
 
   if audience.mode == 'test':
-    df = context.data_gateway.sample_audience_users(context.target, audience, None, return_only_new_users=True)
-    # df contains new users with all features used by splitting algorithm (brand, osv, days_since_install, src, n_sessions),
-    # i.e. it doesn't contain users from today's segment that got into audience on any previous day (we'll load them later)
+    df = context.data_gateway.sample_audience_users(
+        context.target, audience, None, return_only_new_users=True)
+    # df contains new users with all features used by splitting algorithm
+    # (brand, osv, days_since_install, src, n_sessions).
+    # i.e. it doesn't contain users from today's segment that got into audience
+    # on any previous day (we'll load them later)
     if len(df) > 0:
-      logger.debug(f"Starting splitting users of audience '{audience.name}' with {audience.split_ratio if audience.split_ratio else 'default'} ratio")
-      # now split users in df into two groups, treatment and control using stratification by the audience's ration (default 0.5)
-      users_test, users_control = split_via_stratification(df, audience.split_ratio)
+      logger.debug("Starting splitting users of audience '%s' with %s ratio",
+                   audience.name,
+                   audience.split_ratio if audience.split_ratio else 'default')
+      # now split users in df into two groups, treatment and control
+      # using stratification by the audience's ration (default 0.5)
+      users_test, users_control = split_via_stratification(
+          df, audience.split_ratio)
     else:
-      logger.warning(f"User segment of audience '{audience.name}' contains no users")
+      logger.warning("User segment of audience '%s' contains no users",
+                     audience.name)
       # create empty tables for test and control users so other queries won't fail
       users_test = pd.DataFrame(columns=['user'])
       users_control = pd.DataFrame(columns=['user'])
-    # `users_test` and `users_control` are DataFrames with test and control users accordingly from the `df` DataFrame but contain only 'user' column
+    # users_test and users_control are DataFrames with test and control users
+    # accordingly from the `df` DataFrame but contain only 'user' column
   elif audience.mode == 'prod':
     # in prod mode all users are like test users (to be uploaded to Ads)
     # we don't need control users actually but for simplicity we'll keep them as empty DF
-    df = context.data_gateway.sample_audience_users(context.target, audience, None, return_only_new_users=False)
+    df = context.data_gateway.sample_audience_users(
+        context.target, audience, None, return_only_new_users=False)
     users_test = df
     users_control = pd.DataFrame(columns=['user'])
 
-  context.data_gateway.save_sampled_users(context.target, audience, users_test, users_control)
+  context.data_gateway.save_sampled_users(context.target, audience, users_test,
+                                          users_control)
   if audience.mode == 'test':
     # now add users captured by the audience (i.e. are contained in the todays's segment) but that existed on previous days ("old" users)
     context.data_gateway.add_previous_sampled_users(context.target, audience)
 
-  # now add test users from yesterday with ttl>1
+  # now add users from yesterday with ttl>1
   context.data_gateway.add_yesterdays_users(context.target, audience)
 
   # finally load resulting sets of test and control users for today (actually for suffix)
-  test_users = context.data_gateway.load_audience_segment(context.target, audience, 'test')
+  test_users = context.data_gateway.load_audience_segment(
+      context.target, audience, 'test')
 
   return test_users, users_control['user'].tolist()
 
@@ -81,7 +95,9 @@ def update_customer_match_mappings(context: Context, audiences: list[Audience]):
         if not audience.user_list:
           need_updating = True
         elif audience.user_list != res_name:
-          logger.error(f'An audience {list_name} already has user_list ({audience.user_list}) but not the expected one - {res_name}')
+          logger.error(
+              f'An audience {list_name} already has user_list ({audience.user_list}) but not the expected one - {res_name}'
+          )
           need_updating = True
         audience.user_list = res_name
   if need_updating:
@@ -89,7 +105,8 @@ def update_customer_match_mappings(context: Context, audiences: list[Audience]):
 
 
 def upload_customer_match_audience(context: Context,
-                                   audience: Audience, audience_log: list[AudienceLog],
+                                   audience: Audience,
+                                   audience_log: list[AudienceLog],
                                    users: list[str] = None):
   if audience.mode == 'off':
     return
@@ -98,17 +115,22 @@ def upload_customer_match_audience(context: Context,
   user_list_res_name = audience.user_list
   # load of users for 'today' table (audience_{listname}_test_yyyyMMdd)
   if not users:
-    users = context.data_gateway.load_audience_segment(context.target, audience, 'test')
+    users = context.data_gateway.load_audience_segment(context.target, audience,
+                                                       'test')
 
   # upload users to Google Ads
   if len(users) > 0:
     job_resource_name, failed_users, uploaded_users = \
         context.ads_gateway.upload_customer_match_audience(user_list_res_name, users, True)
     # update audience status in our tables, plus calculate some statistics
-    context.data_gateway.update_audience_segment_status(context.target, audience, None, failed_users)
+    context.data_gateway.update_audience_segment_status(context.target,
+                                                        audience, None,
+                                                        failed_users)
     test_user_count, control_user_count, new_test_user_count, new_control_user_count = \
       context.data_gateway.load_user_segment_stat(context.target, audience, None)
-    logger.info(f"Newly uploaded segment contains new {new_test_user_count} test users (of {test_user_count}) and new {new_control_user_count} control users (of {control_user_count})")
+    logger.info(
+        f"Newly uploaded segment contains new {new_test_user_count} test users (of {test_user_count}) and new {new_control_user_count} control users (of {control_user_count})"
+    )
   else:
     logger.warn(f"Audience '{audience.name}' segment has no users")
     job_resource_name = None
@@ -124,8 +146,13 @@ def upload_customer_match_audience(context: Context,
   if len(uploaded_users):
     uploaded_users_mapped = [[id] for id in uploaded_users]
     df = pd.DataFrame(uploaded_users_mapped, columns=['user'])
-    uploaded_table_name = context.data_gateway._get_user_segment_table_full_name(context.target, audience.table_name, 'uploaded')
-    pandas_gbq.to_gbq(df[['user']], uploaded_table_name, context.config.project_id, if_exists='replace')
+    uploaded_table_name = context.data_gateway._get_user_segment_table_full_name(
+        context.target, audience.table_name, 'uploaded')
+    pandas_gbq.to_gbq(
+        df[['user']],
+        uploaded_table_name,
+        context.config.project_id,
+        if_exists='replace')
 
   # now calculate total numbers of users in the audience
   total_test_user_count = 0
@@ -138,7 +165,9 @@ def upload_customer_match_audience(context: Context,
     # take a AudienceLog entry for the previous day (not for today!)
     today = datetime.now().strftime('%Y-%m-%d')
     audience_log.sort(key=lambda i: i.date, reverse=True)
-    previous_day_log = next((obj for obj in audience_log if obj.date.strftime('%Y-%m-%d') != today), None)
+    previous_day_log = next(
+        (obj for obj in audience_log if obj.date.strftime('%Y-%m-%d') != today),
+        None)
     if previous_day_log:
       total_test_user_count = previous_day_log.total_test_user_count + new_test_user_count
       total_control_user_count = previous_day_log.total_control_user_count + new_control_user_count
@@ -146,18 +175,20 @@ def upload_customer_match_audience(context: Context,
       total_test_user_count = new_test_user_count
       total_control_user_count = new_control_user_count
   if new_test_user_count == 0:
-    logger.warning(f'Audience segment for {audience_name} for {datetime.now().strftime("%Y-%m-%d")} contains no new users')
+    logger.warning(
+        f'Audience segment for {audience_name} for {datetime.now().strftime("%Y-%m-%d")} contains no new users'
+    )
 
   return AudienceLog(
-    name=audience.name,
-    date=datetime.now(),
-    job_resource_name=job_resource_name,
-    uploaded_user_count=len(uploaded_users),
-    new_test_user_count=new_test_user_count,
-    new_control_user_count=new_control_user_count,
-    test_user_count=test_user_count,
-    control_user_count=control_user_count,
-    total_test_user_count=total_test_user_count,
-    total_control_user_count=total_control_user_count,
-    failed_user_count=len(failed_users) if failed_users else 0,
+      name=audience.name,
+      date=datetime.now(),
+      job_resource_name=job_resource_name,
+      uploaded_user_count=len(uploaded_users),
+      new_test_user_count=new_test_user_count,
+      new_control_user_count=new_control_user_count,
+      test_user_count=test_user_count,
+      control_user_count=control_user_count,
+      total_test_user_count=total_test_user_count,
+      total_control_user_count=total_control_user_count,
+      failed_user_count=len(failed_users) if failed_users else 0,
   )

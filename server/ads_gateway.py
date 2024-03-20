@@ -26,6 +26,7 @@ from logger import logger
 from config import Config, ConfigTarget
 from models import Audience
 from queries import OfflineJobQuery, UserListCampaigns, UserListCampaignMetrics
+from gaarf.base_query import BaseQuery
 
 _MEMBERSHIP_LIFESPAN = 10000
 _MAX_OPERATIONS_PER_JOB = 100000
@@ -49,6 +50,16 @@ class AdsGateway:
     self.report_fetcher = AdsReportFetcher(googleads_api_client)
     self.query_executor = AdsQueryExecutor(googleads_api_client)
     self.project_id = config.project_id
+
+  def _execute_query(self,
+                     query: BaseQuery,
+                     cids: list[str],
+                     error_message: str = None):
+    try:
+      return self.report_fetcher.fetch(query, cids)
+    except GoogleAdsException as e:
+      for error in e.failure.errors:
+        raise ValueError(f'{error_message + ": "}{error.message}') from e
 
   def create_customer_match_user_lists(
       self, audiences: list[Audience]) -> dict[str, str]:
@@ -286,8 +297,11 @@ class AdsGateway:
           userlist - a list of user lists resource names or a resource name of a user list,
                      or None to load all user lists
       """
-    report = self.report_fetcher.fetch(
-        OfflineJobQuery(userlist), [self.customer_id])
+
+    report = self._execute_query(
+        OfflineJobQuery(userlist), [self.customer_id],
+        f'Could not load offline jobs from account {self.customer_id} for uploading user lists {userlist}'
+    )
     jobs = []
     for item in report:
       job_dict = {

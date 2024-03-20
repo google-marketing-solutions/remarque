@@ -48,6 +48,7 @@ from utils import format_duration
 
 
 class JsonEncoder(json.JSONEncoder):
+  """A custom JSON encoder to support serialization of Audience objects"""
   flask_default: Callable[[Any], Any]
 
   def default(self, o):
@@ -57,7 +58,7 @@ class JsonEncoder(json.JSONEncoder):
 
 
 class JSONProvider(DefaultJSONProvider):
-
+  """A JSON provider to replace JsonEncoder used by Flask"""
   def dumps(self, obj: Any, **kwargs: Any) -> str:
     """Serialize data as JSON to a string.
 

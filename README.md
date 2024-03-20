@@ -32,7 +32,7 @@ remarketing with controlling of results.
 ## Installation
 
 1. Install application
-   Installation is easier to execute in Cloud Shell but actually you can run anywhere.
+   Installation is easier to execute in Cloud Shell but actually you can run it anywhere.
    Open Cloud Shell and execute in the terminal:
 
 ```
@@ -40,6 +40,7 @@ git clone https://github.com/google-marketing-solutions/remarque
 cd remarque
 ./setup.sh deploy_all
 ```
+Please make sure that the user under which you run `setup.sh` is has Owner role.
 
 Run `setup.sh` without parameter to see the application service account
 (PROJECT_ID@appspot.gserviceaccount.com)
