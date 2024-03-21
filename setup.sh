@@ -58,6 +58,7 @@ enable_apis() {
   echo -e "${COLOR}Enabling APIs${NC}"
 
   gcloud services enable appengine.googleapis.com
+  gcloud services enable bigquery.googleapis.com
   gcloud services enable iamcredentials.googleapis.com
   gcloud services enable googleads.googleapis.com
   gcloud services enable cloudscheduler.googleapis.com
@@ -66,7 +67,6 @@ enable_apis() {
   # NOTE: despite other GCP services GAE supports only two regions: europe-west and us-central
   gcloud app create --region $GAE_REGION
 
-#  gcloud services enable cloudresourcemanager.googleapis.com
 #  gcloud services enable cloudbuild.googleapis.com
 }
 
@@ -128,6 +128,8 @@ create_iap() {
     # IAP OAuth brand doesn't exists, creating
     echo -e "${COLOR}Creating oauth brand (consent screen) for IAP...${NC}"
     IAP_BRAND=projects/$PROJECT_NUMBER/brands/$PROJECT_NUMBER
+    USER_EMAIL=$(gcloud config get-value account 2> /dev/null)
+    gcloud iap oauth-brands create --application_title="$PROJECT_TITLE" --support_email=$USER_EMAIL
   else
     echo -e "${COLOR}Found an IAP oauth brand (consent screen):'${IAP_BRAND}'${NC}"
   fi
