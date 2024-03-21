@@ -59,6 +59,7 @@ class JsonEncoder(json.JSONEncoder):
 
 class JSONProvider(DefaultJSONProvider):
   """A JSON provider to replace JsonEncoder used by Flask"""
+
   def dumps(self, obj: Any, **kwargs: Any) -> str:
     """Serialize data as JSON to a string.
 
@@ -240,6 +241,8 @@ def setup():
     ads_cfg = _get_ads_config(target)
     _validate_googleads_config(ads_cfg, throw=True)
 
+  context.data_gateway.ensure_users_normalized(context.target)
+
   # save config to the same location where it was read from
   logger.info('Saving new configuration:\n%s', context.config.to_dict())
   save_config(context.config, args)
@@ -399,7 +402,7 @@ def calculate_users_for_audience():
   audience_raw = params['audience']
   logger.info('Previewing audience:')
   logger.info(audience_raw)
-  context.data_gateway.ensure_user_normalized(context.target)
+  context.data_gateway.ensure_users_normalized(context.target)
   audience = Audience.from_dict(audience_raw)
   audience.ensure_table_name()
   query = context.data_gateway.get_audience_sampling_query(
@@ -505,7 +508,7 @@ def process():
               context.target.name)
 
   # TODO: wrap in try--catch to send any error to email
-  context.data_gateway.ensure_user_normalized(context.target)
+  context.data_gateway.ensure_users_normalized(context.target)
   audiences = context.data_gateway.get_audiences(context.target)
   audiences_log = context.data_gateway.get_audiences_log(context.target)
   update_customer_match_mappings(context, audiences)
@@ -594,7 +597,7 @@ def run_sampling() -> Response:
   params = request.get_json(force=True)
   audience_name = request.args.get('audience', None) or params.get(
       'audience', None)
-  context.data_gateway.ensure_user_normalized(context.target)
+  context.data_gateway.ensure_users_normalized(context.target)
   audiences = context.data_gateway.get_audiences(context.target)
   result = {}
   logger.debug('Loaded %s audiences', len(audiences))

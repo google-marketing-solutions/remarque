@@ -33,7 +33,7 @@ from models import Audience, AudienceLog
 from bigquery_utils import CloudBigQueryUtils
 from utils import format_duration
 
-TABLE_USER_NORMALIZED = 'users_normalized'
+TABLE_USERS_NORMALIZED = 'users_normalized'
 
 country_name_to_code_cache = {}
 
@@ -699,7 +699,7 @@ WHEN NOT MATCHED THEN
               'countries':
                   countries,
               'all_users_table':
-                  target.bq_dataset_id + '.' + TABLE_USER_NORMALIZED,
+                  target.bq_dataset_id + '.' + TABLE_USERS_NORMALIZED,
               'all_events_list':
                   all_events_list,
               'SEARCH_CONDITIONS':
@@ -768,7 +768,7 @@ WHEN NOT MATCHED THEN
               'source_table':
                   self.get_ga4_table_name(target, True),
               'all_users_table':
-                  target.bq_dataset_id + '.' + TABLE_USER_NORMALIZED,
+                  target.bq_dataset_id + '.' + TABLE_USERS_NORMALIZED,
               'date_start':
                   date_start.strftime('%Y%m%d'),
               'date_end':
@@ -828,15 +828,15 @@ WHEN NOT MATCHED THEN
     query = query.format(**{
         'source_table': self.get_ga4_table_name(target, True),
     })
-    destination_table = target.bq_dataset_id + '.' + TABLE_USER_NORMALIZED
+    destination_table = target.bq_dataset_id + '.' + TABLE_USERS_NORMALIZED
     query = f'CREATE OR REPLACE TABLE `{destination_table}` AS\n' + query
     self.execute_query(query)
     #now we should have `users_normalized` table
 
-  def ensure_user_normalized(self, target: ConfigTarget):
+  def ensure_users_normalized(self, target: ConfigTarget):
     to_create = False
     creation_time = self.bq_utils.get_table_creation_time(
-        target.bq_dataset_id, TABLE_USER_NORMALIZED)
+        target.bq_dataset_id, TABLE_USERS_NORMALIZED)
     if creation_time:
       logger.info('user_normalized table exists, creation time: %s',
                   creation_time)
@@ -1323,7 +1323,7 @@ ORDER BY name, date
             'day_end':
                 date_end.strftime('%Y%m%d'),
             'all_users_table':
-                target.bq_dataset_id + '.' + TABLE_USER_NORMALIZED,
+                target.bq_dataset_id + '.' + TABLE_USERS_NORMALIZED,
             'SEARCH_CONDITIONS':
                 conversions_conditions,
             'app_id':
