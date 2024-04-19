@@ -211,11 +211,14 @@ def setup():
     ds = context.data_gateway.bq_client.get_dataset(target.ga4_project + '.' +
                                                     target.ga4_dataset)
     logger.debug(
-        "As GA4 dataset was specified (%s) we'll use its location '%s' as the location for our dataset",
+        "As GA4 dataset was specified (%s) we'll use its location '%s'"
+        " as the location for our dataset",
         ga4_dataset, ds.location)
     bq_dataset_location = ds.location
   except BaseException as e:
-    raise Exception('"An error occurred while accessing GA4 dataset: {e}')
+    logger.warning(e)
+    raise Exception(
+        f'An error occurred while accessing GA4 dataset: {e}') from e
 
   target.bq_dataset_location = bq_dataset_location
   target.bq_dataset_id = bq_dataset_id or 'remarque'
@@ -436,11 +439,12 @@ def get_base_conversion():
   date_end = params.get('date_end', None) or request.args.get('date_end')
   date_end = date.fromisoformat(date_end) if date_end else None
   conversion_window_days = params.get(
-      'conversion_window', None) or request.args.get('conversion_window')
+      'conversion_window') or request.args.get('conversion_window')
   if conversion_window_days:
     conversion_window_days = int(conversion_window_days)
   logger.info(
-      'Calculating baseline conversion for audience:\n %s\nconversion_window=%s, date_start=%s, date_end=%s',
+      'Calculating baseline conversion for audience:\n %s\n'
+      'conversion_window=%s, date_start=%s, date_end=%s',
       audience_raw, conversion_window_days, date_start, date_end)
 
   result = context.data_gateway.get_base_conversion(context.target, audience,
@@ -474,7 +478,9 @@ def get_power_analysis():
       effect_size=effect_size, power=power, alpha=alpha, ratio=ratio)
   sample_size = float(sample_size)
   logger.info(
-      'Power analysis calculation for parameters: cr=%s, power=%s, alpha=%s, ratio=%s, uplift=%s, p1=%s, p2=%s, effect_size=%s, the resulted sample_size=%s',
+      'Power analysis calculation for parameters: cr=%s, power=%s, '
+      'alpha=%s, ratio=%s, uplift=%s, p1=%s, p2=%s, effect_size=%s, '
+      'the resulted sample_size=%s',
       cr, power, alpha, ratio, uplift, p1, p2, effect_size, sample_size)
 
   # prop2 = cr  # base conversion rate
@@ -530,7 +536,9 @@ def process():
 
   elapsed = datetime.now() - ts_start
   if IS_GAE and context.target.notification_email:
-    subject = f"Remarque {'[' + context.target.name + ']' if context.target.name != 'default' else ''} - sampling completed"
+    subject = 'Remarque ' + \
+    '[' + context.target.name + ']' if context.target.name != 'default' else '' + \
+    ' - sampling completed'
     body = f"Processing of {len(result)} audiences has been completed.\n"
     for val in log:
       body += f"""\nAudience '{val.name}':

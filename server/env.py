@@ -16,9 +16,12 @@
 
 import os
 
+
 def get_val(envvar):
-  if envvar == 0: return envvar
-  if not envvar or envvar == 'None': return ''
+  if envvar == 0:
+    return envvar
+  if not envvar or envvar == 'None':
+    return ''
   return envvar
 
 
@@ -27,9 +30,11 @@ IS_GAE = bool(get_val(os.getenv('GAE_APPLICATION')))
 
 GAE_LOCATION = os.getenv('GAE_LOCATION')
 
-SERVICE_ACCOUNT = os.getenv('GOOGLE_CLOUD_PROJECT') + '@appspot.gserviceaccount.com' if IS_GAE else ''
+SERVICE_ACCOUNT = os.getenv(
+    'GOOGLE_CLOUD_PROJECT') + '@appspot.gserviceaccount.com' if IS_GAE else ''
+
 
 def get_temp_dir():
-    if IS_GAE:
-        return '/tmp'
-    return '.tmp'
+  if IS_GAE:
+    return '/tmp'
+  return '.tmp'

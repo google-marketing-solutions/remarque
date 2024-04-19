@@ -23,25 +23,35 @@ from config import Config, ConfigTarget
 from cloud_scheduler_gateway import CloudSchedulerGateway
 from gaarf.api_clients import GoogleAdsApiClient
 
+
 @dataclass
 class ContextOptions:
   create_ads_gateway: bool
 
 
 class Context:
+
   def _get_ads_config(self, target: ConfigTarget):
     ads_config = {
-      'developer_token': target.ads_developer_token,
-      'client_id': target.ads_client_id,
-      'client_secret': target.ads_client_secret,
-      'refresh_token': target.ads_refresh_token,
-      'login_customer_id': str(target.ads_login_customer_id or target.ads_customer_id),
-      'customer_id': str(target.ads_customer_id or target.ads_login_customer_id),
-      'use_proto_plus': True
+        'developer_token':
+            target.ads_developer_token,
+        'client_id':
+            target.ads_client_id,
+        'client_secret':
+            target.ads_client_secret,
+        'refresh_token':
+            target.ads_refresh_token,
+        'login_customer_id':
+            str(target.ads_login_customer_id or target.ads_customer_id),
+        'customer_id':
+            str(target.ads_customer_id or target.ads_login_customer_id),
+        'use_proto_plus':
+            True
     }
     return ads_config
 
-  def __init__(self, config: Config,
+  def __init__(self,
+               config: Config,
                target: ConfigTarget,
                credentials: credentials.Credentials,
                options: ContextOptions = None):
@@ -50,8 +60,8 @@ class Context:
     self.credentials = credentials
 
     self.data_gateway = DataGateway(config, credentials, target)
-    self.storage_client = storage.Client(project=config.project_id,
-                                         credentials=credentials)
+    self.storage_client = storage.Client(
+        project=config.project_id, credentials=credentials)
     self.cloud_scheduler = CloudSchedulerGateway(config, credentials)
 
     if target and options and options.create_ads_gateway:

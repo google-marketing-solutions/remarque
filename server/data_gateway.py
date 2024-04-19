@@ -213,19 +213,22 @@ class DataGateway:
     table_name = f'{bq_dataset_id}.audiences_log'
     self._ensure_table(table_name, TableSchemas.audiences_log)
 
-    # => 2.0
+    # NOTE: when we change schema for test/control tables
+    # we have to update them in all installations.
+    # Here's the last update in schema (ttl added for control tables)
+    # => 2.0 completed for all customers
     # update user segments tables for control users (adding ttl)
-    audiences = self.get_audiences(target)
-    for audience in audiences:
-      if audience.table_name:
-        query = f"SELECT table_name FROM {bq_dataset_id}.INFORMATION_SCHEMA.TABLES WHERE table_name like '{audience.table_name}_control_%' ORDER BY 1"
-        rows = self.execute_query(query)
-        for row in rows:
-          table_name = row['table_name']
-          self._ensure_table(
-              f'{bq_dataset_id}.{table_name}',
-              TableSchemas.daily_control_users,
-              strict=False)
+    # audiences = self.get_audiences(target)
+    # for audience in audiences:
+    #   if audience.table_name:
+    #     query = f"SELECT table_name FROM {bq_dataset_id}.INFORMATION_SCHEMA.TABLES WHERE table_name like '{audience.table_name}_control_%' ORDER BY 1"
+    #     rows = self.execute_query(query)
+    #     for row in rows:
+    #       table_name = row['table_name']
+    #       self._ensure_table(
+    #           f'{bq_dataset_id}.{table_name}',
+    #           TableSchemas.daily_control_users,
+    #           strict=False)
 
   def _ensure_table(self,
                     table_name,

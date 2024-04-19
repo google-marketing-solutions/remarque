@@ -22,6 +22,7 @@ from config import Config, ConfigTarget
 import os
 from dataclasses import dataclass
 
+
 @dataclass
 class Job:
   enabled: bool
@@ -29,7 +30,12 @@ class Job:
   schedule_timezone: str
   name: Optional[str] = None
 
-  def __init__(self, enabled: bool, *, schedule: str = None, schedule_timezone: str = None, schedule_time: str = None):
+  def __init__(self,
+               enabled: bool,
+               *,
+               schedule: str = None,
+               schedule_timezone: str = None,
+               schedule_time: str = None):
     self.name = None
     self.enabled: bool = enabled
     self.schedule: str = schedule
@@ -65,8 +71,7 @@ class Job:
 
 class CloudSchedulerGateway:
 
-  def __init__(self, config: Config,
-               credentials: credentials.Credentials):
+  def __init__(self, config: Config, credentials: credentials.Credentials):
     self.config = config
     self.credentials = credentials
     self.client = scheduler_v1.CloudSchedulerClient(credentials=credentials)
@@ -74,7 +79,6 @@ class CloudSchedulerGateway:
 
   def _get_job_id(self, target: str):
     return f'remarque_{target or "default"}'
-
 
   def get_job(self, target_name: str) -> Job:
     project_id = self.config.project_id
@@ -85,10 +89,12 @@ class CloudSchedulerGateway:
       job = self.client.get_job(scheduler_v1.GetJobRequest(name=job_name))
     except exceptions.NotFound:
       return Job(enabled=False)
-    res = Job(job.state == scheduler_v1.Job.State.ENABLED, schedule=job.schedule, schedule_timezone=job.time_zone)
+    res = Job(
+        job.state == scheduler_v1.Job.State.ENABLED,
+        schedule=job.schedule,
+        schedule_timezone=job.time_zone)
     res.name = job_name
     return res
-
 
   def update_job(self, target: ConfigTarget, job: Job):
     project_id = self.config.project_id
@@ -114,35 +120,36 @@ class CloudSchedulerGateway:
       gae_service = os.getenv('GAE_SERVICE')
       routing = scheduler_v1.AppEngineRouting()
       routing.service = gae_service
-      uri = '/api/process?target=' + (target.name if target.name and target.name != 'default' else '')
+      uri = '/api/process?target=' + (
+          target.name if target.name and target.name != 'default' else '')
       print(f"Setting up scheduler for AppEngine at {uri}")
       job = scheduler_v1.Job(
-        name=job_name,
-        app_engine_http_target=scheduler_v1.AppEngineHttpTarget(
-          app_engine_routing=routing,
-          relative_uri=uri,
-          http_method=scheduler_v1.HttpMethod.POST,
-          body=b'{}',
-        ),
-        schedule = job.schedule,
-        time_zone = job.schedule_timezone,
+          name=job_name,
+          app_engine_http_target=scheduler_v1.AppEngineHttpTarget(
+              app_engine_routing=routing,
+              relative_uri=uri,
+              http_method=scheduler_v1.HttpMethod.POST,
+              body=b'{}',
+          ),
+          schedule=job.schedule,
+          time_zone=job.schedule_timezone,
       )
       if cloud_job:
-        self.client.update_job(scheduler_v1.UpdateJobRequest(
-          job = job,
-          #update_mask = ['schedule','timeZone'],
-        ))
+        self.client.update_job(
+            scheduler_v1.UpdateJobRequest(
+                job=job,
+                #update_mask = ['schedule','timeZone'],
+            ))
       else:
         self.client.create_job(
-          scheduler_v1.CreateJobRequest(
-            parent=self.client.common_location_path(project_id, location_id),
-            job=job,
-          )
-        )
+            scheduler_v1.CreateJobRequest(
+                parent=self.client.common_location_path(project_id,
+                                                        location_id),
+                job=job,
+            ))
 
-
-  def _delete_scheduler_job(
-      self, project_id: str, location_id: str, job_id: str) -> None:
+  def _delete_scheduler_job(self, project_id: str, location_id: str,
+                            job_id: str) -> None:
     """Delete a job via the Cloud Scheduler API.
 
     Args:
@@ -156,10 +163,8 @@ class CloudSchedulerGateway:
 
     # Use the client to send the job deletion request.
     client.delete_job(
-      scheduler_v1.DeleteJobRequest(
-        name=client.job_path(project_id, location_id, job_id)
-      )
-    )
+        scheduler_v1.DeleteJobRequest(
+            name=client.job_path(project_id, location_id, job_id)))
 
   # def get_scheduler_jobs(
   #       self, project_id: str, location_id: str,):

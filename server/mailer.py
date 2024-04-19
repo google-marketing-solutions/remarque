@@ -16,6 +16,7 @@
 from google.appengine.api import mail
 from config import Config, ConfigTarget
 
+
 def send_email(config: Config, to: str, subject: str, body: str):
 
   project_id = config.project_id

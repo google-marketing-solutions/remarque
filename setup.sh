@@ -54,7 +54,6 @@ check_billing() {
 }
 
 enable_apis() {
-  local GAE_REGION=$(git config -f $SETTING_FILE gae.region)
   echo -e "${COLOR}Enabling APIs${NC}"
 
   gcloud services enable appengine.googleapis.com
@@ -64,10 +63,19 @@ enable_apis() {
   gcloud services enable cloudscheduler.googleapis.com
   gcloud services enable iap.googleapis.com
   gcloud services enable cloudresourcemanager.googleapis.com
-  # NOTE: despite other GCP services GAE supports only two regions: europe-west and us-central
-  gcloud app create --region $GAE_REGION
 
 #  gcloud services enable cloudbuild.googleapis.com
+}
+
+create_gae() {
+  # NOTE: despite other GCP services GAE supports only two regions: europe-west and us-central
+  local GAE_REGION=$(git config -f $SETTING_FILE gae.region)
+  gcloud app describe > /dev/null 2> /dev/null
+  APP_EXISTS=$?
+  if [[ $APP_EXISTS -ne 0 ]]; then
+    echo -e "${COLOR}Creating AppEngine application${NC}"
+    gcloud app create --region $GAE_REGION
+  fi
 }
 
 set_iam_permissions() {
@@ -190,6 +198,7 @@ create_iap() {
 deploy_all() {
   check_billing
   enable_apis
+  create_gae
   set_iam_permissions
   update_git_commit
   deploy_files

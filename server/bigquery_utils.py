@@ -31,7 +31,6 @@ class CloudBigQueryUtils:
     self.client = client
     self.project_id = self.client.project
 
-
   def create_dataset_if_not_exists(self, dataset_id: str,
                                    dataset_location: str) -> Dataset:
     """Creates BigQuery dataset if it doesn't exists.
@@ -52,7 +51,8 @@ class CloudBigQueryUtils:
          ds.location and not dataset_location:
         self.client.delete_dataset(fully_qualified_dataset_id, True)
         logger.info(
-            f'Existing dataset needs to be recreated due to different location (current: {ds.location}, needed: {dataset_location}).')
+            f'Existing dataset needs to be recreated due to different location (current: {ds.location}, needed: {dataset_location}).'
+        )
         to_create = True
       else:
         logger.info('Dataset %s already exists.', fully_qualified_dataset_id)
@@ -66,7 +66,6 @@ class CloudBigQueryUtils:
       logger.info('Dataset %s created.', fully_qualified_dataset_id)
     return ds
 
-
   def get_dataset(self, dataset_id: str) -> Dataset:
     fully_qualified_dataset_id = f'{self.project_id}.{dataset_id}'
     try:
@@ -74,10 +73,10 @@ class CloudBigQueryUtils:
     except exceptions.NotFound:
       pass
 
-
   def get_table_creation_time(self, dataset_id, table_id):
     try:
-      table = self.client.get_table(f"{self.project_id}.{dataset_id}.{table_id}")
+      table = self.client.get_table(
+          f"{self.project_id}.{dataset_id}.{table_id}")
     except exceptions.NotFound:
       return None
     creation_time = table.created

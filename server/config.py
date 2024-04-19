@@ -26,12 +26,18 @@ import smart_open as smart_open
 from logger import logger
 from env import GAE_LOCATION
 
+
 class AppNotInitializedError(Exception):
-  def __init__(self, msg = None) -> None:
-    super().__init__(msg or 'Application is not initialized, please go to Configuration page and run setup')
+
+  def __init__(self, msg=None) -> None:
+    super().__init__(
+        msg or
+        'Application is not initialized, please go to Configuration page and run setup'
+    )
 
 
 class ConfigItemBase:
+
   def __init__(self):
     # copy class atrributes (with values) into the instance
     members = [
@@ -87,28 +93,28 @@ class Config(ConfigItemBase):
 
   def to_dict(self) -> dict:
     values = {
-      'project_id': self.project_id,
-      'scheduler_location_id': self.scheduler_location_id,
-      'targets': []
+        'project_id': self.project_id,
+        'scheduler_location_id': self.scheduler_location_id,
+        'targets': []
     }
     for t in self.targets:
       target_json = {
-        'name': t.name,
-        'ga4_project': t.ga4_project,
-        'ga4_dataset': t.ga4_dataset,
-        'ga4_table': t.ga4_table,
-        'ga4_table': t.ga4_table,
-        'bq_dataset_id': t.bq_dataset_id,
-        'bq_dataset_location': t.bq_dataset_location,
-        'notification_email': t.notification_email,
-        'ads_customer_id': t.ads_customer_id,
-        'ads_developer_token': t.ads_developer_token,
-        'ads_client_id': t.ads_client_id,
-        'ads_client_secret': t.ads_client_secret,
-        'ads_refresh_token': t.ads_refresh_token,
-        'ads_login_customer_id': t.ads_login_customer_id
-        #"period_start": t.period_start,
-        #"period_end": t.period_end
+          'name': t.name,
+          'ga4_project': t.ga4_project,
+          'ga4_dataset': t.ga4_dataset,
+          'ga4_table': t.ga4_table,
+          'ga4_table': t.ga4_table,
+          'bq_dataset_id': t.bq_dataset_id,
+          'bq_dataset_location': t.bq_dataset_location,
+          'notification_email': t.notification_email,
+          'ads_customer_id': t.ads_customer_id,
+          'ads_developer_token': t.ads_developer_token,
+          'ads_client_id': t.ads_client_id,
+          'ads_client_secret': t.ads_client_secret,
+          'ads_refresh_token': t.ads_refresh_token,
+          'ads_login_customer_id': t.ads_login_customer_id
+          #"period_start": t.period_start,
+          #"period_end": t.period_end
       }
       values['targets'].append(target_json)
     return values
@@ -117,8 +123,7 @@ class Config(ConfigItemBase):
     return [t.name for t in self.targets]
 
 
-def parse_arguments(
-    only_known: bool = False) -> argparse.Namespace:
+def parse_arguments(only_known: bool = False) -> argparse.Namespace:
   """Initialize command line parser using argparse.
 
   Returns:
@@ -156,7 +161,7 @@ def get_config_url(args: argparse.Namespace):
   return config_file_name
 
 
-def get_config(args: argparse.Namespace, fail_ok = False) -> Config:
+def get_config(args: argparse.Namespace, fail_ok=False) -> Config:
   """ Read config file and merge settings from it, command line args and env vars."""
   config_file_name = get_config_url(args)
   logger.info('Using config file %s', config_file_name)
@@ -166,7 +171,8 @@ def get_config(args: argparse.Namespace, fail_ok = False) -> Config:
   except (FileNotFoundError, google.cloud.exceptions.NotFound) as e:
     logger.error(f'Config file {config_file_name} was not found: {e}')
     if fail_ok:
-      logger.warning('Config file was not found but proceeding due to fail_ok=True flag')
+      logger.warning(
+          'Config file was not found but proceeding due to fail_ok=True flag')
       content = '{}'
     else:
       raise AppNotInitializedError()
@@ -220,7 +226,7 @@ def get_config(args: argparse.Namespace, fail_ok = False) -> Config:
 def save_config(config: Config, args: argparse.Namespace):
   config_file_name = get_config_url(args)
   with smart_open.open(config_file_name, 'w') as f:
-    config_dict =config.to_dict()
+    config_dict = config.to_dict()
     # NOTE: we're not saving the following parameters as they can be detected in runtime
     #       and it's be more reliable than taking them from config
     del config_dict['project_id']

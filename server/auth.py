@@ -18,7 +18,8 @@ import argparse
 import google.auth
 from google.auth import credentials
 
-def get_credentials(args: argparse.Namespace=None) -> credentials.Credentials:
+
+def get_credentials(args: argparse.Namespace = None) -> credentials.Credentials:
   credentials, _ = google.auth.default()
 
   # we can support running the app without default application credentials as above with an explicit key file:
