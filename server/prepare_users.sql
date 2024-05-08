@@ -36,7 +36,7 @@ WITH
       AND device.advertising_id != ''
       AND device.advertising_id != '00000000-0000-0000-0000-000000000000'
       AND _TABLE_SUFFIX BETWEEN
-        FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)) AND
+        FORMAT_DATE('%Y%m%d', {loopback}) AND
         FORMAT_DATE('%Y%m%d', CURRENT_DATE())
   )
 SELECT

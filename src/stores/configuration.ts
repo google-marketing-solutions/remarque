@@ -57,6 +57,7 @@ export interface ConfigTarget {
   ga4_dataset?: string;
   ga4_project?: string;
   ga4_table?: string;
+  ga4_loopback_window?: string;
 }
 
 export enum States {
@@ -207,6 +208,7 @@ export const configurationStore = defineStore('configuration', () => {
     targets: <ConfigTarget[]>[],
 
     project_id: '',
+    ga4_loopback_window: '',
     bq_dataset_id: '',
     bq_dataset_location: '',
     ads_customer_id: '',
@@ -256,6 +258,7 @@ export const configurationStore = defineStore('configuration', () => {
     this.ga4_project = target.ga4_project || '';
     this.ga4_dataset = target.ga4_dataset || '';
     this.ga4_table = target.ga4_table || '';
+    this.ga4_loopback_window = target.ga4_loopback_window || '';
     this.ads_customer_id = target.ads_customer_id || '';
     this.ads_developer_token = target.ads_developer_token || '';
     this.ads_client_id = target.ads_client_id || '';

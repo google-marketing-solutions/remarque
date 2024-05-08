@@ -36,11 +36,13 @@
           <div class="text-subtitle2">events_* tables with app events</div>
         </q-card-section>
 
-        <q-input class="q-mb-md" outlined v-model="store.ga4_project" label="Project id" placeholder="BigQuery project id"
-          hint="Leave empty for using the current GCP project" :hide-bottom-space=true />
+        <q-input class="q-mb-md" outlined v-model="store.ga4_project" label="Project id"
+          placeholder="BigQuery project id" hint="Leave empty for using the current GCP project"
+          :hide-bottom-space=true />
 
-        <q-input class="q-mb-md" outlined v-model="store.ga4_dataset" label="Dataset id" placeholder="BigQuery dataset id"
-          hint="Usually analytics_XXX where XXX GA property id" :hide-bottom-space=true />
+        <q-input class="q-mb-md" outlined v-model="store.ga4_dataset" label="Dataset id"
+          placeholder="BigQuery dataset id" hint="Usually analytics_XXX where XXX GA property id"
+          :hide-bottom-space=true />
 
         <q-input class="q-mb-md" outlined v-model="store.ga4_table" label="Table id" placeholder="BigQuery table id"
           hint="By default 'events' if empty (do not include _* part)" :hide-bottom-space=true />
@@ -70,7 +72,10 @@
           hint="by default - 'remarque'" />
 
         <q-input outlined v-model="store.bq_dataset_location" label="Dataset location" readonly class="q-mt-md"
-          placeholder="BigQuery dataset location (us or eu)" />
+          placeholder="BigQuery dataset location (us or eu)" hint="" />
+
+        <q-input outlined v-model="store.ga4_loopback_window" label="GA4 loopback window"
+          hint="Loopback window for GA4 data used for user_normalized table, by default 1 year (1Y). Format: nYmMoD where n = number of years, m - number of months, o - number of days"></q-input>
       </q-card>
     </div>
 
@@ -94,7 +99,8 @@
             <q-btn round dense flat icon="generating_tokens" @click="onGenerateToken" />
           </template> -->
         </q-input>
-        <q-input outlined v-model="store.ads_login_customer_id" label="MCC id" placeholder="Google Ads MCC id" hint="" />
+        <q-input outlined v-model="store.ads_login_customer_id" label="MCC id" placeholder="Google Ads MCC id"
+          hint="" />
 
         <div class="row q-pa-md">
           <q-file class="col-3" v-model="data.file" label="Select google-ads.yaml" accept=".yaml"></q-file>
@@ -192,6 +198,7 @@ export default defineComponent({
         ga4_project: store.ga4_project,
         ga4_dataset: store.ga4_dataset,
         ga4_table: store.ga4_table,
+        ga4_loopback_window: store.ga4_loopback_window,
         bq_dataset_id: store.bq_dataset_id,
         ads_client_id: store.ads_client_id,
         ads_client_secret: store.ads_client_secret,

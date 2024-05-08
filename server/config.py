@@ -14,7 +14,6 @@
  limitations under the License.
  """
 
-from typing import Any, Dict, List, Tuple, Literal
 import argparse
 import os
 import json
@@ -22,7 +21,7 @@ from typing import List
 import google.auth
 from googleapiclient.discovery import build
 from auth import get_credentials
-import smart_open as smart_open
+import smart_open
 from logger import logger
 from env import GAE_LOCATION
 
@@ -67,6 +66,7 @@ class ConfigTarget(ConfigItemBase):
   ga4_project = ''
   ga4_dataset = ''
   ga4_table = ''
+  ga4_loopback_window: str = ''
   # dataset id for all tables
   bq_dataset_id: str = 'remarque'
   # location for dataset in BigQuery (readonly on the client)
@@ -103,7 +103,7 @@ class Config(ConfigItemBase):
           'ga4_project': t.ga4_project,
           'ga4_dataset': t.ga4_dataset,
           'ga4_table': t.ga4_table,
-          'ga4_table': t.ga4_table,
+          'ga4_loopback_window': t.ga4_loopback_window,
           'bq_dataset_id': t.bq_dataset_id,
           'bq_dataset_location': t.bq_dataset_location,
           'notification_email': t.notification_email,
@@ -162,20 +162,29 @@ def get_config_url(args: argparse.Namespace):
 
 
 def get_config(args: argparse.Namespace, fail_ok=False) -> Config:
-  """ Read config file and merge settings from it, command line args and env vars."""
+  """
+  Read config file and merge settings from it, command line args and env vars.
+  
+  Args:
+    args: cli arguments
+    fail_ok: pass true to raise an exception if config is invalid
+
+  Returns: a config object
+  """
   config_file_name = get_config_url(args)
   logger.info('Using config file %s', config_file_name)
   try:
     with smart_open.open(config_file_name, 'rb') as f:
       content = f.read()
   except (FileNotFoundError, google.cloud.exceptions.NotFound) as e:
-    logger.error(f'Config file {config_file_name} was not found: {e}')
+    msg = f'Config file {config_file_name} was not found: {e}'
+    logger.error(msg)
     if fail_ok:
       logger.warning(
           'Config file was not found but proceeding due to fail_ok=True flag')
       content = '{}'
     else:
-      raise AppNotInitializedError()
+      raise AppNotInitializedError(msg) from e
 
   cfg_dict: dict = json.loads(content)
   config = Config()
@@ -198,13 +207,11 @@ def get_config(args: argparse.Namespace, fail_ok=False) -> Config:
   if not config.project_id:
     logger.error('We could not detect GCP project_id')
   else:
-    logger.info(f"Project id: {config.project_id}")
+    logger.info('Project id: %s', config.project_id)
 
   if not config.scheduler_location_id:
     location_id = GAE_LOCATION
     if not location_id:
-      #let gae = (await google.appengine("v1").apps.get({ appsId: `${projectId}` })).data;
-      #return gae.locationId! + "1";
       credentials = get_credentials(args)
       service = build('appengine', 'v1', credentials=credentials)
       response = service.apps().get(appsId=config.project_id).execute()

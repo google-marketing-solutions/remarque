@@ -15,6 +15,7 @@
  """
 
 import os
+import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 from google.auth import credentials
@@ -826,11 +827,44 @@ WHEN NOT MATCHED THEN
         'date_end': date_end.strftime('%Y%m%d'),
     }
 
+  def _parse_duration(self, duration: str) -> tuple[int, int, int]:
+    years = months = days = 0
+    matches = re.findall(r'(\d+[YMD])', duration)
+    for match in matches:
+      if 'Y' in match:
+        years = int(match.replace('Y', ''))
+      elif 'M' in match:
+        months = int(match.replace('M', ''))
+      elif 'D' in match:
+        days = int(match.replace('D', ''))
+    return years, months, days
+
+  def _convert_duration_to_interval(self, duration: str) -> str:
+    years, months, days = self._parse_duration(duration)
+    base_query = "CURRENT_DATE()"
+    if years > 0:
+      base_query = "DATE_SUB({base_query}, INTERVAL {amount} YEAR)".format(
+          base_query=base_query, amount=years)
+    if months > 0:
+      base_query = "DATE_SUB({base_query}, INTERVAL {amount} MONTH)".format(
+          base_query=base_query, amount=months)
+    if days > 0:
+      base_query = "DATE_SUB({base_query}, INTERVAL {amount} DAY)".format(
+          base_query=base_query, amount=days)
+    return base_query
+
   def _create_users_normalized_table(self, target: ConfigTarget):
     query = self._read_file('prepare_users.sql')
-    query = query.format(**{
-        'source_table': self.get_ga4_table_name(target, True),
-    })
+    lookback_expr = 'DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)'
+    if target.ga4_loopback_window:
+      lookback_expr = self._convert_duration_to_interval(
+          target.ga4_loopback_window)
+
+    query = query.format(
+        **{
+            'source_table': self.get_ga4_table_name(target, True),
+            'loopback': lookback_expr
+        })
     destination_table = target.bq_dataset_id + '.' + TABLE_USERS_NORMALIZED
     query = f'CREATE OR REPLACE TABLE `{destination_table}` AS\n' + query
     self.execute_query(query)

@@ -112,8 +112,7 @@ def create_context(target_name: str = None,
                    fail_ok=False) -> Context:
   credentials = _get_credentials()
   config = _get_config(fail_ok=fail_ok)
-  target_name = _get_req_arg_str(
-      'target') if target_name == None else target_name
+  target_name = target_name or _get_req_arg_str('target')
   if not target_name:
     if not config.targets:
       target = None
@@ -206,7 +205,8 @@ def setup():
   target.ga4_project = ga4_project or context.config.project_id
   target.ga4_dataset = ga4_dataset
   target.ga4_table = ga4_table or 'events'
-  # TODO: validate ga4_* parameters
+  target.ga4_loopback_window = params.get('ga4_loopback_window')
+
   try:
     ds = context.data_gateway.bq_client.get_dataset(target.ga4_project + '.' +
                                                     target.ga4_dataset)
@@ -244,7 +244,7 @@ def setup():
     ads_cfg = _get_ads_config(target)
     _validate_googleads_config(ads_cfg, throw=True)
 
-  context.data_gateway.ensure_users_normalized(context.target)
+  context.data_gateway.ensure_users_normalized(target)
 
   # save config to the same location where it was read from
   logger.info('Saving new configuration:\n%s', context.config.to_dict())
