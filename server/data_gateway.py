@@ -829,7 +829,9 @@ WHEN NOT MATCHED THEN
 
   def _parse_duration(self, duration: str) -> tuple[int, int, int]:
     years = months = days = 0
-    matches = re.findall(r'(\d+[YMD])', duration)
+    matches = re.findall(r'(\d+[YMD])', duration.upper())
+    if not matches:
+      raise ValueError(f'Unknown duration format: {duration}')
     for match in matches:
       if 'Y' in match:
         years = int(match.replace('Y', ''))
@@ -837,19 +839,21 @@ WHEN NOT MATCHED THEN
         months = int(match.replace('M', ''))
       elif 'D' in match:
         days = int(match.replace('D', ''))
+      else:
+        raise ValueError(f'Unknown duration format: {duration}')
     return years, months, days
 
   def _convert_duration_to_interval(self, duration: str) -> str:
     years, months, days = self._parse_duration(duration)
-    base_query = "CURRENT_DATE()"
+    base_query = 'CURRENT_DATE()'
     if years > 0:
-      base_query = "DATE_SUB({base_query}, INTERVAL {amount} YEAR)".format(
+      base_query = 'DATE_SUB({base_query}, INTERVAL {amount} YEAR)'.format(
           base_query=base_query, amount=years)
     if months > 0:
-      base_query = "DATE_SUB({base_query}, INTERVAL {amount} MONTH)".format(
+      base_query = 'DATE_SUB({base_query}, INTERVAL {amount} MONTH)'.format(
           base_query=base_query, amount=months)
     if days > 0:
-      base_query = "DATE_SUB({base_query}, INTERVAL {amount} DAY)".format(
+      base_query = 'DATE_SUB({base_query}, INTERVAL {amount} DAY)'.format(
           base_query=base_query, amount=days)
     return base_query
 

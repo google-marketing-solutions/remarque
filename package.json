@@ -1,12 +1,13 @@
 {
   "name": "Remarque",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "Remarque webclient app",
   "productName": "Remarque",
   "private": true,
   "scripts": {
     "lint": "eslint --ext .js,.ts,.vue ./",
     "format": "prettier --write \"**/*.{js,ts,vue,scss,html,md,json}\" --ignore-path .gitignore",
+    "pre-commit": "npx pretty-quick --staged",
     "test": "echo \"No test specified\" && exit 0",
     "dev": "quasar dev",
     "build": "quasar build"
