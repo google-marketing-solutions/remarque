@@ -26,7 +26,8 @@ WITH
       device.operating_system_version,
       event_date,
       event_timestamp,
-      ROW_NUMBER() OVER (PARTITION BY device.advertising_id, app_info.id ORDER BY event_timestamp DESC) AS row_num
+      ROW_NUMBER() OVER (PARTITION BY device.advertising_id, app_info.id
+        ORDER BY event_timestamp DESC) AS row_num
     FROM
       `{source_table}`
     WHERE
@@ -35,9 +36,7 @@ WITH
       AND device.advertising_id IS NOT NULL
       AND device.advertising_id != ''
       AND device.advertising_id != '00000000-0000-0000-0000-000000000000'
-      AND _TABLE_SUFFIX BETWEEN
-        FORMAT_DATE('%Y%m%d', {loopback}) AND
-        FORMAT_DATE('%Y%m%d', CURRENT_DATE())
+      {SEARCH_CONDITIONS}
   )
 SELECT
   user,
@@ -49,7 +48,7 @@ SELECT
   acquisition_medium,
   mobile_brand_name,
   operating_system_version,
-  DATE_DIFF(CURRENT_DATE(), PARSE_DATE('%Y%m%d', event_date), DAY) AS days_since_install,
+  NULL AS days_since_install, -- for backward compatibility
   event_date,
   event_timestamp
 FROM

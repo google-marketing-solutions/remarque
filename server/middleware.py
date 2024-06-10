@@ -176,8 +176,9 @@ def upload_customer_match_audience(context: Context,
       total_control_user_count = new_control_user_count
   if new_test_user_count == 0:
     logger.warning(
-        f'Audience segment for {audience_name} for {datetime.now().strftime("%Y-%m-%d")} contains no new users'
-    )
+        'Audience segment for %s for %s contains no new users',
+        audience_name,
+        datetime.now().strftime('%Y-%m-%d'))
 
   return AudienceLog(
       name=audience.name,

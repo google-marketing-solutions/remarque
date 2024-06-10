@@ -16,9 +16,10 @@
 <template>
   <q-page padding class="items-center justify-evenly">
     <div class="text-h2">Remarque</div>
-    <br>
+    <br />
     <div class="text-body1">
-      Welcome to Remarque, a tool for creating and tracking A/B experiments for remarkating campaigns (ACe).
+      Welcome to Remarque, a tool for mastering user audiences, and creating and
+      tracking A/B experiments for remarkating campaigns in Google Ads (ACe).
     </div>
   </q-page>
 </template>

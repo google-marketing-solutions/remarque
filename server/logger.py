@@ -16,7 +16,9 @@
 
 import os
 import logging
-from env import IS_GAE
+import env
+
+LOGGER_NAME = 'Remarque'
 
 logging.basicConfig(
     format='[%(asctime)s][%(name)s][%(levelname)s] %(message)s',
@@ -24,16 +26,21 @@ logging.basicConfig(
     datefmt='%H:%M:%S')
 
 loglevel = logging.getLevelName(os.getenv('LOG_LEVEL') or 'DEBUG')
-
-if IS_GAE:
-  import google.cloud.logging
-  client = google.cloud.logging.Client()
-  client.setup_logging(log_level=loglevel)
-
-logger = logging.getLogger('remarque')
+logger = logging.getLogger(LOGGER_NAME)
 logger.setLevel(loglevel)
-logging.getLogger('google.ads.googleads.client').setLevel(logging.WARNING)
+
+if env.IS_GAE:
+  import google.cloud.logging
+  from google.cloud.logging.handlers import CloudLoggingHandler, setup_logging
+
+  client = google.cloud.logging.Client()
+  handler = CloudLoggingHandler(client, name=LOGGER_NAME)
+  handler.setLevel(loglevel)
+  setup_logging(handler)
+
 logging.getLogger('gaarf').setLevel(loglevel)
+# disable excessive logging from some components
+logging.getLogger('google.ads.googleads.client').setLevel(logging.WARNING)
 logging.getLogger('googleapiclient.discovery').setLevel(logging.WARNING)
 logging.getLogger('smart_open.gcs').setLevel(logging.WARNING)
 logging.getLogger('smart_open.smart_open_lib').setLevel(logging.WARNING)

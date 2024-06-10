@@ -13,10 +13,11 @@
 # limitations under the License.
 
 WITH
-  EventTable AS (
+  UserEvents AS (
     SELECT
       device.advertising_id AS user,
       ARRAY_AGG(event_name) AS events,
+      ANY_VALUE(user_first_touch_timestamp) AS user_first_touch_timestamp,
       SUM(IF(event_name = 'session_start', 1, 0)) AS n_sessions
     FROM
       `{source_table}`
@@ -32,13 +33,13 @@ WITH
       F.user,
       F.mobile_brand_name AS brand,
       F.operating_system_version AS osv,
-      F.days_since_install,
       F.acquisition_source,
       F.acquisition_medium,
-      n_sessions,
+      UserEvents.user_first_touch_timestamp,
+      UserEvents.n_sessions,
       F.country
     FROM
-      EventTable
+      UserEvents
       INNER JOIN `{all_users_table}` AS F USING (user)
     WHERE
       {countries_clause}
@@ -49,7 +50,11 @@ SELECT DISTINCT
   user,
   brand,
   osv,
-  days_since_install,
+  DATE_DIFF(
+    CURRENT_DATE(),
+    DATE(TIMESTAMP_MICROS(user_first_touch_timestamp)),
+    DAY
+  ) AS days_since_install,
   IFNULL(acquisition_source,'') || '_' || IFNULL(acquisition_medium,'') AS src,
   n_sessions,
   country

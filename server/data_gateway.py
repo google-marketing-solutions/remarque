@@ -17,6 +17,7 @@
 import os
 import re
 from datetime import date, datetime, timedelta, timezone
+from dateutil.relativedelta import relativedelta
 from typing import Literal
 from google.auth import credentials
 from google.cloud import bigquery
@@ -231,6 +232,46 @@ class DataGateway:
     #           TableSchemas.daily_control_users,
     #           strict=False)
 
+    # => 3.0
+    # Update for v3 (user_normalized with incrementality)
+    if target.ga4_loopback_recreate:
+      # in case if the user is switching back from ga4_loopback_recreate=False,
+      # drop all incremental tables and view
+      query = f"""SELECT table_name
+  FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES
+  WHERE table_name like '{TABLE_USERS_NORMALIZED}_%' ORDER BY 1 DESC
+      """
+      response = self.execute_query(query)
+      tables = [r['table_name'] for r in response]
+      # first drop all existing tables users_normalized_*
+      for table in tables:
+        query = f'DROP TABLE IF EXISTS `{target.bq_dataset_id}.{table}`'
+        self.execute_query(query)
+      # drop the view users_normalized if it exists
+      query = f'DROP VIEW IF EXISTS {target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}'
+      self.execute_query(query)
+    else:
+      # initialization in default mode from old schema (pre v3)
+      # when users_normalized was a single table
+      creation_time = self.bq_utils.get_table_creation_time(
+          target.bq_dataset_id, TABLE_USERS_NORMALIZED, table_only=True)
+      if creation_time:
+        # the table exists (not view), so we're migrating from the old schema
+        # first we need to rename existing users_normalized to suffixed table
+        # with date of its creation date
+        table_name = f'{target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}'
+        suffixed_table_name = f"{TABLE_USERS_NORMALIZED}_{creation_time.strftime('%Y%m%d')}"
+        query = f"ALTER TABLE `{table_name}` RENAME TO `{suffixed_table_name}`"
+        self.execute_query(query)
+        query = f'CREATE OR REPLACE VIEW `{table_name}` AS SELECT * FROM `{table_name}_*`'
+        self.execute_query(query)
+        logger.warning(
+            'users_normalized renamed to %s, view users_normalized created',
+            suffixed_table_name)
+      # TODO: there's a problem: if the user has changed loopback_window,
+      # it won't go into effect as we're not recreating the table and
+      # don't know for what period it was created originally.
+
   def _ensure_table(self,
                     table_name,
                     expected_schema: list[bigquery.SchemaField],
@@ -337,7 +378,19 @@ class DataGateway:
       table = bigquery.Table(table_ref, schema=expected_schema)
       self.bq_client.create_table(table)
 
-  def execute_query(self, query: str) -> list[dict]:
+  def execute_query(
+      self,
+      query: str,
+      return_stat=False) -> list[dict] | tuple[list[dict], float, int]:
+    """Execute a query.
+
+      Args:
+        query: a SQL query to execute
+        return_stat: if true then function returns a tuple
+
+      Returns:
+        results or tuple with results, cost, number of billed bytes
+    """
     ts_start = datetime.now()
     lines = [
         f'{i}: {line.rstrip()}'
@@ -346,15 +399,19 @@ class DataGateway:
     query_logged = '\n'.join(lines)
     logger.debug('Executing SQL query: \n%s', query_logged)
     try:
-      results = self.bq_client.query(query).result()
+      query_job = self.bq_client.query(query)
+      results = query_job.result()
+      # current pricing for on-demand model (2024): $6.25 per TiB
+      cost = 6.25 * query_job.total_bytes_billed / 1024**4
     except exceptions.BadRequest as e:
       if e.errors and e.errors[0]['reason'] == 'invalidQuery' and e.errors[0][
           'message'].startswith('Unrecognized name:'):
         raise AppNotInitializedError(
-            f'Query failed to exucute due to either mistake in the query or schema incompatibility. {e.errors[0]["message"]}. Please reinitialize application'
-        ) from e
+            'Query failed to execute due to either mistake in the query'
+            f' or schema incompatibility. {e.errors[0]["message"]}.'
+            ' Please re-initialize application') from e
       raise QueryExecutionError(
-          f'Query execution error{": " + e.errors[0]["message"] if e.errors else str(e)}',
+          f'Query execution error: {e.errors[0]["message"] if e.errors else str(e)}',
           query) from e
 
     fields = [field.name for field in results.schema]
@@ -367,8 +424,12 @@ class DataGateway:
       data_list.append(row_dict)
 
     elapsed = datetime.now() - ts_start
-    logger.debug('Query executed successfully (elapsed %s)',
-                 format_duration(elapsed))
+    logger.debug(
+        'Query executed successfully (elapsed: %s, cost: %.4f, total bytes billed: %s)',
+        format_duration(elapsed), cost, query_job.total_bytes_billed)
+    if return_stat:
+      return data_list, cost, query_job.total_bytes_billed
+
     return data_list
 
   def get_ga4_table_name(self, target: ConfigTarget, wildcard=False):
@@ -395,14 +456,14 @@ class DataGateway:
 
     if logger.isEnabledFor(logger.level):
       logger.debug('Found GA4 events tables: %s', tables)
-    yesterday = (date.today() - timedelta(days=1)).strftime('%Y%m%d')
+    yesterday = (date.today() - timedelta(days=2)).strftime('%Y%m%d')
     # first row should be 'events_intraday_yyymmdd' (for today), and previous one 'events_yyyymmdd' for tomorrow
     found = next((t for t in tables if t == ga4_table + '_' + yesterday), None)
     if not found:
       raise Exception(
           f"The speficied GA4 dataset ({ga4_project}.{ga4_dataset}) does exists"
           " but does not seem to be updated as we couldn't find an events table"
-          f" for yesterday ('{ga4_table + '_' + yesterday}')")
+          f" for the day before yesterday ('{ga4_table + '_' + yesterday}')")
 
     return tables
 
@@ -630,10 +691,20 @@ WHEN NOT MATCHED THEN
       self._on_audience_removed(target, audience)
     return result
 
-  def _on_audience_removed(self, target: ConfigTarget, audience: dict):
+  def _on_audience_removed(self, target: ConfigTarget, audience: Audience):
     table_name = target.bq_dataset_id + '.' + audience.table_name
     self.bq_client.delete_table(table_name, not_found_ok=True)
-    # TODO: should we delete all test/control tables as well?
+    for suffix in ['all', 'test', 'control', 'uploaded']:
+      self._delete_audience_tables(target, audience.table_name, suffix)
+
+  def _delete_audience_tables(self, target: ConfigTarget, table_name: str,
+                              suffix: str):
+    meta_table_name = target.bq_dataset_id + '.INFORMATION_SCHEMA.TABLES'
+    query = f"SELECT table_name FROM {meta_table_name} WHERE table_name like '{table_name}_{suffix}_%' ORDER BY 1"
+    rows = self.execute_query(query)
+    for row in rows:
+      table_name = target.bq_dataset_id + '.' + row['table_name']
+      self.bq_client.delete_table(table_name, not_found_ok=True)
 
   def _read_file(self, filename):
     script_path = os.path.realpath(__file__)
@@ -843,53 +914,99 @@ WHEN NOT MATCHED THEN
         raise ValueError(f'Unknown duration format: {duration}')
     return years, months, days
 
-  def _convert_duration_to_interval(self, duration: str) -> str:
-    years, months, days = self._parse_duration(duration)
-    base_query = 'CURRENT_DATE()'
-    if years > 0:
-      base_query = 'DATE_SUB({base_query}, INTERVAL {amount} YEAR)'.format(
-          base_query=base_query, amount=years)
-    if months > 0:
-      base_query = 'DATE_SUB({base_query}, INTERVAL {amount} MONTH)'.format(
-          base_query=base_query, amount=months)
-    if days > 0:
-      base_query = 'DATE_SUB({base_query}, INTERVAL {amount} DAY)'.format(
-          base_query=base_query, amount=days)
-    return base_query
-
-  def _create_users_normalized_table(self, target: ConfigTarget):
-    query = self._read_file('prepare_users.sql')
-    lookback_expr = 'DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)'
+  def _create_users_normalized_table_backfill(self,
+                                              target: ConfigTarget,
+                                              incremental: bool = True):
     if target.ga4_loopback_window:
-      lookback_expr = self._convert_duration_to_interval(
-          target.ga4_loopback_window)
+      years, months, days = self._parse_duration(target.ga4_loopback_window)
+      start_date = date.today()
+      if years > 0:
+        start_date = start_date - relativedelta(years=years)
+      if months > 0:
+        start_date = start_date - relativedelta(months=months)
+      if days > 0:
+        start_date = start_date - timedelta(days=days)
+      if start_date == date.today():
+        raise ValueError(
+            'ga4_loopback_window does not define any time range: ' +
+            target.ga4_loopback_window)
+    else:
+      start_date = date.today() - relativedelta(years=years)
+    start_day = start_date.strftime('%Y%m%d')
+    end_day = date.today().strftime('%Y%m%d')
+    self._create_users_normalized_table(target, start_day, end_day, incremental)
 
+  def _create_users_normalized_table(self,
+                                     target: ConfigTarget,
+                                     start_day: str,
+                                     end_day: str,
+                                     incremental: bool = True):
+    query = self._read_file('prepare_users.sql')
+    if not start_day or not end_day:
+      raise ValueError(
+          'Creating users_normalized: start_date and end_date must be specified'
+      )
+    if start_day == end_day:
+      range_condition = f"AND _TABLE_SUFFIX = '{start_day}'"
+    else:
+      range_condition = f"AND _TABLE_SUFFIX BETWEEN '{start_day}' AND '{end_day}'"
     query = query.format(
         **{
             'source_table': self.get_ga4_table_name(target, True),
-            'loopback': lookback_expr
+            'SEARCH_CONDITIONS': range_condition
         })
-    destination_table = target.bq_dataset_id + '.' + TABLE_USERS_NORMALIZED
-    query = f'CREATE OR REPLACE TABLE `{destination_table}` AS\n' + query
-    self.execute_query(query)
-    #now we should have `users_normalized` table
-
-  def ensure_users_normalized(self, target: ConfigTarget):
-    to_create = False
-    creation_time = self.bq_utils.get_table_creation_time(
-        target.bq_dataset_id, TABLE_USERS_NORMALIZED)
-    if creation_time:
-      logger.info('user_normalized table exists, creation time: %s',
-                  creation_time)
-      if creation_time.date() != datetime.now(timezone.utc).date():
-        # table was created not today
-        logger.debug('Table user_normalized needs to be recreated')
-        to_create = True
+    if incremental:
+      destination_table_base = f'{target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}'
+      destination_table = f'{destination_table_base}_{end_day}'
+      query = f'CREATE OR REPLACE TABLE `{destination_table}` AS\n' + query
+      self.execute_query(query)
+      query = f'CREATE OR REPLACE VIEW `{destination_table_base}` AS SELECT * FROM `{destination_table_base}_*`'
+      self.execute_query(query)
     else:
-      to_create = True
-    if to_create:
-      logger.info('Recreating user_normalized table')
-      self._create_users_normalized_table(target)
+      # just one table 'users_normalized' with all data
+      query = f'CREATE OR REPLACE TABLE `{destination_table_base}` AS\n' + query
+      self.execute_query(query)
+
+  def ensure_users_normalized(self, target: ConfigTarget, today=date.today()):
+    if target.ga4_loopback_recreate:
+      # users_normalized is non-incremental
+      # check its creation date and if it's not today
+      # recreate it for loopback_window time range
+      creation_time = self.bq_utils.get_table_creation_time(
+          target.bq_dataset_id, TABLE_USERS_NORMALIZED, table_only=True)
+      if creation_time:
+        logger.info('user_normalized table exists, creation time: %s',
+                    creation_time)
+        if creation_time.date() != datetime.now(timezone.utc).date():
+          # table was created not today
+          logger.debug('Table user_normalized needs to be recreated')
+          self._create_users_normalized_table_backfill(
+              target, incremental=False)
+    else:
+      # users_normalized is incremental
+      query = f"""SELECT table_name
+  FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES
+  WHERE table_name like '{TABLE_USERS_NORMALIZED}_%' ORDER BY 1 DESC
+      """
+      response = self.execute_query(query)
+      tables = [r['table_name'] for r in response]
+
+      if not tables:
+        logger.info('Creating users_normalized table for the first time')
+        self._create_users_normalized_table_backfill(target)
+      else:
+        # detect the last day till which we have data in users_normalized table
+        last_day = [t.split('_')[-1] for t in tables][0]
+        # now we need to create a table users_normalized_{today} that includes
+        # events starting the day after last_day till today
+        last_day = datetime.strptime(last_day, '%Y%m%d').date()
+        if last_day == today:
+          # today's table already exists, no need to do anything
+          return
+
+        start_day = (last_day + timedelta(days=1)).strftime('%Y%m%d')
+        end_day = today.strftime('%Y%m%d')
+        self._create_users_normalized_table(target, start_day, end_day)
 
   def sample_audience_users(self,
                             target: ConfigTarget,

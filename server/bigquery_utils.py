@@ -14,11 +14,9 @@
  limitations under the License.
  """
 
-from typing import Any, Dict, List, Union, Sequence
 from google.cloud import bigquery
 from google.api_core import exceptions
 from google.cloud.bigquery.dataset import Dataset
-import smart_open as smart_open
 from logger import logger
 
 
@@ -26,8 +24,7 @@ class CloudBigQueryUtils:
   """This class provides methods to simplify BigQuery API usage."""
 
   def __init__(self, client: bigquery.Client):
-    """Initialise new instance of CloudBigQueryUtils.
-    """
+    """Initialise new instance of CloudBigQueryUtils."""
     self.client = client
     self.project_id = self.client.project
 
@@ -73,11 +70,23 @@ class CloudBigQueryUtils:
     except exceptions.NotFound:
       pass
 
-  def get_table_creation_time(self, dataset_id, table_id):
+  def get_table_creation_time(self, dataset_id, table_id, table_only=False):
+    """Get a table's creation date (or view's).
+
+    Args:
+      dataset_id: BigQuery dataset id.
+      table_id: BigQuery table id.
+      table_only: if True, only table creation time is returned.
+
+    Returns:
+      Table creation time.
+    """
     try:
       table = self.client.get_table(
-          f"{self.project_id}.{dataset_id}.{table_id}")
+          f"{self.project_id}.{dataset_id}.{table_id}",)
     except exceptions.NotFound:
+      return None
+    if table_only and table.table_type != 'TABLE':
       return None
     creation_time = table.created
     return creation_time

@@ -67,6 +67,7 @@ class ConfigTarget(ConfigItemBase):
   ga4_dataset = ''
   ga4_table = ''
   ga4_loopback_window: str = ''
+  ga4_loopback_recreate: bool = False
   # dataset id for all tables
   bq_dataset_id: str = 'remarque'
   # location for dataset in BigQuery (readonly on the client)
@@ -104,6 +105,7 @@ class Config(ConfigItemBase):
           'ga4_dataset': t.ga4_dataset,
           'ga4_table': t.ga4_table,
           'ga4_loopback_window': t.ga4_loopback_window,
+          'ga4_loopback_recreate': t.ga4_loopback_recreate,
           'bq_dataset_id': t.bq_dataset_id,
           'bq_dataset_location': t.bq_dataset_location,
           'notification_email': t.notification_email,
@@ -164,7 +166,7 @@ def get_config_url(args: argparse.Namespace):
 def get_config(args: argparse.Namespace, fail_ok=False) -> Config:
   """
   Read config file and merge settings from it, command line args and env vars.
-  
+
   Args:
     args: cli arguments
     fail_ok: pass true to raise an exception if config is invalid

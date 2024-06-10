@@ -332,7 +332,7 @@
                 <q-icon name="event" class="cursor-pointer">
                   <q-popup-proxy ref="qStartProxy" cover transition-show="scale" transition-hide="scale">
                     <q-date v-model="data.powerAnalysis.from" mask="YYYY-MM-DD" :no-unset="true"
-                      @update:model-value="$refs.qStartProxy.hide()">
+                      @update:model-value="(<any>$refs.qStartProxy).hide()">
                     </q-date>
                   </q-popup-proxy>
                 </q-icon>
@@ -345,7 +345,7 @@
                 <q-icon name="event" class="cursor-pointer">
                   <q-popup-proxy ref="qEndProxy" cover transition-show="scale" transition-hide="scale">
                     <q-date v-model="data.powerAnalysis.to" mask="YYYY-MM-DD" today-btn :no-unset="true"
-                      @update:model-value="$refs.qEndProxy.hide()">
+                      @update:model-value="(<any>$refs.qEndProxy).hide()">
                     </q-date>
                   </q-popup-proxy>
                 </q-icon>
@@ -606,7 +606,7 @@ export default defineComponent({
         mode: <AudienceMode>audience.value.mode,
         query: audience.value.query,
         ttl: audience.value.ttl,
-        split_ratio: audience.value.split_ratio,
+        split_ratio: audience.value.split_ratio
       }
       return obj;
     }
@@ -696,7 +696,9 @@ export default defineComponent({
         console.log(res.data);
         $q.dialog({
           title: 'Audience preview',
-          message: `The audience with current conditions returned ${res.data.users_count} users.\nPlease note that it's a total number of users to be split onto treatment/control groups and it doens't take into account TTL (users readded from previous days because of ttl>1)`
+          message: `The audience with current conditions returned ${res.data.users_count} users.\n` +
+            `Query cost: $${res.data.cost.toFixed(2)}, total billed bytes: ${res.data.total_bytes_billed.toLocaleString('en-US')}.\n` +
+            "Please note that it's a total number of users to be split onto treatment/control groups and it doens't take into account TTL (users readded from previous days because of ttl>1)"
         });
       }
     };

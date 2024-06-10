@@ -111,13 +111,20 @@ deploy_files() {
   echo -e "${COLOR}Files were deployed to ${GCS_BUCKET}${NC}"
 }
 
-deploy_app() {
+
+build_app() {
   echo -e "${COLOR}Building app...${NC}"
   npm i
   npm run build
+}
+
+
+deploy_app() {
+  build_app
   echo -e "${COLOR}Deploying app to GAE...${NC}"
   gcloud app deploy --quiet
 }
+
 
 create_iap() {
   local USER_EMAIL=$(gcloud config get-value account 2> /dev/null)

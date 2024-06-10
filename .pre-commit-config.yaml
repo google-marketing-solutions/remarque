@@ -22,9 +22,3 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-      - id: prettier
-        name: prettier
-        entry: npm run pre-commit
-        language: system
-        pass_filenames: false
-        always_run: true
