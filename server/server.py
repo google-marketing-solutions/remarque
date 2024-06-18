@@ -506,8 +506,12 @@ def get_power_analysis():
 @app.route('/api/process', methods=['POST'])
 def process():
   # it's a method for automated execution (via Cloud Scheduler)
-
   context = create_context(create_ads=True)
+  params = request.get_json(force=True)
+  audience_name = request.args.get('audience', None) or params.get(
+      'audience', None)
+  mode = request.args.get('mode', None) or params.get('mode', None)
+
   if not context.target:
     raise Exception(
         f"Target was not set, target uri argument: {_get_req_arg_str('target')},"
@@ -515,8 +519,13 @@ def process():
     )
 
   ts_start = datetime.now()
-  logger.info("Starting automated processing for target '%s'",
-              context.target.name)
+  if audience_name:
+    logger.info(
+        "Starting processing for target '%s' and '%s' audience (mode=%s)",
+        context.target.name, audience_name, mode)
+  else:
+    logger.info("Starting automated processing for target '%s'",
+                context.target.name)
 
   # TODO: wrap in try--catch to send any error to email
   context.data_gateway.ensure_users_normalized(context.target)
@@ -526,8 +535,15 @@ def process():
   result = {}
   log = []
   logger.debug('Loaded %s audiences with logs', len(audiences))
+  if audience_name:
+    for audience in audiences:
+      if audience.name == audience_name:
+        audience.mode = mode
+        break
   for audience in audiences:
     if audience.mode == 'off':
+      continue
+    if audience_name and audience.name != audience_name:
       continue
     users_test, users_control = run_sampling_for_audience(context, audience)
     audience_log = audiences_log.get(audience.name, None)

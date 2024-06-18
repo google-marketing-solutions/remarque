@@ -35,8 +35,8 @@ def run_sampling_for_audience(
   """
   if audience.mode == 'off':
     return
-  logger.debug("Starting sampling for '%s' audience", audience.name)
-
+  logger.debug("Starting sampling for '%s' audience (mode=%s)", audience.name,
+               audience.mode)
   if audience.mode == 'test':
     df = context.data_gateway.sample_audience_users(
         context.target, audience, None, return_only_new_users=True)
@@ -71,7 +71,8 @@ def run_sampling_for_audience(
   context.data_gateway.save_sampled_users(context.target, audience, users_test,
                                           users_control)
   if audience.mode == 'test':
-    # now add users captured by the audience (i.e. are contained in the todays's segment) but that existed on previous days ("old" users)
+    # now add users captured by the audience (i.e. are contained in
+    # the todays's segment) but that existed on previous days ("old" users)
     context.data_gateway.add_previous_sampled_users(context.target, audience)
 
   # now add users from yesterday with ttl>1
@@ -175,10 +176,9 @@ def upload_customer_match_audience(context: Context,
       total_test_user_count = new_test_user_count
       total_control_user_count = new_control_user_count
   if new_test_user_count == 0:
-    logger.warning(
-        'Audience segment for %s for %s contains no new users',
-        audience_name,
-        datetime.now().strftime('%Y-%m-%d'))
+    logger.warning('Audience segment for %s for %s contains no new users',
+                   audience_name,
+                   datetime.now().strftime('%Y-%m-%d'))
 
   return AudienceLog(
       name=audience.name,

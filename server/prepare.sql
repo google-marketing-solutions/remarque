@@ -24,6 +24,10 @@ WITH
     WHERE
       _TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
       AND app_info.id = '{app_id}'
+      AND device.operating_system = 'Android'
+      AND device.advertising_id IS NOT NULL
+      AND device.advertising_id NOT IN
+        ('', '00000000-0000-0000-0000-000000000000', '0000-0000')
       AND event_name IN ({all_events_list})
     GROUP BY
       1

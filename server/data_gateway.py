@@ -746,10 +746,6 @@ WHEN NOT MATCHED THEN
     if events_exclude:
       search_condition += ' AND '.join(
           [f"'{event}' NOT IN UNNEST(events)" for event in events_exclude])
-    # search_condition = \
-    #   " AND ".join([f"'{event}' IN UNNEST(events)" for event in events_include]) + \
-    #   " AND " + \
-    #   " AND ".join([f"'{event}' NOT IN UNNEST(events)" for event in events_exclude])
 
     if audience.query:
       query = audience.query
@@ -1152,6 +1148,10 @@ FROM `{audience_table_name}` a
                                  target: ConfigTarget,
                                  audience: Audience,
                                  suffix: str = None):
+    """Add users from previous days into today's segment.
+      It implements 'user affinity'. We take only users sampled today but
+      their affinity to group (test or control) should not change.
+    """
     suffix = datetime.now().strftime('%Y%m%d') if suffix is None else suffix
     segment_table_name = self._get_user_segment_table_full_name(
         target, audience.table_name, 'all', suffix)

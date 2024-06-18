@@ -20,9 +20,25 @@
       <div class="text-h2">Google Ads</div>
     </div>
     <div class="row" style="margin-top: 20px">
-      <q-btn label="Run All" @click="onExecute" :fab="true" color="primary" class="q-mx-md"></q-btn>
-      <q-btn label="Run sampling" @click="onSampling(undefined)" :fab="true" class="q-mx-md"></q-btn>
-      <q-btn label="Upload audiences" @click="onAudiencesUpload(undefined)" :fab="true" class="q-mx-md"></q-btn>
+      <q-btn
+        label="Run All"
+        @click="onExecute"
+        :fab="true"
+        color="primary"
+        class="q-mx-md"
+      ></q-btn>
+      <q-btn
+        label="Run sampling"
+        @click="onSampling(undefined)"
+        :fab="true"
+        class="q-mx-md"
+      ></q-btn>
+      <q-btn
+        label="Upload audiences"
+        @click="onAudiencesUpload(undefined)"
+        :fab="true"
+        class="q-mx-md"
+      ></q-btn>
     </div>
 
     <div class="q-mt-md">
@@ -32,46 +48,113 @@
           <div>
             <q-banner class="bg-grey-3">
               <template v-slot:avatar>
-                <q-icon name="info" color="primary" size="md" style="margin-right: 5px;" />
-                If you scheduled execution then for each defined audience
-                there will be segments with sampled users uploaded to Google Ads as customer match user lists.
+                <q-icon
+                  name="info"
+                  color="primary"
+                  size="md"
+                  style="margin-right: 5px"
+                />
+                If you scheduled execution then for each defined audience there
+                will be segments with sampled users uploaded to Google Ads as
+                customer match user lists.
               </template>
             </q-banner>
           </div>
         </q-card-section>
         <q-card-actions class="q-pa-md">
-          <q-btn label="Load" icon="download" size="md" @click="onFetchAudiencesStatus" color="primary"
-            style="width:130px" class="q-mr-lg" />
-          <q-toggle v-model="data.include_log_duplicates" label="Include log duplicates" class="q-mx-md" />
+          <q-btn
+            label="Load"
+            icon="download"
+            size="md"
+            @click="onFetchAudiencesStatus"
+            color="primary"
+            style="width: 130px"
+            class="q-mr-lg"
+          />
+          <q-toggle
+            v-model="data.include_log_duplicates"
+            label="Include log duplicates"
+            class="q-mx-md"
+          />
           <q-toggle v-model="data.skip_ads" label="Skip Ads info"></q-toggle>
-          <q-icon name="info" size="sm" color="grey"><q-tooltip>Enabling can speed up the loading</q-tooltip></q-icon>
+          <q-icon name="info" size="sm" color="grey"
+            ><q-tooltip>Enabling can speed up the loading</q-tooltip></q-icon
+          >
 
           <!-- <q-toggle v-model="data.only_active" label="Only active audiences"/> -->
         </q-card-actions>
 
         <q-card-section>
           <div class="">
-            <q-table title="Audiences" class="qtable-sticky-header" style="height: 400px" flat bordered
-              :rows="data.audiences" row-key="name" :columns="data.audiences_columns" virtual-scroll
-              :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" v-model:selected="data.selectedAudience"
-              :wrap-cells="data.audiences_wrap" selection="single" :hide-bottom="true">
-
+            <q-table
+              title="Audiences"
+              class="qtable-sticky-header"
+              style="height: 400px"
+              flat
+              bordered
+              :rows="data.audiences"
+              row-key="name"
+              :columns="data.audiences_columns"
+              virtual-scroll
+              :pagination="{ rowsPerPage: 0 }"
+              :rows-per-page-options="[0]"
+              v-model:selected="data.selectedAudience"
+              :wrap-cells="data.audiences_wrap"
+              selection="single"
+              :hide-bottom="true"
+            >
               <template v-slot:top="props">
                 <div class="col-2 q-table__title">Audiences</div>
                 <q-space />
                 <div class="col" align="right">
                   <q-toggle v-model="data.audiences_wrap" label="Word wrap" />
                 </div>
-                <q-btn flat round dense :icon="props.inFullscreen ? 'fullscreen_exit' : 'fullscreen'"
-                  @click="props.toggleFullscreen" class="q-ml-md" />
+                <q-btn
+                  flat
+                  round
+                  dense
+                  :icon="props.inFullscreen ? 'fullscreen_exit' : 'fullscreen'"
+                  @click="props.toggleFullscreen"
+                  class="q-ml-md"
+                />
               </template>
 
               <template v-slot:body-cell-actions="props">
                 <q-td :props="props">
-                  <q-btn dense round flat color="grey" @click="onOpenChart(props.row)" icon="query_stats"></q-btn>
+                  <q-btn
+                    dense
+                    round
+                    flat
+                    color="grey"
+                    @click="onOpenChart(props.row)"
+                    icon="query_stats"
+                  ></q-btn>
                   <q-btn-dropdown dense icon="electric_bolt">
                     <q-list>
-                      <q-item clickable v-close-popup @click="onSampling(props.row)">
+                      <q-item
+                        clickable
+                        v-close-popup
+                        @click="onProcessAudience(props.row, 'test')"
+                      >
+                        <q-item-section>
+                          <q-item-label
+                            >Sample &amp; Split &amp; Upload (as if
+                            mode=test)</q-item-label
+                          >
+                        </q-item-section>
+                      </q-item>
+                      <q-item
+                        clickable
+                        v-close-popup
+                        @click="onProcessAudience(props.row, 'prod')"
+                      >
+                        <q-item-section>
+                          <q-item-label
+                            >Sample &amp; Upload (as if mode=prod)</q-item-label
+                          >
+                        </q-item-section>
+                      </q-item>
+                      <!-- <q-item clickable v-close-popup @click="onSampling(props.row)">
                         <q-item-section>
                           <q-item-label>Sample &amp; Split</q-item-label>
                         </q-item-section>
@@ -80,7 +163,7 @@
                         <q-item-section>
                           <q-item-label>Upload</q-item-label>
                         </q-item-section>
-                      </q-item>
+                      </q-item> -->
                     </q-list>
                   </q-btn-dropdown>
                 </q-td>
@@ -88,10 +171,26 @@
 
               <template v-slot:body-cell-mode="props">
                 <q-td :props="props">
-                  <q-chip :color="props.row.mode === 'off' ? 'red' : props.row.mode === 'test' ? 'blue' : 'green'"
-                    text-color="white" dense class="text-weight-bolder" square>{{ props.row.mode === 'off' ? 'Off' :
-        props.row.mode === 'test' ?
-          'Test ' : 'Prod' }}</q-chip>
+                  <q-chip
+                    :color="
+                      props.row.mode === 'off'
+                        ? 'red'
+                        : props.row.mode === 'test'
+                          ? 'blue'
+                          : 'green'
+                    "
+                    text-color="white"
+                    dense
+                    class="text-weight-bolder"
+                    square
+                    >{{
+                      props.row.mode === 'off'
+                        ? 'Off'
+                        : props.row.mode === 'test'
+                          ? 'Test '
+                          : 'Prod'
+                    }}</q-chip
+                  >
                 </q-td>
               </template>
 
@@ -102,28 +201,56 @@
                   </div>
                   <div class="limited-width" v-if="!data.audiences_wrap">
                     {{ formatArray(props.row.countries) }}
-                    <q-tooltip>{{ formatArray(props.row.countries) }}</q-tooltip>
+                    <q-tooltip>{{
+                      formatArray(props.row.countries)
+                    }}</q-tooltip>
                   </div>
                 </q-td>
               </template>
             </q-table>
             <div
-              v-if="data.selectedAudience.length && data.selectedAudience[0].ads && data.selectedAudience[0].ads.tree.length">
-              <q-pagination v-if="data.selectedAudience[0].ads.tree.length > 1" v-model="data.currentAdgroupIndex"
-                :min="1" :max="data.selectedAudience[0].ads.tree.length" input direction-links />
-              <q-splitter v-model="data.audience_adstree_splitter" class="q-table--bordered">
-
+              v-if="
+                data.selectedAudience.length &&
+                data.selectedAudience[0].ads &&
+                data.selectedAudience[0].ads.tree.length
+              "
+            >
+              <q-pagination
+                v-if="data.selectedAudience[0].ads.tree.length > 1"
+                v-model="data.currentAdgroupIndex"
+                :min="1"
+                :max="data.selectedAudience[0].ads.tree.length"
+                input
+                direction-links
+              />
+              <q-splitter
+                v-model="data.audience_adstree_splitter"
+                class="q-table--bordered"
+              >
                 <template v-slot:before>
                   <div class="q-pa-md">
-                    <q-tree :nodes="[data.selectedAudience[0].ads.tree[data.currentAdgroupIndex - 1]]" node-key="type"
-                      selected-color="primary" default-expand-all v-model:selected="data.adsTreeSelectedNode">
+                    <q-tree
+                      :nodes="[
+                        data.selectedAudience[0].ads.tree[
+                          data.currentAdgroupIndex - 1
+                        ],
+                      ]"
+                      node-key="type"
+                      selected-color="primary"
+                      default-expand-all
+                      v-model:selected="data.adsTreeSelectedNode"
+                    >
                       <template v-slot:default-header="prop">
                         <div v-if="prop.node.status">
                           <div v-if="prop.node.status == 'ENABLED'">
-                            <div class="text-positive">{{ prop.node.label }}</div>
+                            <div class="text-positive">
+                              {{ prop.node.label }}
+                            </div>
                           </div>
                           <div v-if="prop.node.status == 'PAUSED'">
-                            <div class="text-warning">{{ prop.node.label }}</div>
+                            <div class="text-warning">
+                              {{ prop.node.label }}
+                            </div>
                           </div>
                         </div>
                         <div v-else>{{ prop.node.label }}</div>
@@ -136,23 +263,51 @@
                   <q-tab-panels v-model="data.adsTreeSelectedNode">
                     <q-tab-panel name="campaign">
                       <div
-                        v-html="renderNodeInfo(data.selectedAudience[0].ads.tree[data.currentAdgroupIndex - 1], 'campaign')">
-                      </div>
+                        v-html="
+                          renderNodeInfo(
+                            data.selectedAudience[0].ads.tree[
+                              data.currentAdgroupIndex - 1
+                            ],
+                            'campaign',
+                          )
+                        "
+                      ></div>
                     </q-tab-panel>
                     <q-tab-panel name="customer">
                       <div
-                        v-html="renderNodeInfo(data.selectedAudience[0].ads.tree[data.currentAdgroupIndex - 1], 'customer')">
-                      </div>
+                        v-html="
+                          renderNodeInfo(
+                            data.selectedAudience[0].ads.tree[
+                              data.currentAdgroupIndex - 1
+                            ],
+                            'customer',
+                          )
+                        "
+                      ></div>
                     </q-tab-panel>
                     <q-tab-panel name="ad_group">
                       <div
-                        v-html="renderNodeInfo(data.selectedAudience[0].ads.tree[data.currentAdgroupIndex - 1], 'ad_group')">
-                      </div>
+                        v-html="
+                          renderNodeInfo(
+                            data.selectedAudience[0].ads.tree[
+                              data.currentAdgroupIndex - 1
+                            ],
+                            'ad_group',
+                          )
+                        "
+                      ></div>
                     </q-tab-panel>
                     <q-tab-panel name="user_list">
                       <div
-                        v-html="renderNodeInfo(data.selectedAudience[0].ads.tree[data.currentAdgroupIndex - 1], 'user_list')">
-                      </div>
+                        v-html="
+                          renderNodeInfo(
+                            data.selectedAudience[0].ads.tree[
+                              data.currentAdgroupIndex - 1
+                            ],
+                            'user_list',
+                          )
+                        "
+                      ></div>
                     </q-tab-panel>
                   </q-tab-panels>
                 </template>
@@ -162,24 +317,52 @@
         </q-card-section>
 
         <q-card-section>
-          <q-expansion-item :default-opened=true :label="data.isLogPanelExpanded ? '' : 'Upload history'"
-            v-model="data.isLogPanelExpanded" style="font-size: 20px;">
+          <q-expansion-item
+            :default-opened="true"
+            :label="data.isLogPanelExpanded ? '' : 'Upload history'"
+            v-model="data.isLogPanelExpanded"
+            style="font-size: 20px"
+          >
             <div class="row">
               <div class="col" align="right">
-                <q-btn label="Recalculate" @click="onReclculateAudiencesLog" color="secondary" icon="repeat"
-                  class="q-my-md" align="right"></q-btn>
+                <q-btn
+                  label="Recalculate"
+                  @click="onReclculateAudiencesLog"
+                  color="secondary"
+                  icon="repeat"
+                  class="q-my-md"
+                  align="right"
+                ></q-btn>
               </div>
             </div>
             <div class="">
-              <q-table title="Upload history" class="qtable-sticky-header" style="height: 300px" flat bordered
-                :rows="data.audience_log" row-key="name" :columns="data.audience_status_columns" virtual-scroll
-                :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" hide-bottom>
-
+              <q-table
+                title="Upload history"
+                class="qtable-sticky-header"
+                style="height: 300px"
+                flat
+                bordered
+                :rows="data.audience_log"
+                row-key="name"
+                :columns="data.audience_status_columns"
+                virtual-scroll
+                :pagination="{ rowsPerPage: 0 }"
+                :rows-per-page-options="[0]"
+                hide-bottom
+              >
                 <template v-slot:top="props">
                   <div class="col-2 q-table__title">Upload history</div>
                   <q-space />
-                  <q-btn flat round dense :icon="props.inFullscreen ? 'fullscreen_exit' : 'fullscreen'"
-                    @click="props.toggleFullscreen" class="q-ml-md" />
+                  <q-btn
+                    flat
+                    round
+                    dense
+                    :icon="
+                      props.inFullscreen ? 'fullscreen_exit' : 'fullscreen'
+                    "
+                    @click="props.toggleFullscreen"
+                    class="q-ml-md"
+                  />
                 </template>
               </q-table>
             </div>
@@ -191,37 +374,73 @@
             <div class="row">
               <div class="col q-pa-xs">
                 <q-banner class="bg-grey-3">
-
-                  <template v-slot:avatar><q-icon name="info" color="primary" size="md" style="margin-right: 5px;" />
-                    If you don't specify the start date then the day of first upload to Google Ads will be used.<br>
-                    If you don't specify the end date then yesterday will be used.
+                  <template v-slot:avatar
+                    ><q-icon
+                      name="info"
+                      color="primary"
+                      size="md"
+                      style="margin-right: 5px"
+                    />
+                    If you don't specify the start date then the day of first
+                    upload to Google Ads will be used.<br />
+                    If you don't specify the end date then yesterday will be
+                    used.
                   </template>
                 </q-banner>
               </div>
             </div>
             <div class="row">
-              <div class="col q-pa-xs" style="max-width:250px">
-                <q-input filled v-model="data.conversions_from" mask="####-##-##" label="Start date" clearable>
-
+              <div class="col q-pa-xs" style="max-width: 250px">
+                <q-input
+                  filled
+                  v-model="data.conversions_from"
+                  mask="####-##-##"
+                  label="Start date"
+                  clearable
+                >
                   <template v-slot:append>
                     <q-icon name="event" class="cursor-pointer">
-                      <q-popup-proxy ref="qStartProxy" cover transition-show="scale" transition-hide="scale">
-                        <q-date v-model="data.conversions_from" mask="YYYY-MM-DD" :no-unset="true"
-                          @update:model-value="$refs.qStartProxy.hide()">
+                      <q-popup-proxy
+                        ref="qStartProxy"
+                        cover
+                        transition-show="scale"
+                        transition-hide="scale"
+                      >
+                        <q-date
+                          v-model="data.conversions_from"
+                          mask="YYYY-MM-DD"
+                          :no-unset="true"
+                          @update:model-value="$refs.qStartProxy.hide()"
+                        >
                         </q-date>
                       </q-popup-proxy>
                     </q-icon>
                   </template>
                 </q-input>
               </div>
-              <div class="col q-pa-xs" style="max-width:250px">
-                <q-input filled v-model="data.conversions_to" mask="####-##-##" label="End date" clearable>
-
+              <div class="col q-pa-xs" style="max-width: 250px">
+                <q-input
+                  filled
+                  v-model="data.conversions_to"
+                  mask="####-##-##"
+                  label="End date"
+                  clearable
+                >
                   <template v-slot:append>
                     <q-icon name="event" class="cursor-pointer">
-                      <q-popup-proxy ref="qEndProxy" cover transition-show="scale" transition-hide="scale">
-                        <q-date v-model="data.conversions_to" mask="YYYY-MM-DD" today-btn :no-unset="true"
-                          @update:model-value="$refs.qEndProxy.hide()">
+                      <q-popup-proxy
+                        ref="qEndProxy"
+                        cover
+                        transition-show="scale"
+                        transition-hide="scale"
+                      >
+                        <q-date
+                          v-model="data.conversions_to"
+                          mask="YYYY-MM-DD"
+                          today-btn
+                          :no-unset="true"
+                          @update:model-value="$refs.qEndProxy.hide()"
+                        >
                         </q-date>
                       </q-popup-proxy>
                     </q-icon>
@@ -229,47 +448,113 @@
                 </q-input>
               </div>
               <div class="col q-pa-xs" style="width: 250px">
-                <q-select filled v-model="data.conversions_selected_countries" multiple
-                  :options="data.conversions_countries" label="Country" clearable />
+                <q-select
+                  filled
+                  v-model="data.conversions_selected_countries"
+                  multiple
+                  :options="data.conversions_countries"
+                  label="Country"
+                  clearable
+                />
               </div>
               <div class="col q-pa-xs">
-                <q-input filled v-model="data.conversions_events" label="Conv. event" clearable />
+                <q-input
+                  filled
+                  v-model="data.conversions_events"
+                  label="Conv. event"
+                  clearable
+                />
               </div>
               <div class="col q-pa-xs">
                 <q-banner class="bg-grey-3">
-                  p-val: <q-badge>{{ formatFloat(data.pval, 6) }}</q-badge>
-                  <br>If pval &lt;=0.05, then results are statistically significant
+                  p-val:
+                  <q-badge :color="data.pval <= 0.05 ? 'green' : 'blue'">{{
+                    formatFloat(data.pval, 6)
+                  }}</q-badge>
+                  <br />If pval &lt;=0.05, then results are statistically
+                  significant
                 </q-banner>
               </div>
             </div>
             <div class="row">
               <div class="col q-pa-xs">
-                <q-btn label="Load conversions" @click="onLoadConversions" color="primary" icon="query_stats"
-                  class="q-my-md"></q-btn>
-                <q-toggle v-model="data.load_ads_graph" label="Load Ads metrics"
-                  :disable="!(data.selectedAudience[0].ads && data.selectedAudience[0].ads.adgroups.length > 0)" />
-                <q-btn-toggle class="q-mx-lg" v-model="data.conversions_mode" no-wrap outline alight="right" :options="[
-        { label: 'Conv Rate', value: 'cr' },
-        { label: 'Absolute', value: 'abs' },
-      ]" />
+                <q-btn
+                  label="Load conversions"
+                  @click="onLoadConversions"
+                  color="primary"
+                  icon="query_stats"
+                  class="q-my-md"
+                ></q-btn>
+                <q-toggle
+                  v-model="data.load_ads_graph"
+                  label="Load Ads metrics"
+                  :disable="
+                    !(
+                      data.selectedAudience[0].ads &&
+                      data.selectedAudience[0].ads.adgroups.length > 0
+                    )
+                  "
+                />
+                <q-btn-toggle
+                  class="q-mx-lg"
+                  v-model="data.conversions_mode"
+                  no-wrap
+                  outline
+                  alight="right"
+                  :options="[
+                    { label: 'Conv Rate', value: 'cr' },
+                    { label: 'Absolute', value: 'abs' },
+                  ]"
+                />
 
-                <q-btn label="Get query" @click="onGetConversionsQuery" class="q-my-md"></q-btn>
+                <q-btn
+                  label="Get query"
+                  @click="onGetConversionsQuery"
+                  class="q-my-md"
+                ></q-btn>
               </div>
             </div>
           </q-banner>
-          <apexchart v-if="data.chart.series.length" :options="data.chart.options" :series="data.chart.series"
-            height="600">
+          <apexchart
+            v-if="data.chart.series.length"
+            :options="data.chart.options"
+            :series="data.chart.series"
+            height="600"
+          >
           </apexchart>
-          <apexchart v-if="data.chartAds.series.length" :options="data.chartAds.options" :series="data.chartAds.series"
-            height="600"></apexchart>
-          <div v-if="data.selectedAudience[0].ads && data.selectedAudience[0].ads.campaigns.length &&
-        data.selectedAudience[0].conversions &&
-        data.selectedAudience[0].conversions.ads_metrics">
-            <q-pagination v-model="data.currentCampaignIndex" :min="1"
-              :max="data.selectedAudience[0].ads.campaigns.length" input direction-links />
+          <apexchart
+            v-if="data.chartAds.series.length"
+            :options="data.chartAds.options"
+            :series="data.chartAds.series"
+            height="600"
+          ></apexchart>
+          <div
+            v-if="
+              data.selectedAudience[0].ads &&
+              data.selectedAudience[0].ads.campaigns.length &&
+              data.selectedAudience[0].conversions &&
+              data.selectedAudience[0].conversions.ads_metrics
+            "
+          >
+            <q-pagination
+              v-model="data.currentCampaignIndex"
+              :min="1"
+              :max="data.selectedAudience[0].ads.campaigns.length"
+              input
+              direction-links
+            />
             <div
-              v-html="data.selectedAudience[0].ads.campaigns[data.currentCampaignIndex - 1].campaign_name + ' (' + data.selectedAudience[0].ads.campaigns[data.currentCampaignIndex - 1].campaign_id + ')'">
-            </div>
+              v-html="
+                data.selectedAudience[0].ads.campaigns[
+                  data.currentCampaignIndex - 1
+                ].campaign_name +
+                ' (' +
+                data.selectedAudience[0].ads.campaigns[
+                  data.currentCampaignIndex - 1
+                ].campaign_id +
+                ')'
+              "
+            ></div>
           </div>
         </q-card-section>
       </q-card>
@@ -280,7 +565,9 @@
       <q-card-section>
         <div class="text-h6">{{ data.resultDialog.header }}</div>
       </q-card-section>
-      <q-card-section><span v-html="data.resultDialog.message"></span></q-card-section>
+      <q-card-section
+        ><span v-html="data.resultDialog.message"></span
+      ></q-card-section>
       <q-separator />
       <q-card-actions align="right">
         <q-btn v-close-popup flat color="primary" label="Close" />
@@ -294,7 +581,11 @@
 <script lang="ts">
 import { computed, defineComponent, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
-import { AudienceInfo, configurationStore } from 'stores/configuration';
+import {
+  AudienceInfo,
+  AudienceMode,
+  configurationStore,
+} from 'stores/configuration';
 import { postApi, postApiUi, getApiUi } from 'boot/axios';
 import { formatArray, formatDate, formatFloat } from '../helpers/utils';
 
@@ -338,7 +629,7 @@ interface AudienceWithLog extends AudienceInfo {
   ads: {
     campaigns: any[];
     adgroups: any[];
-    tree: any
+    tree: any;
   };
 }
 enum GraphMode {
@@ -363,13 +654,36 @@ export default defineComponent({
         { name: 'mode', label: 'Mode', field: 'mode' },
         { name: 'name', label: 'Name', field: 'name', sortable: true },
         { name: 'app_id', label: 'App id', field: 'app_id', sortable: true },
-        { name: 'countries', label: 'Countries', field: 'countries', sortable: true, format: formatArray },
-        { name: 'events_include', label: 'Include events', field: 'events_include', sortable: true, format: formatArray },
-        { name: 'events_exclude', label: 'Exclude events', field: 'events_exclude', sortable: true, format: formatArray },
+        {
+          name: 'countries',
+          label: 'Countries',
+          field: 'countries',
+          sortable: true,
+          format: formatArray,
+        },
+        {
+          name: 'events_include',
+          label: 'Include events',
+          field: 'events_include',
+          sortable: true,
+          format: formatArray,
+        },
+        {
+          name: 'events_exclude',
+          label: 'Exclude events',
+          field: 'events_exclude',
+          sortable: true,
+          format: formatArray,
+        },
         { name: 'days_ago_start', label: 'Start', field: 'days_ago_start' },
         { name: 'days_ago_end', label: 'End', field: 'days_ago_end' },
         { name: 'ttl', label: 'TTL', field: 'ttl' },
-        { name: 'created', label: 'Created', field: 'created', format: formatDate },
+        {
+          name: 'created',
+          label: 'Created',
+          field: 'created',
+          format: formatDate,
+        },
         { name: 'actions', label: 'Actions', field: '' },
       ],
       audiences_wrap: true,
@@ -377,16 +691,67 @@ export default defineComponent({
       skip_ads: false,
       audience_status_columns: [
         //{ name: 'status', label: 'Status', field: 'status', sortable: true },
-        { name: 'date', label: 'Date', field: 'date', sortable: true, format: (v: any) => formatDate(v, true) },
-        { name: 'test_user_count', label: 'Test Users', field: 'test_user_count', sortable: true },
-        { name: 'control_user_count', label: 'Control Users', field: 'control_user_count', sortable: true },
-        { name: 'uploaded_user_count', label: 'Uploaded Users', field: 'user_count', sortable: true },
-        { name: 'new_test_user_count', label: 'New Test Users', field: 'new_test_user_count', sortable: true },
-        { name: 'new_control_user_count', label: 'New Control Users', field: 'new_control_user_count', sortable: true },
-        { name: 'total_test_user_count', label: 'Total Test Users', field: 'total_test_user_count', sortable: true },
-        { name: 'total_control_user_count', label: 'Total Control Users', field: 'total_control_user_count', sortable: true },
-        { name: 'job_status', label: 'Job Status', field: 'job_status', sortable: true },
-        { name: 'job_failure', label: 'Job Failure', field: 'job_failure', sortable: true },
+        {
+          name: 'date',
+          label: 'Date',
+          field: 'date',
+          sortable: true,
+          format: (v: any) => formatDate(v, true),
+        },
+        {
+          name: 'test_user_count',
+          label: 'Test Users',
+          field: 'test_user_count',
+          sortable: true,
+        },
+        {
+          name: 'control_user_count',
+          label: 'Control Users',
+          field: 'control_user_count',
+          sortable: true,
+        },
+        {
+          name: 'uploaded_user_count',
+          label: 'Uploaded Users',
+          field: 'user_count',
+          sortable: true,
+        },
+        {
+          name: 'new_test_user_count',
+          label: 'New Test Users',
+          field: 'new_test_user_count',
+          sortable: true,
+        },
+        {
+          name: 'new_control_user_count',
+          label: 'New Control Users',
+          field: 'new_control_user_count',
+          sortable: true,
+        },
+        {
+          name: 'total_test_user_count',
+          label: 'Total Test Users',
+          field: 'total_test_user_count',
+          sortable: true,
+        },
+        {
+          name: 'total_control_user_count',
+          label: 'Total Control Users',
+          field: 'total_control_user_count',
+          sortable: true,
+        },
+        {
+          name: 'job_status',
+          label: 'Job Status',
+          field: 'job_status',
+          sortable: true,
+        },
+        {
+          name: 'job_failure',
+          label: 'Job Failure',
+          field: 'job_failure',
+          sortable: true,
+        },
       ],
       audience_adstree_splitter: 70,
       isLogPanelExpanded: true,
@@ -397,7 +762,7 @@ export default defineComponent({
             type: 'line',
           },
           stroke: {
-            curve: 'straight'
+            curve: 'straight',
           },
           zoom: {
             enabled: true,
@@ -406,16 +771,16 @@ export default defineComponent({
           },
           title: {
             text: 'Conversions',
-            align: 'left'
+            align: 'left',
           },
           grid: {
             row: {
               colors: ['#f3f3f3', 'transparent'],
-              opacity: 0.5
+              opacity: 0.5,
             },
           },
           markers: {
-            size: 2
+            size: 2,
           },
           labels: [],
           xaxis: {
@@ -429,8 +794,8 @@ export default defineComponent({
               },
               axisBorder: {
                 show: true,
-                color: '#FF1654'
-              }
+                color: '#FF1654',
+              },
             },
           ],
         },
@@ -442,7 +807,7 @@ export default defineComponent({
             type: 'line',
           },
           stroke: {
-            curve: 'straight'
+            curve: 'straight',
           },
           zoom: {
             enabled: true,
@@ -451,16 +816,16 @@ export default defineComponent({
           },
           title: {
             text: 'Ads campaign metrics',
-            align: 'left'
+            align: 'left',
           },
           grid: {
             row: {
               colors: ['#f3f3f3', 'transparent'],
-              opacity: 0.5
+              opacity: 0.5,
             },
           },
           markers: {
-            size: 2
+            size: 2,
           },
           xaxis: {
             type: 'datetime',
@@ -473,7 +838,7 @@ export default defineComponent({
               },
               axisBorder: {
                 show: true,
-              }
+              },
             },
             {
               opposite: true,
@@ -483,8 +848,8 @@ export default defineComponent({
               },
               axisBorder: {
                 show: true,
-              }
-            }
+              },
+            },
           ],
         },
         series: [] as any,
@@ -531,12 +896,30 @@ export default defineComponent({
               <li>Total control user count: ${result.total_control_user_count}</li>
               </ul></div>`;
       }
-      data.value.resultDialog.header = 'Audience uploading to Google Ads completed';
+      data.value.resultDialog.header =
+        'Audience uploading to Google Ads completed';
       data.value.resultDialog.message = html;
       data.value.resultDialog.show = true;
     }
     const onExecute = async () => {
-      let res = await postApiUi('process', {}, 'Running sampling and uploading...');
+      let res = await postApiUi(
+        'process',
+        {},
+        'Running sampling and uploading...',
+      );
+      if (res?.data.result) {
+        showExecutionResultDialog(res.data.result);
+      }
+    };
+    const onProcessAudience = async (
+      audience: AudienceWithLog,
+      mode: string,
+    ) => {
+      let res = await postApiUi(
+        'process',
+        { audience: audience.name, mode: mode },
+        'Processing the audience...',
+      );
       if (res?.data.result) {
         showExecutionResultDialog(res.data.result);
       }
@@ -544,8 +927,10 @@ export default defineComponent({
     const onSampling = async (audience?: AudienceWithLog) => {
       let res = await postApiUi(
         'sampling/run',
-        { 'audience': audience ? audience.name : null },
-        audience ? 'Running sampling for the audience...' : 'Running sampling for audiences...'
+        { audience: audience ? audience.name : null },
+        audience
+          ? 'Running sampling for the audience...'
+          : 'Running sampling for audiences...',
       );
       /* Expect:
         "result": {
@@ -570,19 +955,24 @@ export default defineComponent({
     };
     const onAudiencesUpload = async (audience?: AudienceWithLog) => {
       const progressDlg = $q.dialog({
-        message: audience ? 'Uploading the audience to Google Ads...' : 'Uploading audiences to Google Ads...',
+        message: audience
+          ? 'Uploading the audience to Google Ads...'
+          : 'Uploading audiences to Google Ads...',
         progress: true, // we enable default settings
         persistent: true, // we want the user to not be able to close it
-        ok: false // we want the user to not be able to close it
+        ok: false, // we want the user to not be able to close it
       });
       const loading = () => progressDlg.hide();
       try {
-        let res = await postApi('ads/upload', { 'audience': audience ? audience.name : null }, loading);
+        let res = await postApi(
+          'ads/upload',
+          { audience: audience ? audience.name : null },
+          loading,
+        );
         if (res.data && res.data.result) {
           showExecutionResultDialog(res.data.result);
         }
-      }
-      catch (e: any) {
+      } catch (e: any) {
         $q.dialog({
           title: 'Error',
           message: e.message,
@@ -590,37 +980,56 @@ export default defineComponent({
       }
     };
 
-    watch(() => data.value.selectedAudience, (newValue: any[]) => {
-      data.value.currentAdgroupIndex = 1;
-      if (newValue && newValue.length) {
-        let newActiveAudience = <AudienceWithLog>newValue[0];
-        data.value.audience_log = newActiveAudience.log;
-        data.value.conversions_selected_countries = [];
-        data.value.conversions_events = '';
-        data.value.conversions_countries = newActiveAudience.countries;
-        updateConversionsChart(newActiveAudience.conversions);
-        data.value.load_ads_graph = (newActiveAudience.ads && newActiveAudience.ads.campaigns.length > 0);
-      }
-    });
-
-    watch(() => data.value.currentCampaignIndex, (newValue: number) => {
-      if (data.value.selectedAudience && data.value.selectedAudience.length) {
-        const audience = data.value.selectedAudience[0];
-        if (audience.ads && audience.conversions && audience.conversions.ads_metrics) {
-          updateAdsMetricsChart(audience.conversions.ads_metrics);
+    watch(
+      () => data.value.selectedAudience,
+      (newValue: any[]) => {
+        data.value.currentAdgroupIndex = 1;
+        if (newValue && newValue.length) {
+          let newActiveAudience = <AudienceWithLog>newValue[0];
+          data.value.audience_log = newActiveAudience.log;
+          data.value.conversions_selected_countries = [];
+          data.value.conversions_events = '';
+          data.value.conversions_countries = newActiveAudience.countries;
+          updateConversionsChart(newActiveAudience.conversions);
+          data.value.load_ads_graph =
+            newActiveAudience.ads && newActiveAudience.ads.campaigns.length > 0;
         }
-      }
-    });
+      },
+    );
 
-    watch(() => data.value.conversions_mode, (newValue: any) => {
-      if (data.value.selectedAudience && data.value.selectedAudience.length) {
-        const audience = data.value.selectedAudience[0];
-        updateConversionsChart(audience.conversions);
-      }
-    });
+    watch(
+      () => data.value.currentCampaignIndex,
+      (newValue: number) => {
+        if (data.value.selectedAudience && data.value.selectedAudience.length) {
+          const audience = data.value.selectedAudience[0];
+          if (
+            audience.ads &&
+            audience.conversions &&
+            audience.conversions.ads_metrics
+          ) {
+            updateAdsMetricsChart(audience.conversions.ads_metrics);
+          }
+        }
+      },
+    );
+
+    watch(
+      () => data.value.conversions_mode,
+      (newValue: any) => {
+        if (data.value.selectedAudience && data.value.selectedAudience.length) {
+          const audience = data.value.selectedAudience[0];
+          updateConversionsChart(audience.conversions);
+        }
+      },
+    );
 
     function getNodeInfo(obj: any, prefix: string) {
-      const keys = Object.keys(obj).filter(n => n.startsWith(prefix + '_') && ['id', 'name', 'status'].indexOf(n.substring(prefix.length + 1)) == -1)
+      const keys = Object.keys(obj).filter(
+        (n) =>
+          n.startsWith(prefix + '_') &&
+          ['id', 'name', 'status'].indexOf(n.substring(prefix.length + 1)) ==
+            -1,
+      );
       let info: any = {};
       for (let key of keys) {
         info[key] = obj[key];
@@ -630,23 +1039,31 @@ export default defineComponent({
     const onFetchAudiencesStatus = async () => {
       data.value.audiences = [];
       data.value.audience_log = [];
-      let res = await getApiUi('audiences/status',
-        { include_log_duplicates: data.value.include_log_duplicates, skip_ads: data.value.skip_ads },
-        'Fetching audiences status...');
+      let res = await getApiUi(
+        'audiences/status',
+        {
+          include_log_duplicates: data.value.include_log_duplicates,
+          skip_ads: data.value.skip_ads,
+        },
+        'Fetching audiences status...',
+      );
       if (!res?.data.result) return;
       const result = res.data.result;
       let audiences = <any[]>[];
-      Object.keys(result).map(name => {
+      Object.keys(result).map((name) => {
         const audience = result[name];
         let logs = audience.log;
         // convert dates from strings to Date objects
         if (logs) {
-          logs = logs.map((i: any) => { i.date = new Date(i.date); return i; });
+          logs = logs.map((i: any) => {
+            i.date = new Date(i.date);
+            return i;
+          });
         }
         let ads = {
           campaigns: [],
           adgroups: [],
-          tree: []
+          tree: [],
         };
         if (audience.campaigns) {
           let campaigns = audience.campaigns.reduce((r: any, a: any) => {
@@ -659,36 +1076,42 @@ export default defineComponent({
           ads = {
             campaigns: Object.values(campaigns),
             adgroups: audience.campaigns,
-            tree: audience.campaigns.map(i => {
+            tree: audience.campaigns.map((i) => {
               return {
                 label: `CID ${i.customer_id} - ${i.customer_name}`,
                 type: 'customer',
                 id: i.customer_id,
                 selected: true,
                 info: getNodeInfo(i, 'customer'),
-                children: [{
-                  label: `Campaign ${i.campaign_id} - ${i.campaign_name} (${i.campaign_status})`,
-                  status: i.campaign_status,
-                  id: i.campaign_id,
-                  type: 'campaign',
-                  info: getNodeInfo(i, 'campaign'),
-                  children: [{
-                    label: `AdGroup ${i.ad_group_id} - ${i.ad_group_name} (${i.ad_group_status})`,
-                    status: i.ad_group_status,
-                    id: i.ad_group_id,
-                    type: 'ad_group',
-                    info: getNodeInfo(i, 'ad_group'),
-                    children: [{
-                      label: `UserList ${i.user_list_id} - ${i.user_list_name}`,
-                      id: i.user_list_id,
-                      type: 'user_list',
-                      info: getNodeInfo(i, 'user_list')
-                    }]
-                  }]
-                }]
+                children: [
+                  {
+                    label: `Campaign ${i.campaign_id} - ${i.campaign_name} (${i.campaign_status})`,
+                    status: i.campaign_status,
+                    id: i.campaign_id,
+                    type: 'campaign',
+                    info: getNodeInfo(i, 'campaign'),
+                    children: [
+                      {
+                        label: `AdGroup ${i.ad_group_id} - ${i.ad_group_name} (${i.ad_group_status})`,
+                        status: i.ad_group_status,
+                        id: i.ad_group_id,
+                        type: 'ad_group',
+                        info: getNodeInfo(i, 'ad_group'),
+                        children: [
+                          {
+                            label: `UserList ${i.user_list_id} - ${i.user_list_name}`,
+                            id: i.user_list_id,
+                            type: 'user_list',
+                            info: getNodeInfo(i, 'user_list'),
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
               };
             }),
-          }
+          };
         }
         audiences.push({
           mode: audience.mode,
@@ -706,19 +1129,19 @@ export default defineComponent({
           ads: ads,
         });
       });
-      console.log(audiences)
+      console.log(audiences);
       data.value.audiences = audiences;
       if (audiences.length > 0) {
         data.value.selectedAudience = [audiences[0]];
       }
     };
 
-    const onReclculateAudiencesLog = async () => {
+    const onRecalculateAudiencesLog = async () => {
       $q.dialog({
         title: 'Confirm',
         message: 'Are you sure you want to rebuild audiences log?',
         cancel: true,
-        persistent: true
+        persistent: true,
       }).onOk(async () => {
         await postApiUi('audiences/recalculate_log', {}, 'Recalculating...');
       });
@@ -741,7 +1164,8 @@ export default defineComponent({
           date_end,
           country_str,
           events,
-          data.value.load_ads_graph ? audience.ads.campaigns : null);
+          data.value.load_ads_graph ? audience.ads.campaigns : null,
+        );
         updateConversionsChart(audience.conversions);
       }
     };
@@ -756,7 +1180,16 @@ export default defineComponent({
         if (country && country.length) {
           country_str = country.join(',');
         }
-        let res = await getApiUi('conversions/query', { audience: audience.name, date_start, date_end, country: country_str }, 'Fetching the audience conversion uquery...');
+        let res = await getApiUi(
+          'conversions/query',
+          {
+            audience: audience.name,
+            date_start,
+            date_end,
+            country: country_str,
+          },
+          'Fetching the audience conversion uquery...',
+        );
         if (!res?.data) {
           return;
         }
@@ -765,31 +1198,42 @@ export default defineComponent({
           title: 'SQL Query for conversion calculation',
           message: res.data.query,
           ok: {
-            push: true
+            push: true,
           },
           class: 'text-pre',
-          fullWidth: true
+          fullWidth: true,
         });
       }
     };
 
-    const loadConversions = async (audienceName: string, date_start: string | undefined, date_end: string | undefined, country: string | undefined, events: string | undefined, campaigns?: any): Promise<Conversions | undefined> => {
+    const loadConversions = async (
+      audienceName: string,
+      date_start: string | undefined,
+      date_end: string | undefined,
+      country: string | undefined,
+      events: string | undefined,
+      campaigns?: any,
+    ): Promise<Conversions | undefined> => {
       data.value.chart.series = [];
       data.value.chartAds.series = [];
       // NOTE: if 'campaigns' is specified it says that we want to fetch campaign's metrics
-      let res = await postApiUi('conversions', {
-        audience: audienceName,
-        date_start,
-        date_end,
-        country,
-        events,
-        campaigns
-      }, 'Fetching the audience conversion history...');
+      let res = await postApiUi(
+        'conversions',
+        {
+          audience: audienceName,
+          date_start,
+          date_end,
+          country,
+          events,
+          campaigns,
+        },
+        'Fetching the audience conversion history...',
+      );
       if (!res) return;
       const results = res.data.results;
       let result;
       if (results) {
-        result = results[audienceName]
+        result = results[audienceName];
       }
       if (!result) {
         $q.dialog({
@@ -801,18 +1245,20 @@ export default defineComponent({
       // 'result' object for a particular audience is expected to be: conversions, date_start, date_end, pval, chi
       // 'result.conversions' is an array of objects with fields: date, cum_test_regs, cum_control_regs
       console.log(result);
-      let ads_metrics_grouped = result.ads_metrics ? result.ads_metrics.reduce((r: any, a: any) => {
-        r[a.campaign] = r[a.campaign] || [];
-        r[a.campaign].push(a);
-        return r;
-      }, Object.create(null)) : {};
+      let ads_metrics_grouped = result.ads_metrics
+        ? result.ads_metrics.reduce((r: any, a: any) => {
+            r[a.campaign] = r[a.campaign] || [];
+            r[a.campaign].push(a);
+            return r;
+          }, Object.create(null))
+        : {};
 
       return {
         data: result.conversions,
         start_date: result.date_start,
         end_date: result.date_end,
         pval: result.pval,
-        ads_metrics: ads_metrics_grouped
+        ads_metrics: ads_metrics_grouped,
       };
     };
 
@@ -843,13 +1289,23 @@ export default defineComponent({
         // NOTE: dates should not repeat otherwise there will be no graph
         graph_data[label] = {
           date: item.date,
-          test: data.value.conversions_mode === GraphMode.cr ? item.cr_test : item.cum_test_regs,
-          control: data.value.conversions_mode === GraphMode.cr ? item.cr_control : item.cum_control_regs
+          test:
+            data.value.conversions_mode === GraphMode.cr
+              ? item.cr_test
+              : item.cum_test_regs,
+          control:
+            data.value.conversions_mode === GraphMode.cr
+              ? item.cr_control
+              : item.cum_control_regs,
         };
       }
       const entries = Object.entries(graph_data);
-      const test_data = entries.map(item => { return { x: item[1].date, y: formatGraphValue(item[1].test) }; });
-      const control_data = entries.map(item => { return { x: item[1].date, y: formatGraphValue(item[1].control) }; });
+      const test_data = entries.map((item) => {
+        return { x: item[1].date, y: formatGraphValue(item[1].test) };
+      });
+      const control_data = entries.map((item) => {
+        return { x: item[1].date, y: formatGraphValue(item[1].control) };
+      });
       data.value.chart.series = [
         { name: 'treatment', data: test_data },
         { name: 'control', data: control_data },
@@ -859,21 +1315,31 @@ export default defineComponent({
       }
     };
 
-    const updateAdsMetricsChart = (ads_metrics: Record<string, AdsMetric[]>) => {
+    const updateAdsMetricsChart = (
+      ads_metrics: Record<string, AdsMetric[]>,
+    ) => {
       const audience = data.value.selectedAudience[0];
       if (!audience.ads) {
         // TODO: clear graph
       } else {
-        const campaign = audience.ads.campaigns[data.value.currentCampaignIndex - 1];
+        const campaign =
+          audience.ads.campaigns[data.value.currentCampaignIndex - 1];
         const ads_metrics_item = ads_metrics[campaign.campaign_id];
         if (ads_metrics_item) {
-          data.value.chartAds.series = [{
-            name: 'users',
-            data: ads_metrics_item.map(i => { return { x: i.date, y: i.unique_users }; })
-          }, {
-            name: 'clicks',
-            data: ads_metrics_item.map(i => { return { x: i.date, y: i.clicks }; })
-          }];
+          data.value.chartAds.series = [
+            {
+              name: 'users',
+              data: ads_metrics_item.map((i) => {
+                return { x: i.date, y: i.unique_users };
+              }),
+            },
+            {
+              name: 'clicks',
+              data: ads_metrics_item.map((i) => {
+                return { x: i.date, y: i.clicks };
+              }),
+            },
+          ];
         } else {
           data.value.chartAds.series = [];
         }
@@ -887,7 +1353,7 @@ export default defineComponent({
       } else {
         onLoadConversions();
       }
-    }
+    };
 
     const getAdsTreeNode = (node: any, nodeKey: string): any | undefined => {
       if (node.type == nodeKey) {
@@ -899,7 +1365,7 @@ export default defineComponent({
           if (res) return res;
         }
       }
-    }
+    };
 
     const renderNodeInfo = (node: any, nodeKey: string): string | undefined => {
       node = getAdsTreeNode(node, nodeKey);
@@ -908,7 +1374,9 @@ export default defineComponent({
         for (let key of Object.keys(node.info)) {
           const prop = key.substring(nodeKey.length + 1).replace('_', ' ');
           if (prop === 'link') {
-            html = `<li><a href='${node.info[key]}' target='_blank'>Open in Google Ads</a></li>` + html;
+            html =
+              `<li><a href='${node.info[key]}' target='_blank'>Open in Google Ads</a></li>` +
+              html;
           } else {
             html += '<li>' + prop + ': ' + node.info[key] + '</li>';
           }
@@ -918,23 +1386,24 @@ export default defineComponent({
         }
         return html;
       }
-    }
+    };
 
     return {
       store,
       data,
       onExecute,
+      onProcessAudience,
       onSampling,
       onAudiencesUpload,
       onFetchAudiencesStatus,
-      onReclculateAudiencesLog,
+      onReclculateAudiencesLog: onRecalculateAudiencesLog,
       onLoadConversions,
       onGetConversionsQuery,
       onOpenChart,
       formatArray,
       formatFloat,
-      renderNodeInfo
+      renderNodeInfo,
     };
-  }
+  },
 });
 </script>

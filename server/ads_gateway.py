@@ -64,26 +64,25 @@ class AdsGateway:
   def create_customer_match_user_lists(
       self, audiences: list[Audience]) -> dict[str, str]:
     """ Identifies which audience lists need to be created in Google Ads and
-            and creates new Customer Match user lists for them.
+        and creates new Customer Match user lists for them.
 
-        Args:
-            audiences: list of audiences
-        Returns:
-            dict: a mapping from audience name to customer match user list resource
-        """
+    Args:
+        audiences: list of audiences
+    Returns:
+        dict: a mapping from audience name to customer match user list resource
+    """
     logger.info('Creating customer match user lists if needed')
     # Get the list audiences that already exist to create the new ones only
     query_text = 'SELECT user_list.name, user_list.resource_name AS user_list_name FROM user_list'
     existing_lists = self.report_fetcher.fetch(query_text,
                                                [self.customer_id]).to_list()
-    logger.debug('Existing user lists: ')
-    logger.debug(existing_lists)
+    logger.debug('Existing user lists:\n %s', existing_lists)
 
     lists_to_add = []
     result = {}
     for audience in audiences:
-      if audience.mode == 'off':
-        continue
+      # we can't skip audiences with mode=off here (though it looks logical)
+      # because audiences in mode=off still can be process on-demand from UI
 
       # Check if the list name is already in existing_lists
       existing_list = next((existing_list for existing_list in existing_lists
@@ -94,8 +93,8 @@ class AdsGateway:
       else:
         result[audience.name] = existing_list[1]
 
-    logger.info('User lists to create: ')
-    logger.info(lists_to_add)
+    if lists_to_add:
+      logger.info('User lists to create:\n %s', lists_to_add)
 
     # Now we'll create a list of UserListOperation objects for each user list
     user_list_service_client = self.googleads_client.get_service(
@@ -110,8 +109,9 @@ class AdsGateway:
       user_list.name = audience.name
       user_list.description = 'Remarque user list'
       # A string that uniquely identifies a mobile application from which the data was collected.
-      # For iOS, the ID string is the 9 digit string that appears at the end of an App Store URL (for example, "476943146" for "Flood-It! 2" whose App Store link is http://itunes.apple.com/us/app/flood-it!-2/id476943146).
-      # For Android, the ID string is the application's package name (for example, "com.labpixies.colordrips" for "Color Drips" given Google Play link https://play.google.com/store/apps/details?id=com.labpixies.colordrips).
+      # For Android, the ID string is the application's package name
+      # (for example, "com.labpixies.colordrips" for "Color Drips" given
+      # Google Play link https://play.google.com/store/apps/details?id=com.labpixies.colordrips).
       user_list.crm_based_user_list.app_id = audience.app_id
       user_list.crm_based_user_list.upload_key_type = self.googleads_client.enums.CustomerMatchUploadKeyTypeEnum.MOBILE_ADVERTISING_ID
       user_list.membership_life_span = _MEMBERSHIP_LIFESPAN

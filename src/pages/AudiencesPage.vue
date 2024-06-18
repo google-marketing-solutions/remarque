@@ -289,7 +289,7 @@
               <li><code>app_id</code> - app id from the audience definition</li>
               <li><code>countries</code> - a list of countries from the audience definition</li>
               <li><code>all_users_table</code> - fullyqualified name of the users_normalized table</li>
-              <li><code>all_events_list</code> - list of all events names from the audience definition</li>
+              <li><code>all_events_list</code> - list of all events names from the audience definition, plus 'session_start' and 'app_remove'</li>
             </ul>
           </q-expansion-item>
         </div>
