@@ -94,150 +94,172 @@
 
     <div class="row q-pa-md">
       <q-card class="col-7 card" flat bordered>
-        <q-card-section>
-          <div class="text-h6">BigQuery</div>
-          <div class="text-subtitle2">
-            BQ dataset where all application data will be kept
-          </div>
-        </q-card-section>
-        <q-banner inline-actions rounded class="bg-grey-3 q-mb-md">
-          <template v-slot:avatar>
-            <q-icon name="info" color="primary" />
-          </template>
+        <q-form class="q-gutter-y-md q-pa-md">
+          <q-card-section>
+            <div class="text-h6">BigQuery</div>
+            <div class="text-subtitle2">
+              BQ dataset where all application data will be kept
+            </div>
+          </q-card-section>
+          <q-banner inline-actions rounded class="bg-grey-3 q-mb-md">
+            <template v-slot:avatar>
+              <q-icon name="info" color="primary" />
+            </template>
 
-          Please note that the dataset will be created in the same location (us
-          or eu) where your GA4 dataset is located.
-        </q-banner>
+            Please note that the dataset will be created in the same location
+            (us or eu) where your GA4 dataset is located.
+          </q-banner>
 
-        <q-input
-          outlined
-          v-model="store.bq_dataset_id"
-          label="Dataset id"
-          placeholder="BigQuery dataset id"
-          hint="by default - 'remarque'"
-        />
+          <q-input
+            outlined
+            v-model="store.bq_dataset_id"
+            label="Dataset id"
+            placeholder="BigQuery dataset id"
+            hint="by default - 'remarque'"
+          />
 
-        <q-input
-          outlined
-          v-model="store.bq_dataset_location"
-          label="Dataset location"
-          readonly
-          class="q-mt-md"
-          placeholder="BigQuery dataset location (us or eu)"
-          hint=""
-        />
+          <q-input
+            outlined
+            v-model="store.bq_dataset_location"
+            label="Dataset location"
+            readonly
+            class="q-mt-md"
+            placeholder="BigQuery dataset location (us or eu)"
+            hint=""
+          />
 
-        <q-input
-          outlined
-          v-model="store.ga4_loopback_window"
-          label="GA4 loopback window"
-          hint="Loopback window for GA4 users data used for users_normalized table, by default 1 year (1Y). Format: nYmMoD where n = number of years, m - number of months, o - number of days"
-        ></q-input>
+          <!-- <q-input
+            outlined
+            v-model="store.ga4_loopback_window"
+            label="GA4 loopback window"
+            hint="Loopback window for GA4 users data used for users_normalized table, by default 1 year (1Y). Format: nYmMoD where n = number of years, m - number of months, o - number of days"
+          ></q-input> -->
+          <q-item class="q-pa-none">
+            <q-item-section>
+              <q-input
+                outlined
+                v-model="store.ga4_loopback_window"
+                label="GA4 loopback window"
+                stack-label
+              />
+              <q-item-label caption class="q-pt-sm">
+                Loopback window for GA4 users data used for users_normalized table, by default 1 year (1Y). Format: nYmMoD where n = number of years, m - number of months, o - number of days
+              </q-item-label>
+            </q-item-section>
+          </q-item>
 
-        <!-- <q-toggle v-model="store.ga4_loopback_recreate" label="Recreate users_normalized table" /> -->
-        <q-item tag="label" v-ripple>
-          <q-item-section>
-            <q-item-label>Recreate users_normalized table</q-item-label>
-            <q-item-label caption
-              ><code>users_normalized</code> table contains user ids with
-              attributes for "loopback window" period (1 year bu default). When
-              the option is enabled the table will be recreated every day. This
-              might incur significant costs in BigQuery. By default (when
-              disabled) very day will created a wildcard table
-              users_normalized_yyyymmdd and all such tables are unioned via a
-              view <code>users_normalized</code>.
-            </q-item-label>
-          </q-item-section>
-          <q-item-section avatar>
-            <q-toggle v-model="store.ga4_loopback_recreate" />
-          </q-item-section>
-        </q-item>
+          <!-- <q-toggle v-model="store.ga4_loopback_recreate" label="Recreate users_normalized table" /> -->
+          <q-item tag="label" v-ripple class="q-pa-none">
+            <q-item-section>
+              <q-item-label>Recreate users_normalized table</q-item-label>
+              <q-item-label caption
+                ><code>users_normalized</code> table contains user ids with
+                attributes for "loopback window" period (1 year bu default).
+                When the option is enabled the table will be recreated every
+                day. This might incur significant costs in BigQuery. By default
+                (when disabled) very day will created a wildcard table
+                users_normalized_yyyymmdd and all such tables are unioned via a
+                view <code>users_normalized</code>.
+              </q-item-label>
+            </q-item-section>
+            <q-item-section side>
+              <q-toggle v-model="store.ga4_loopback_recreate" />
+            </q-item-section>
+          </q-item>
+        </q-form>
       </q-card>
     </div>
 
     <div class="row q-pa-md">
       <q-card class="col-7 card" flat bordered>
-        <q-card-section>
-          <div class="text-h6">Google Ads</div>
-          <div class="text-subtitle2"></div>
-        </q-card-section>
+        <q-form class="q-gutter-y-md q-pa-md">
+          <q-card-section>
+            <div class="text-h6">Google Ads</div>
+            <div class="text-subtitle2"></div>
+          </q-card-section>
 
-        <q-input
-          outlined
-          v-model="store.ads_customer_id"
-          label="Account id"
-          placeholder="Google Ads account id"
-          hint=""
-        />
-        <q-input
-          outlined
-          v-model="store.ads_developer_token"
-          label="Developer token"
-          placeholder="Google Ads developer token"
-          hint=""
-        />
-        <q-input
-          outlined
-          v-model="store.ads_client_id"
-          label="Client id"
-          placeholder="GCP oauth client id"
-          hint=""
-        />
-        <q-input
-          outlined
-          v-model="store.ads_client_secret"
-          label="Client secret"
-          placeholder="GCP oauth client secret"
-          hint=""
-        />
-        <q-input
-          outlined
-          v-model="store.ads_refresh_token"
-          label="Refresh token"
-          placeholder="GCP oauth refresh token"
-          hint=""
-        >
-          <!-- <template v-slot:after>
+          <q-input
+            outlined
+            v-model="store.ads_customer_id"
+            label="Account id"
+            placeholder="Google Ads account id"
+            hint=""
+          />
+          <q-input
+            outlined
+            v-model="store.ads_developer_token"
+            label="Developer token"
+            placeholder="Google Ads developer token"
+            hint=""
+          />
+          <q-input
+            outlined
+            v-model="store.ads_client_id"
+            label="Client id"
+            placeholder="GCP oauth client id"
+            hint=""
+          />
+          <q-input
+            outlined
+            v-model="store.ads_client_secret"
+            label="Client secret"
+            placeholder="GCP oauth client secret"
+            hint=""
+          />
+          <q-input
+            outlined
+            v-model="store.ads_refresh_token"
+            label="Refresh token"
+            placeholder="GCP oauth refresh token"
+            hint=""
+          >
+            <!-- <template v-slot:after>
             <q-btn round dense flat icon="generating_tokens" @click="onGenerateToken" />
           </template> -->
-        </q-input>
-        <q-input
-          outlined
-          v-model="store.ads_login_customer_id"
-          label="MCC id"
-          placeholder="Google Ads MCC id"
-          hint=""
-        />
+          </q-input>
+          <q-input
+            outlined
+            v-model="store.ads_login_customer_id"
+            label="MCC id"
+            placeholder="Google Ads MCC id"
+            hint=""
+          />
 
-        <div class="row q-pa-md">
-          <q-file
-            class="col-3"
-            v-model="data.file"
-            label="Select google-ads.yaml"
-            accept=".yaml"
-          ></q-file>
-          <div class="col">
-            <q-btn
-              label="Upload google-ads.yaml"
-              color="primary"
-              @click="uploadGoogleAdsConfig"
-              class="q-ml-md q-my-xs"
-            ></q-btn>
-            <q-btn
-              label="Download google-ads.yaml"
-              color="primary"
-              @click="downloadGoogleAdsConfig"
-              class="q-ml-md q-my-xs"
-            ></q-btn>
-            <q-btn
-              label="Validate"
-              color="primary"
-              @click="validateGoogleAdsConfig"
-              class="q-ml-md q-my-xs"
-            ></q-btn>
+          <div class="row  q-col-gutter-lg">
+            <q-file
+              class="col-6"
+              v-model="data.file"
+              label="Select google-ads.yaml"
+              accept=".yaml"
+            ></q-file>
+            <div class="col-6">
+              <q-btn
+                label="Upload google-ads.yaml"
+                color="primary"
+                @click="uploadGoogleAdsConfig"
+                class="q-ml-md q-my-xs full-width"
+              ></q-btn>
+
+              <q-btn
+                label="Validate"
+                color="primary"
+                @click="validateGoogleAdsConfig"
+                class="q-ml-md q-my-xs full-width"
+              ></q-btn>
+            </div>
           </div>
-          <div class="col"></div>
-        </div>
+          <div class="row  q-col-gutter-lg">
+            <div class="col-6"></div>
+            <div class="col-6">
+              <q-btn
+                label="Download google-ads.yaml"
+                color="primary"
+                @click="downloadGoogleAdsConfig"
+                class="q-ml-md q-my-xs full-width"
+              ></q-btn>
+            </div>
+          </div>
+        </q-form>
       </q-card>
     </div>
 
@@ -265,6 +287,14 @@
   padding-right: 20px;
   padding-bottom: 20px;
   min-width: 400px;
+}
+.q-item {
+  align-items: flex-start;
+}
+
+.q-item-label.caption {
+  white-space: normal;
+  line-height: 1.4;
 }
 </style>
 

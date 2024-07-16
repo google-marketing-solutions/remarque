@@ -97,7 +97,6 @@
                     </div>
                   </div>
                 </template>
-
               </q-table>
             </div>
           </q-card-section>
