@@ -154,16 +154,6 @@
                           >
                         </q-item-section>
                       </q-item>
-                      <!-- <q-item clickable v-close-popup @click="onSampling(props.row)">
-                        <q-item-section>
-                          <q-item-label>Sample &amp; Split</q-item-label>
-                        </q-item-section>
-                      </q-item>
-                      <q-item clickable v-close-popup @click="onAudiencesUpload(props.row)">
-                        <q-item-section>
-                          <q-item-label>Upload</q-item-label>
-                        </q-item-section>
-                      </q-item> -->
                     </q-list>
                   </q-btn-dropdown>
                 </q-td>
@@ -478,13 +468,25 @@
             </div>
             <div class="row">
               <div class="col q-pa-xs">
-                <q-btn
-                  label="Load conversions"
-                  @click="onLoadConversions"
-                  color="primary"
-                  icon="query_stats"
-                  class="q-my-md"
-                ></q-btn>
+                <q-btn-toggle
+                  class="q-mx-lg"
+                  style="margin-left: 0"
+                  v-model="data.conversions_strategy"
+                  no-wrap
+                  outline
+                  alight="right"
+                  :options="[
+                    { label: 'Bounded', value: 'bounded' },
+                    { label: 'Unbounded', value: 'unbounded' },
+                  ]"
+                />
+                <q-icon name="info" size="sm" color="grey"
+                  ><q-tooltip
+                    ><strong>Bounded</strong> means we take conversions only for days when users were included in the treatment group. <br>
+                    <strong>Unbounded</strong> means we take conversions for all time after users got into the treatment group</q-tooltip
+                  ></q-icon
+                >
+
                 <q-toggle
                   v-model="data.load_ads_graph"
                   label="Load Ads metrics"
@@ -495,6 +497,18 @@
                     )
                   "
                 />
+              </div>
+            </div>
+            <div class="row">
+              <div class="col q-pa-xs">
+                <q-btn
+                  label="Load conversions"
+                  @click="onLoadConversions"
+                  color="primary"
+                  icon="query_stats"
+                  class="q-my-md"
+                ></q-btn>
+
                 <q-btn-toggle
                   class="q-mx-lg"
                   v-model="data.conversions_mode"
@@ -506,7 +520,6 @@
                     { label: 'Absolute', value: 'abs' },
                   ]"
                 />
-
                 <q-btn
                   label="Get query"
                   @click="onGetConversionsQuery"
@@ -636,6 +649,11 @@ enum GraphMode {
   cr = 'cr',
   abs = 'abs',
 }
+enum ConversionStrategy {
+  bounded = 'bounded',
+  unbounded = 'unbounded',
+}
+
 export default defineComponent({
   name: 'GoogleAdsPage',
   components: {},
@@ -865,6 +883,7 @@ export default defineComponent({
       conversions_countries: [] as string[],
       conversions_events: '',
       conversions_mode: GraphMode.cr,
+      conversions_strategy: ConversionStrategy.bounded,
       pval: <number | undefined>undefined,
     });
 
@@ -1184,6 +1203,7 @@ export default defineComponent({
           'conversions/query',
           {
             audience: audience.name,
+            strategy: data.value.conversions_strategy,
             date_start,
             date_end,
             country: country_str,
@@ -1221,6 +1241,7 @@ export default defineComponent({
         'conversions',
         {
           audience: audienceName,
+          strategy: data.value.conversions_strategy,
           date_start,
           date_end,
           country,
@@ -1324,24 +1345,28 @@ export default defineComponent({
       } else {
         const campaign =
           audience.ads.campaigns[data.value.currentCampaignIndex - 1];
-        const ads_metrics_item = ads_metrics[campaign.campaign_id];
-        if (ads_metrics_item) {
-          data.value.chartAds.series = [
-            {
-              name: 'users',
-              data: ads_metrics_item.map((i) => {
-                return { x: i.date, y: i.unique_users };
-              }),
-            },
-            {
-              name: 'clicks',
-              data: ads_metrics_item.map((i) => {
-                return { x: i.date, y: i.clicks };
-              }),
-            },
-          ];
-        } else {
+        if (!campaign) {
           data.value.chartAds.series = [];
+        } else {
+          const ads_metrics_item = ads_metrics[campaign.campaign_id];
+          if (ads_metrics_item) {
+            data.value.chartAds.series = [
+              {
+                name: 'users',
+                data: ads_metrics_item.map((i) => {
+                  return { x: i.date, y: i.unique_users };
+                }),
+              },
+              {
+                name: 'clicks',
+                data: ads_metrics_item.map((i) => {
+                  return { x: i.date, y: i.clicks };
+                }),
+              },
+            ];
+          } else {
+            data.value.chartAds.series = [];
+          }
         }
       }
     };

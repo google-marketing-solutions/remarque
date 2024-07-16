@@ -868,8 +868,12 @@ def get_conversions_query():
   if not audiences:
     raise ValueError(f"No audience with name '{audience_name}' found")
   audience = audiences[0]
+  strategy = request.args.get('strategy') or 'bounded'
+  if strategy != 'bounded' and strategy != 'unbounded':
+    raise ValueError(f'Unknown conversion calculation strategy ({strategy})')
+
   query, date_start, date_end = context.data_gateway.get_user_conversions_query(
-      context.target, audience, date_start, date_end, country, events)
+      context.target, audience, strategy, date_start, date_end, country, events)
   return jsonify({
       'query': query,
       'date_start': date_start.strftime('%Y-%m-%d'),
@@ -894,12 +898,12 @@ def get_user_conversions():
     events = [e.strip() for e in events.split(',') if e.strip()]
   audiences = context.data_gateway.get_audiences(context.target)
   audience_name = params.get('audience')
+  strategy = params.get('strategy') or 'bounded'
+  if strategy != 'bounded' and strategy != 'unbounded':
+    raise ValueError(f'Unknown conversion calculation strategy ({strategy})')
   logger.info(
-      "Calculating conversions graph for '%s' audience and %s-%s timeframe",
-      audience_name,
-      date_start,
-      date_end,
-  )
+      "Calculating conversions graph for '%s' audience and %s-%s timeframe (strategy: %s)",
+      audience_name, date_start, date_end, strategy)
   campaigns = params.get('campaigns', None)
 
   results = {}
@@ -909,9 +913,11 @@ def get_user_conversions():
     if audience_name and audience.name != audience_name:
       continue
     result, date_start, date_end = context.data_gateway.get_user_conversions(
-        context.target, audience, date_start, date_end, country, events)
-    # the result is a list of columns: date, cum_test_regs, cum_control_regs,
-    # total_user_count, total_control_user_count
+        context.target, audience, strategy, date_start, date_end, country,
+        events)
+    # the result is a list of columns:
+    #   date, cum_test_regs, cum_control_regs,
+    #   total_user_count, total_control_user_count
 
     if result:
       last_day_result = result[-1]

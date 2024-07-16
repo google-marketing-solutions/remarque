@@ -1409,6 +1409,8 @@ ORDER BY name, date
   def get_user_conversions_query(self,
                                  target: ConfigTarget,
                                  audience: Audience,
+                                 strategy: Literal['bounded']
+                                 | Literal['unbounded'],
                                  date_start: date = None,
                                  date_end: date = None,
                                  country=None,
@@ -1461,7 +1463,10 @@ ORDER BY name, date
       conversions_conditions = 'TRUE'
       query_TotalCounts = self._read_file('results_parts_TotalCounts_all.sql')
 
-    query = self._read_file('results.sql')
+    if strategy == 'bounded':
+      query = self._read_file('results.sql')
+    else:
+      query = self._read_file('results_unbounded.sql')
 
     class Default(dict):
       """Special dict used for `str.format` to tolerate missing args."""
@@ -1505,12 +1510,13 @@ ORDER BY name, date
   def get_user_conversions(self,
                            target: ConfigTarget,
                            audience: Audience,
+                           strategy: Literal['bounded'] | Literal['unbounded'],
                            date_start: date = None,
                            date_end: date = None,
                            country=None,
                            events: list[str] = None):
     query, date_start, date_end = self.get_user_conversions_query(
-        target, audience, date_start, date_end, country, events)
+        target, audience, strategy, date_start, date_end, country, events)
     result = self.execute_query(query)
     return result, date_start, date_end
 

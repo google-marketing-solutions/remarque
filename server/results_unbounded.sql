@@ -33,32 +33,46 @@ WITH
     FROM AllConversions
       INNER JOIN `{all_users_table}` USING(user)
     WHERE
-      {SEARCH_CONDITIONS}
+      TRUE
   ),
-  TestConvertedPrepare AS (
-    SELECT DISTINCT
-       U.user, reg_date,
-       RANK() OVER (PARTITION BY U.user ORDER BY reg_date) AS rr
-    FROM
-      `{test_users_table}` AS U
-      INNER JOIN Conversions AS C ON U.user = C.user AND U._TABLE_SUFFIX = C.reg_date
+  UserFirstAppearance AS (
+    SELECT user, MIN(_TABLE_SUFFIX) AS first_appearance
+    FROM `{test_users_table}`
     WHERE _TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
+    GROUP BY user
+    UNION ALL
+    SELECT user, MIN(_TABLE_SUFFIX) AS first_appearance
+    FROM `{control_users_table}`
+    WHERE _TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
+    GROUP BY user
   ),
   TestConverted AS (
-    SELECT * FROM TestConvertedPrepare WHERE rr = 1
-  ),
-  ControlConvertedPrepare AS (
     SELECT DISTINCT
-      U.user,
-      reg_date,
-      RANK() OVER (PARTITION BY U.user ORDER BY reg_date) AS rr
+       U.user, C.reg_date
     FROM
-      `{control_users_table}` AS U
-      INNER JOIN Conversions AS C ON U.user = C.user AND U._TABLE_SUFFIX = C.reg_date
-    WHERE _TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
+      `{test_users_table}` AS U
+      INNER JOIN Conversions AS C ON U.user = C.user
+      INNER JOIN UserFirstAppearance AS FA ON U.user = FA.user
+    WHERE U._TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
+      AND C.reg_date >= FA.first_appearance
+      AND C.reg_date <= FORMAT_DATE('%Y%m%d', LEAST(
+        DATE_ADD(PARSE_DATE('%Y%m%d', FA.first_appearance), INTERVAL 14 DAY),
+        PARSE_DATE('%Y%m%d', '{day_end}')
+      ))
   ),
   ControlConverted AS (
-    SELECT * FROM ControlConvertedPrepare WHERE rr = 1
+    SELECT DISTINCT
+      U.user, C.reg_date
+    FROM
+      `{control_users_table}` AS U
+      INNER JOIN Conversions AS C ON U.user = C.user
+      INNER JOIN UserFirstAppearance AS FA ON U.user = FA.user
+    WHERE U._TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
+      AND C.reg_date >= FA.first_appearance
+      AND C.reg_date <= FORMAT_DATE('%Y%m%d', LEAST(
+        DATE_ADD(PARSE_DATE('%Y%m%d', FA.first_appearance), INTERVAL 14 DAY),
+        PARSE_DATE('%Y%m%d', '{day_end}')
+      ))
   ),
   Dates AS (
     SELECT GENERATE_DATE_ARRAY('{date_start}', '{date_end}', INTERVAL 1 DAY) AS date_array
