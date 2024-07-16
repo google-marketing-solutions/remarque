@@ -148,6 +148,12 @@ class CloudSchedulerGateway:
                 job=job,
             ))
 
+  def delete_job(self, target_name: str):
+    project_id = self.config.project_id
+    location_id = self.config.scheduler_location_id
+    job_id = self._get_job_id(target_name)
+    self._delete_scheduler_job(project_id, location_id, job_id)
+
   def _delete_scheduler_job(self, project_id: str, location_id: str,
                             job_id: str) -> None:
     """Delete a job via the Cloud Scheduler API.
@@ -161,10 +167,13 @@ class CloudSchedulerGateway:
     # Create a client.
     client = scheduler_v1.CloudSchedulerClient()
 
-    # Use the client to send the job deletion request.
-    client.delete_job(
-        scheduler_v1.DeleteJobRequest(
-            name=client.job_path(project_id, location_id, job_id)))
+    try:
+      client.delete_job(
+          scheduler_v1.DeleteJobRequest(
+              name=client.job_path(project_id, location_id, job_id)))
+    except exceptions.NotFound:
+      # no job exists and we're asked to remove, done
+      pass
 
   # def get_scheduler_jobs(
   #       self, project_id: str, location_id: str,):

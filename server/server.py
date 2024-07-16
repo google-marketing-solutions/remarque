@@ -249,10 +249,10 @@ def setup():
   # save config to the same location where it was read from
   logger.info('Saving new configuration:\n%s', context.config.to_dict())
   save_config(context.config, args)
-  # TODO:
-  # if name_org := params.get('name_org', None) and name_org != name:
-  # remove a Schedule Job left
-  #  context.cloud_scheduler.delete_job(context.config, name_org)
+
+  # remove a Schedule Job left from previous target if it was renamed
+  if name_org := params.get('name_org', None) and name_org != name:
+    context.cloud_scheduler.delete_job(name_org)
 
   return jsonify(context.config.to_dict())
 
