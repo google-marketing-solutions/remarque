@@ -582,13 +582,15 @@ def process():
 def get_schedule():
   context = create_context()
 
-  job = context.cloud_scheduler.get_job(context.target.name)
+  job = context.cloud_scheduler.get_job(
+      target_name=context.target.name, load_logs=True)
   logger.info('Loaded Schedule Job info: %s', job)
   return jsonify({
       'scheduled': job.enabled,
       'schedule': job.schedule_time,
       'schedule_timezone': job.schedule_timezone,
       'schedule_email': context.target.notification_email,
+      'runs': job.runs
   })
 
 

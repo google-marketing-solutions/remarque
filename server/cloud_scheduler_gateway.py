@@ -1,5 +1,5 @@
 """
- Copyright 2023 Google LLC
+ Copyright 2024 Google LLC
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -15,20 +15,33 @@
  """
 
 from typing import Optional
+from datetime import datetime, timedelta
 from google.cloud import scheduler_v1
+from google.cloud import logging_v2
 from google.api_core import exceptions
-from google.auth import credentials
+from google.auth.credentials import Credentials
 from config import Config, ConfigTarget
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
 class Job:
+  """Scheduler Job description.
+
+  Attributes:
+    enabled: A boolean indicating if the job is enabled.
+    schedule: A string with croc-formatted schedule.
+    schedule_timezone: A timezone name.
+    name: A job name.
+    runs:
+      An ordered list of past runs, where each run is tuple of date and status.
+  """
   enabled: bool
   schedule: str
   schedule_timezone: str
   name: Optional[str] = None
+  runs: list[tuple[str, str]] = field(default_factory=list)
 
   def __init__(self,
                enabled: bool,
@@ -37,6 +50,7 @@ class Job:
                schedule_timezone: str = None,
                schedule_time: str = None):
     self.name = None
+    self.runs = []
     self.enabled: bool = enabled
     self.schedule: str = schedule
     self.schedule_timezone: str = schedule_timezone
@@ -50,7 +64,7 @@ class Job:
       minutes = parts[1]
       if minutes == '00':
         minutes = '0'
-      self.schedule = f"{minutes} {hours} * * *"
+      self.schedule = f'{minutes} {hours} * * *'
     elif schedule:
       # extract time from a croc schedule
       parts = schedule.split(' ')
@@ -66,21 +80,37 @@ class Job:
           minutes = '0' + minutes
       else:
         minutes = '00'
-      self.schedule_time = f"{hours}:{minutes}"
+      self.schedule_time = f'{hours}:{minutes}'
 
 
 class CloudSchedulerGateway:
+  """Gateway to work with Scheduler Job.
 
-  def __init__(self, config: Config, credentials: credentials.Credentials):
+  Attributes:
+    config: The application config.
+    credentials: A credentials object.
+    client: An instance of `google.cloud.scheduler_v1.CloudSchedulerClient`.
+  """
+
+  def __init__(self, config: Config, credentials: Credentials):
     self.config = config
     self.credentials = credentials
     self.client = scheduler_v1.CloudSchedulerClient(credentials=credentials)
-    # Then currently (at 2021 April) there're just two locations for Scheduler: us-west1 and europe-west1.
 
   def _get_job_id(self, target: str):
     return f'remarque_{target or "default"}'
 
-  def get_job(self, target_name: str) -> Job:
+  def get_job(self,
+              target_name: str,
+              load_logs: bool,
+              load_last_days: int = 10) -> Job:
+    """Get a target's job, optionally with run history.
+
+    Args:
+      target_name: A target name.
+      load_logs: True to load run history.
+      load_last_days: A number of days to load history for (default 10).
+    """
     project_id = self.config.project_id
     location_id = self.config.scheduler_location_id
     job_id = self._get_job_id(target_name)
@@ -94,9 +124,33 @@ class CloudSchedulerGateway:
         schedule=job.schedule,
         schedule_timezone=job.time_zone)
     res.name = job_name
+    if load_logs:
+      logging_client = logging_v2.Client()
+      start_time = datetime.now() - timedelta(days=load_last_days)
+      log_filter = (
+          'resource.type="cloud_scheduler_job" '
+          f'AND resource.labels.job_id="{job_id}" '
+          f'AND timestamp >= "{start_time.isoformat(timespec="milliseconds")}Z"'
+      )
+      entries = logging_client.list_entries(filter_=log_filter)
+      for entry in entries:
+        timestamp = entry.timestamp.isoformat()
+        if entry.payload.get('@type') != \
+          'type.googleapis.com/google.cloud.scheduler.logging.AttemptFinished':
+          continue
+        status = 'Success' if entry.http_request.get(
+            'status') == 200 else 'Failure'
+        res.runs.append((timestamp, status))
+
     return res
 
-  def update_job(self, target: ConfigTarget, job: Job):
+  def update_job(self, target: ConfigTarget, job: Job) -> None:
+    """Update a target's job.
+
+    Args:
+      target: A target.
+      job: The target's Cloud job to update.
+    """
     project_id = self.config.project_id
     location_id = self.config.scheduler_location_id
     job_id = self._get_job_id(target.name)
@@ -113,16 +167,12 @@ class CloudSchedulerGateway:
       # to disable we delete the job
       self._delete_scheduler_job(project_id, location_id, job_id)
     elif job.enabled:
-      #and (
-      #cloud_job.state != scheduler_v1.Job.State.ENABLED or
-      #cloud_job.schedule != job.schedule or
-      #cloud_job.time_zone != job.schedule_timezone):
       gae_service = os.getenv('GAE_SERVICE')
       routing = scheduler_v1.AppEngineRouting()
       routing.service = gae_service
       uri = '/api/process?target=' + (
           target.name if target.name and target.name != 'default' else '')
-      print(f"Setting up scheduler for AppEngine at {uri}")
+      print(f'Setting up scheduler for AppEngine at {uri}')
       job = scheduler_v1.Job(
           name=job_name,
           app_engine_http_target=scheduler_v1.AppEngineHttpTarget(
@@ -135,11 +185,7 @@ class CloudSchedulerGateway:
           time_zone=job.schedule_timezone,
       )
       if cloud_job:
-        self.client.update_job(
-            scheduler_v1.UpdateJobRequest(
-                job=job,
-                #update_mask = ['schedule','timeZone'],
-            ))
+        self.client.update_job(scheduler_v1.UpdateJobRequest(job=job))
       else:
         self.client.create_job(
             scheduler_v1.CreateJobRequest(
@@ -148,7 +194,12 @@ class CloudSchedulerGateway:
                 job=job,
             ))
 
-  def delete_job(self, target_name: str):
+  def delete_job(self, target_name: str) -> None:
+    """Delete a target's job.
+
+    Args:
+      target_name: A target name.
+    """
     project_id = self.config.project_id
     location_id = self.config.scheduler_location_id
     job_id = self._get_job_id(target_name)
@@ -163,8 +214,6 @@ class CloudSchedulerGateway:
       location_id: The location for the job to delete.
       job_id: The id of the job to delete.
     """
-
-    # Create a client.
     client = scheduler_v1.CloudSchedulerClient()
 
     try:
@@ -174,16 +223,3 @@ class CloudSchedulerGateway:
     except exceptions.NotFound:
       # no job exists and we're asked to remove, done
       pass
-
-  # def get_scheduler_jobs(
-  #       self, project_id: str, location_id: str,):
-  #   client = scheduler_v1.CloudSchedulerClient()
-  #   jobs = client.list_jobs(
-  #     request=scheduler_v1.ListJobsRequest(
-  #       client.common_location_path(project_id, location_id)
-  #     ),
-  #   )
-  #   for job in jobs:
-  #     print(job)
-  #     print(job.schedule, job.schedule_time, job.state, job.status, job.name, job.time_zone)
-  #   return jobs
