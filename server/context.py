@@ -66,5 +66,5 @@ class Context:
 
     if target and options and options.create_ads_gateway:
       ads_config = self._get_ads_config(target)
-      ads_client = GoogleAdsApiClient(config_dict=ads_config, version='v15')
+      ads_client = GoogleAdsApiClient(config_dict=ads_config)
       self.ads_gateway = AdsGateway(config, target, ads_client)

@@ -927,7 +927,7 @@ WHEN NOT MATCHED THEN
             'ga4_loopback_window does not define any time range: ' +
             target.ga4_loopback_window)
     else:
-      start_date = date.today() - relativedelta(years=years)
+      start_date = date.today() - relativedelta(years=1)
     start_day = start_date.strftime('%Y%m%d')
     end_day = date.today().strftime('%Y%m%d')
     self._create_users_normalized_table(target, start_day, end_day, incremental)
@@ -1535,6 +1535,8 @@ ORDER BY name, date
     for audience in audiences:
       # we load existing log entries to restore relations with jobs
       audience_log_existing = audiences_log.get(audience.name, None)
+      if audience.mode == 'off':
+        continue
       audience_log = self.recalculate_audience_log(target, audience,
                                                    audience_log_existing)
       if audience_log:
