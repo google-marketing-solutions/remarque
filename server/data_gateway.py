@@ -1406,15 +1406,34 @@ ORDER BY name, date
       result[name] = log_items
     return result
 
-  def get_user_conversions_query(self,
-                                 target: ConfigTarget,
-                                 audience: Audience,
-                                 strategy: Literal['bounded']
-                                 | Literal['unbounded'],
-                                 date_start: date = None,
-                                 date_end: date = None,
-                                 country=None,
-                                 events: list[str] = None):
+  def get_user_conversions_query(
+      self,
+      target: ConfigTarget,
+      audience: Audience,
+      strategy: Literal['bounded', 'unbounded'],
+      date_start: date | None = None,
+      date_end: date | None = None,
+      country: list[str] | None = None,
+      events: list[str] | None = None) -> tuple[str, date, date]:
+    """Return a query for calculating conversions.
+
+      Args:
+        target: A target.
+        audience: An audience description.
+        strategy: A strategy to calculate conversions, 'unbounded' means taking
+          events for a user only for periods when they are in a list, while
+          'unbounded' takes events starting a day a user got into a list.
+        date_start: Optional start date of a period.
+        date_end: Optional end date of a period.
+        country: Optional list of countries to additionally filter results.
+        events: Optional list of conversion events to use instead of
+          the audience's event.
+
+      Returns:
+        a tuple (query, date_start, date_end) where query is a SQL query,
+        date_start and date_end are dates for a period, if not specified
+        they will be detected as first and last day of audience import.
+    """
     if date_start is None:
       log = self.get_audiences_log(target)
       log_rows = log.get(audience.name, None)
@@ -1422,7 +1441,8 @@ ORDER BY name, date
         # no imports for the audience, then we'll use the audience creation date
         date_start = audience.created
       else:
-        # Start listing conversions makes sense from the day when first segment was uploaded to Google Ads
+        # Start listing conversions makes sense from the day when first segment
+        # was uploaded to Google Ads
         date_start = min(log_rows, key=lambda i: i.date).date
     if date_end is None:
       # take last day of audience_log
@@ -1437,12 +1457,13 @@ ORDER BY name, date
       if not date_end:
         date_end = date.today() - timedelta(days=1)
 
-    # NOTE: all events that we ignored for sampling (we picked users for whom those events didn't happen)
-    # now are our conversions, but except "app_remove"
-    # TODO: if events_exclude has more than one, we need to make sure all of them happened not just one!
     if events:
       conversion_events = events
     else:
+      # NOTE: all events that we ignored for sampling now are our conversions
+      # (but except "app_remove").
+      # TODO: if events_exclude has more than one item,
+      # we need to make sure all of them happened not just one of them!
       conversion_events = [
           item for item in audience.events_exclude if item != 'app_remove'
       ]
@@ -1450,8 +1471,8 @@ ORDER BY name, date
                             ]) if conversion_events else ''
     if not events_list:
       raise ValueError(
-          "Conversions cannot be calculated as audience's conversion events (excluded_event or explicitly) were not specified"
-      )
+          "Conversions cannot be calculated as audience's conversion events "
+          '(excluded_event or explicitly) were not specified')
     ga_table = self.get_ga4_table_name(target, True)
     user_table = target.bq_dataset_id + '.' + audience.table_name
     if country:
@@ -1502,22 +1523,50 @@ ORDER BY name, date
             'audiences_log':
                 target.bq_dataset_id + '.audiences_log',
             'audience_name':
-                audience.name
+                audience.name,
+            # forward-looking conversion window for unbounded strategy
+            'conv_window':
+                14  # TODO: take the window from args and/or config
         })
-    # expect columns: date, cum_test_regs, cum_control_regs, total_user_count, total_control_user_count
     return query, date_start, date_end
 
-  def get_user_conversions(self,
-                           target: ConfigTarget,
-                           audience: Audience,
-                           strategy: Literal['bounded'] | Literal['unbounded'],
-                           date_start: date = None,
-                           date_end: date = None,
-                           country=None,
-                           events: list[str] = None):
+  def get_user_conversions(
+      self,
+      target: ConfigTarget,
+      audience: Audience,
+      strategy: Literal['bounded', 'unbounded'],
+      date_start: date | None = None,
+      date_end: date | None = None,
+      country: list[str] | None = None,
+      events: list[str] | None = None) -> tuple[list[dict], date, date]:
+    """Calculate conversions.
+
+      Args:
+        target: A target.
+        audience: An audience description.
+        strategy: A strategy to calculate conversions, 'unbounded' means taking
+          events for a user only for periods when they are in a list, while
+          'unbounded' takes events starting a day a user got into a list.
+        date_start: Optional start date of a period.
+        date_end: Optional end date of a period.
+        country: Optional list of countries to additionally filter results.
+        events: Optional list of conversion events to use instead of
+          the audience's event.
+
+      Returns:
+        a tuple (results, date_start, date_end) where results is a list of rows
+        which is a result of executing a query, each row is a dict with columns:
+        date, cum_test_regs, cum_control_regs, total_user_count,
+        total_control_user_count.
+        date_start and date_end are dates for a period, if not specified
+        they will be detected as first and last day of audience import.
+    """
     query, date_start, date_end = self.get_user_conversions_query(
         target, audience, strategy, date_start, date_end, country, events)
     result = self.execute_query(query)
+    # expect columns:
+    # date, cum_test_regs, cum_control_regs,
+    # total_user_count, total_control_user_count
     return result, date_start, date_end
 
   def rebuilt_audiences_log(self, target: ConfigTarget):
@@ -1525,7 +1574,8 @@ ORDER BY name, date
     audiences_log = self.get_audiences_log(target, include_duplicates=True)
 
     # drop audiences_log table (because 'delete from' can fail with error:
-    #   UPDATE or DELETE statement over table 'table_name' would affect rows in the streaming buffer, which is not supported.
+    #   "UPDATE or DELETE statement over table 'table_name' would affect rows
+    #   in the streaming buffer, which is not supported"
     table_name = f'{target.bq_dataset_id}.audiences_log'
     query = f'DROP TABLE `{table_name}`'
     self.execute_query(query)
