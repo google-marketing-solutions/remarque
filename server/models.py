@@ -14,7 +14,7 @@
  limitations under the License.
  """
 from typing import Literal
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 from dataclasses import dataclass
 
 
@@ -71,23 +71,23 @@ class Audience:
     return 'Audience: ' + str(self.to_dict())
 
   @staticmethod
-  def from_dict(dict: dict):
+  def from_dict(map: dict):
     self = Audience()
-    self.name = dict.get('name', None)
-    self.id = dict.get('id', None)
-    self.app_id = dict.get('app_id', None)
-    self.table_name = dict.get('table_name', None)
-    self.countries = dict.get('countries', None)
-    self.events_include = dict.get('events_include', None)
-    self.events_exclude = dict.get('events_exclude', None)
-    self.days_ago_start = dict.get('days_ago_start', None)
-    self.days_ago_end = dict.get('days_ago_end', None)
-    self.user_list = dict.get('user_list', None)
-    self.created = dict.get('created', None)
-    self.mode = dict.get('mode', 'off')
-    self.query = dict.get('query', None)
-    self.ttl = dict.get('ttl', None)
-    self.split_ratio = dict.get('split_ratio', None)
+    self.name = map.get('name', None)
+    self.id = map.get('id', None)
+    self.app_id = map.get('app_id', None)
+    self.table_name = map.get('table_name', None)
+    self.countries = map.get('countries', None)
+    self.events_include = map.get('events_include', None)
+    self.events_exclude = map.get('events_exclude', None)
+    self.days_ago_start = map.get('days_ago_start', None)
+    self.days_ago_end = map.get('days_ago_end', None)
+    self.user_list = map.get('user_list', None)
+    self.created = map.get('created', None)
+    self.mode = map.get('mode', 'off')
+    self.query = map.get('query', None)
+    self.ttl = map.get('ttl', None)
+    self.split_ratio = map.get('split_ratio', None)
     return self
 
 

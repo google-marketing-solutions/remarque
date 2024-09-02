@@ -27,6 +27,7 @@ from env import GAE_LOCATION
 
 
 class AppNotInitializedError(Exception):
+  """Application is not initialized."""
 
   def __init__(self, msg=None) -> None:
     super().__init__(
@@ -36,6 +37,7 @@ class AppNotInitializedError(Exception):
 
 
 class ConfigItemBase:
+  """Base class for Config and ConfigTarget."""
 
   def __init__(self):
     # copy class atrributes (with values) into the instance
@@ -61,19 +63,25 @@ class ConfigItemBase:
 
 
 class ConfigTarget(ConfigItemBase):
-  # target name (required)
+  """Description of a configuration target."""
   name: str = ''
+  """Target name (required)."""
   ga4_project = ''
+  """GA4 project id."""
   ga4_dataset = ''
+  """GA4 dataset id."""
   ga4_table = ''
+  """GA4 table id."""
   ga4_loopback_window: str = ''
+  """Loopback window for GA4 users data used for users_normalized table."""
   ga4_loopback_recreate: bool = False
-  # dataset id for all tables
+  """True to recreate users_normalized every day."""
   bq_dataset_id: str = 'remarque'
-  # location for dataset in BigQuery (readonly on the client)
+  """Dataset id for all Remarque tables."""
   bq_dataset_location: str = ''
-  # notification email
+  """location for dataset in BigQuery (readonly on the client)."""
   notification_email = ''
+  """notification email."""
 
   # Google Ads customer id
   ads_customer_id: str = ''
@@ -85,14 +93,17 @@ class ConfigTarget(ConfigItemBase):
 
 
 class Config(ConfigItemBase):
-  # GCP project id
+  """Application configuration."""
   project_id: str = ''
+  """GCP project id."""
   scheduler_location_id = ''
+  """Cloud Scheduler location (region)."""
 
   def __init__(self) -> None:
     self.targets: List[ConfigTarget] = []
 
   def to_dict(self) -> dict:
+    """Convert to a dictionary."""
     values = {
         'project_id': self.project_id,
         'scheduler_location_id': self.scheduler_location_id,
@@ -115,13 +126,12 @@ class Config(ConfigItemBase):
           'ads_client_secret': t.ads_client_secret,
           'ads_refresh_token': t.ads_refresh_token,
           'ads_login_customer_id': t.ads_login_customer_id
-          #"period_start": t.period_start,
-          #"period_end": t.period_end
       }
       values['targets'].append(target_json)
     return values
 
   def get_targets_names(self):
+    """Get a list of targets names."""
     return [t.name for t in self.targets]
 
 
@@ -157,7 +167,8 @@ def get_config_url(args: argparse.Namespace):
     project_id = find_project_id(args)
     if project_id is None:
       raise Exception(
-          'Config file url contains macro $PROJECT_ID but project id isn\'t specified and can\'t be detected from environment'
+          'Config file url contains macro $PROJECT_ID but '
+          "project id isn't specified and can't be detected from environment"
       )
     config_file_name = config_file_name.replace('$PROJECT_ID', project_id)
   return config_file_name
@@ -214,14 +225,15 @@ def get_config(args: argparse.Namespace, fail_ok=False) -> Config:
   if not config.scheduler_location_id:
     location_id = GAE_LOCATION
     if not location_id:
+      # if Scheduler location isn't specified explicitly
+      # infer it from the GAE location
       credentials = get_credentials(args)
       service = build('appengine', 'v1', credentials=credentials)
       response = service.apps().get(appsId=config.project_id).execute()
       location_id = response.get('locationId')
     if location_id:
-      # if Scheduler location isn't specified explicitly infer it from the GAE location
       # see https://cloud.google.com/appengine/docs/standard/locations
-      # Two locations, which are called europe-west and us-central in App Engine commands and in the Google Cloud console, are called europe-west1 and us-central1, respectively, elsewhere in Google documentation.
+      # there're just two locations for Scheduler: us-west1 and europe-west1.
       if location_id == 'europe-west' or location_id == 'us-central':
         config.scheduler_location_id = location_id + '1'
       else:
@@ -233,11 +245,12 @@ def get_config(args: argparse.Namespace, fail_ok=False) -> Config:
 
 
 def save_config(config: Config, args: argparse.Namespace):
+  """Save the current config into a file"""
   config_file_name = get_config_url(args)
   with smart_open.open(config_file_name, 'w') as f:
     config_dict = config.to_dict()
-    # NOTE: we're not saving the following parameters as they can be detected in runtime
-    #       and it's be more reliable than taking them from config
+    # NOTE: we're not saving the following parameters as they can be detected
+    # in runtime and it's be more reliable than taking them from config
     del config_dict['project_id']
     del config_dict['scheduler_location_id']
     f.write(json.dumps(config_dict))

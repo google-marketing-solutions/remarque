@@ -63,13 +63,16 @@ class AdsGateway:
 
   def create_customer_match_user_lists(
       self, audiences: list[Audience]) -> dict[str, str]:
-    """ Identifies which audience lists need to be created in Google Ads and
-        and creates new Customer Match user lists for them.
+    """Create user list in Google Ads if needed.
+
+    Identifies which audience lists need to be created in Google Ads and
+    creates new Customer Match user lists for them.
 
     Args:
-        audiences: list of audiences
+        audiences: A list of audiences.
+
     Returns:
-        dict: a mapping from audience name to customer match user list resource
+        A mapping from audience name to customer match user list resource.
     """
     logger.info('Creating customer match user lists if needed')
     # Get the list audiences that already exist to create the new ones only
@@ -113,7 +116,9 @@ class AdsGateway:
       # (for example, "com.labpixies.colordrips" for "Color Drips" given
       # Google Play link https://play.google.com/store/apps/details?id=com.labpixies.colordrips).
       user_list.crm_based_user_list.app_id = audience.app_id
-      user_list.crm_based_user_list.upload_key_type = self.googleads_client.enums.CustomerMatchUploadKeyTypeEnum.MOBILE_ADVERTISING_ID
+      user_list.crm_based_user_list.upload_key_type = (
+          self.googleads_client.enums.CustomerMatchUploadKeyTypeEnum
+          .MOBILE_ADVERTISING_ID)
       user_list.membership_life_span = _MEMBERSHIP_LIFESPAN
       user_list_operations.append(user_list_op)
 

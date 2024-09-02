@@ -1149,6 +1149,7 @@ FROM `{audience_table_name}` a
                                  audience: Audience,
                                  suffix: str = None):
     """Add users from previous days into today's segment.
+
       It implements 'user affinity'. We take only users sampled today but
       their affinity to group (test or control) should not change.
     """

@@ -163,14 +163,14 @@ def get_configuration():
 @app.route('/api/setup', methods=['POST'])
 def setup():
   context = create_context(fail_ok=True)
-  params = request.get_json(force=True)
+  params: dict = request.get_json(force=True)
   logger.info('Running setup with params:\n %s', params)
   is_new = params.get('is_new', False)
   name = (params.get('name') or 'default').strip().lower()
-  ga4_project = params.get('ga4_project', None)
-  ga4_dataset = params.get('ga4_dataset', None)
+  ga4_project = params.get('ga4_project')
+  ga4_dataset = params.get('ga4_dataset')
   ga4_table = params.get('ga4_table', 'events')
-  bq_dataset_id = params.get('bq_dataset_id', None)
+  bq_dataset_id = params.get('bq_dataset_id')
   context.config.targets = context.config.targets or []
 
   if not ga4_dataset:
@@ -233,12 +233,12 @@ def setup():
 
   context.data_gateway.initialize(target)
 
-  target.ads_client_id = params.get('ads_client_id', None)
-  target.ads_client_secret = params.get('ads_client_secret', None)
-  target.ads_customer_id = params.get('ads_customer_id', None)
-  target.ads_developer_token = params.get('ads_developer_token', None)
-  target.ads_login_customer_id = params.get('ads_login_customer_id', None)
-  target.ads_refresh_token = params.get('ads_refresh_token', None)
+  target.ads_client_id = params.get('ads_client_id')
+  target.ads_client_secret = params.get('ads_client_secret')
+  target.ads_customer_id = params.get('ads_customer_id')
+  target.ads_developer_token = params.get('ads_developer_token')
+  target.ads_login_customer_id = params.get('ads_login_customer_id')
+  target.ads_refresh_token = params.get('ads_refresh_token')
 
   if target.ads_refresh_token:
     ads_cfg = _get_ads_config(target)
@@ -251,7 +251,7 @@ def setup():
   save_config(context.config, args)
 
   # remove a Schedule Job left from previous target if it was renamed
-  if name_org := params.get('name_org', None) and name_org != name:
+  if name_org := params.get('name_org') and name_org != name:
     context.cloud_scheduler.delete_job(name_org)
 
   return jsonify(context.config.to_dict())
@@ -326,12 +326,12 @@ def setup_download_ads_cred():
 @app.route('/api/setup/validate_ads_cred', methods=['POST'])
 def setup_validate_ads_cred():
   context = create_context()
-  params = request.get_json(force=True)
+  params: dict = request.get_json(force=True)
   cfg = {
-      'developer_token': params.get('ads_developer_token', None),
-      'client_id': params.get('ads_client_id', None),
-      'client_secret': params.get('ads_client_secret', None),
-      'refresh_token': params.get('ads_refresh_token', None),
+      'developer_token': params.get('ads_developer_token'),
+      'client_id': params.get('ads_client_id'),
+      'client_secret': params.get('ads_client_secret'),
+      'refresh_token': params.get('ads_refresh_token'),
       'login_customer_id': str(params.get('ads_login_customer_id')),
       'customer_id': str(params.get('ads_customer_id')),
       'use_proto_plus': True,
@@ -436,12 +436,12 @@ def get_query_for_audience() -> Response:
 @app.route('/api/audience/base_conversion', methods=['POST', 'GET'])
 def get_base_conversion():
   context = create_context()
-  params = request.get_json(force=True)
+  params: dict = request.get_json(force=True)
   audience_raw = params['audience']
   audience = Audience.from_dict(audience_raw)
-  date_start = params.get('date_start', None) or request.args.get('date_start')
+  date_start = params.get('date_start') or request.args.get('date_start')
   date_start = date.fromisoformat(date_start) if date_start else None
-  date_end = params.get('date_end', None) or request.args.get('date_end')
+  date_end = params.get('date_end') or request.args.get('date_end')
   date_end = date.fromisoformat(date_end) if date_end else None
   conversion_window_days = params.get('conversion_window') or request.args.get(
       'conversion_window')
@@ -507,10 +507,9 @@ def get_power_analysis():
 def process():
   # it's a method for automated execution (via Cloud Scheduler)
   context = create_context(create_ads=True)
-  params = request.get_json(force=True)
-  audience_name = request.args.get('audience', None) or params.get(
-      'audience', None)
-  mode = request.args.get('mode', None) or params.get('mode', None)
+  params: dict = request.get_json(force=True)
+  audience_name = request.args.get('audience') or params.get('audience')
+  mode = request.args.get('mode') or params.get('mode')
 
   if not context.target:
     raise Exception(
@@ -625,9 +624,8 @@ def run_sampling() -> Response:
   """
   logger.info('Run sampling for all audiences')
   context = create_context()
-  params = request.get_json(force=True)
-  audience_name = request.args.get('audience', None) or params.get(
-      'audience', None)
+  params: dict = request.get_json(force=True)
+  audience_name = request.args.get('audience') or params.get('audience')
   context.data_gateway.ensure_users_normalized(context.target)
   audiences = context.data_gateway.get_audiences(context.target)
   result = {}
@@ -692,9 +690,8 @@ def _get_ads_config(target: ConfigTarget, assert_non_empty=False):
 def update_customer_match_audiences():
   logger.info('Uploading audiences to Google Ads')
   context = create_context(create_ads=True)
-  params = request.get_json(force=True)
-  audience_name = request.args.get('audience', None) or params.get(
-      'audience', None)
+  params: dict = request.get_json(force=True)
+  audience_name = request.args.get('audience') or params.get('audience')
   audiences = context.data_gateway.get_audiences(context.target)
   audiences_log = context.data_gateway.get_audiences_log(context.target)
   update_customer_match_mappings(context, audiences)
@@ -709,7 +706,7 @@ def update_customer_match_audiences():
     if audience.mode == 'off':
       continue
 
-    audience_log = audiences_log.get(audience.name, None)
+    audience_log = audiences_log.get(audience.name)
     # load of users for 'today' table (audience_{listname}_test_yyyyMMdd)
     users = context.data_gateway.load_audience_segment(context.target, audience,
                                                        'test')
@@ -906,7 +903,7 @@ def get_user_conversions():
   logger.info(
       "Calculating conversions graph for '%s' audience and %s-%s timeframe (strategy: %s)",
       audience_name, date_start, date_end, strategy)
-  campaigns = params.get('campaigns', None)
+  campaigns = params.get('campaigns')
 
   results = {}
   pval = None
