@@ -2,6 +2,22 @@
 
 _This is not an officially supported Google product._
 
+## Table of content
+
+- [Problem](#problem)
+- [Solution](#solution)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+  - [GAE environemnt, instance class, scaling and costs](#gae-environemnt-instance-class-scaling-and-costs)
+  - [Application acccess](#application-access)
+- [Design](#design)
+  - [Sampling](#sampling)
+  - [Splitting](#splitting)
+  - [Upload Audiences](#upload-audiences)
+  - [Run campaigns (ACe)](#run-campaigns-ace)
+  - [Analyze results](#analyze-results)
+  - [Incrementality](#incrementality)
+
 ## Problem
 
 The tool leverages Customer Match user lists in Google Ads using user ids from
@@ -26,13 +42,15 @@ remarketing with controlling of results.
 
 ## Prerequisites
 
-1. Firebase streaming to BigQuery. There should be at least one of the following events included: session_start, first_open, plus events that will be used for sampling users into audiences
-2. Google Ads API access (developer token)
+1. Firebase streaming to BigQuery. There should be at least one of the following
+   events included: session_start, first_open, plus events that will be used
+   for sampling users into audiences
+2. Google Ads API access (developer token + refresh token)
 
 ## Installation
 
 1. Install application
-   Installation is easier to execute in Cloud Shell but actually you can run it anywhere.
+   Installation is easier to do in Cloud Shell but actually you can run it anywhere.
    Open Cloud Shell and execute in the terminal:
 
 ```
@@ -40,14 +58,15 @@ git clone https://github.com/google-marketing-solutions/remarque
 cd remarque
 ./setup.sh deploy_all
 ```
-Please make sure that the user under which you run `setup.sh` is has Owner role.
+
+Please make sure that the user under which you run `setup.sh` has Owner role.
 
 Run `setup.sh` without parameter to see the application service account
 (PROJECT_ID@appspot.gserviceaccount.com)
 
 Execution of `setup.sh` might fail if your Cloud project isn't in a Cloud Organization.
 In that case you will need to manually create OAuth consent screen and
-enable IAP for your AppEngine.
+enable IAP for your AppEngine (see https://cloud.google.com/iap/docs/enabling-app-engine).
 
 To redeploy app run:
 
@@ -70,6 +89,74 @@ To redeploy app run:
 All other settings should be done inside the application.
 
 FYI: the configuration is kept on GCS gs://<project_id>/remarque/config.json
+
+> The application will be deployed to Google Cloud App Engine standard environment.
+> Particular settings for AppEngine are defined in `app.yaml`. Please consult the next section
+> to learn more about instance classes and timeouts.
+
+### GAE environemnt, instance class, scaling and costs
+
+There are two types of environment in GAE: standard and flexible.
+See https://cloud.google.com/appengine/docs/the-appengine-environments
+As flexible environment doesn't provide Free Tier we use the standard.
+But you can manually change the environemnt in your `app.yaml`.
+Standard environment allows to scale down to 0 running instances when
+the application is not in use.
+
+There are several types of scaling in the standard environment.
+Different scaling type have [different characterictics](https://cloud.google.com/appengine/docs/standard/python/how-instances-are-managed#scaling_types).
+For this solution the most important one is _request timeout_.
+As processing of all audiences can be quite long.
+
+Request timeouts are following:
+
+- Automatic scaling : 10 minutes
+- Basic/manual scaling: 24 hours
+
+Usually 10 minutes is not enough. That's because by default basic scalling
+is used and the template for `app.yaml` contains `basic_scaling` section:
+
+```yaml
+runtime: python311
+basic_scaling:
+  max_instances: 1
+```
+
+Why should you bother about scaling type? It's because that Free Tier
+provides different quotes for different scalling types (See all details here - https://cloud.google.com/free/docs/gcp-free-tier#free-tier-usage-limits):
+
+- 28 hours per day of "F" instances
+- 9 hours per day of "B" instances
+
+"F" instances means automatic scaling.
+"B" instances means basic (or manual) scaling.
+
+So when using one instance in standard environment with basic scaling you have
+9 hours of execution time free of change. After that you'll be charged -
+check [pricing](https://cloud.google.com/appengine/pricing).
+
+You always can change environemnt, scaling and instance class in your app.yaml,
+see detail here - https://cloud.google.com/appengine/docs/standard/nodejs/config/appref.
+
+### Application acccess
+
+When an application is installed with `setup.sh` it's by default shielded with
+Identity-Aware Proxy (IAP). IAP is a service in Google Cloud that we used for
+authentication/authorization.  
+You can access it via https://console.cloud.google.com/security/iap.
+On that page we shall see a list of services, in our case - AppEngine application
+(with default 'service' which is actually our application).
+IAP should be enabled for the 'App Engine app' node with 'OK' status. If you see
+'Fail' status, please disable and re-enable IAP.
+
+To grant access to your application you should give the 'IAP-secured Web App User'
+role to either user, domain or Google Group. Click on 'App Engine app' node in
+the list of services and then on 'Add Principal' in the rightside menu.
+For principal you can enter either a Google account (user1@gmail.com or
+user1@your_domain.com if you use Google Workspace), or Google Workspace domain
+(e.g. your_domain.com), or a Google Group (you need to create it beforehand).
+In the latter case you'll be able to manage the app access permissions via
+the group membership.
 
 ## Design
 

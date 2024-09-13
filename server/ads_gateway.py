@@ -16,17 +16,19 @@
 
 from enum import Enum
 from typing import Union
+
+from config import Config, ConfigTarget
+from gaarf.api_clients import GoogleAdsApiClient
+from gaarf.base_query import BaseQuery
+from gaarf.query_executor import AdsQueryExecutor, AdsReportFetcher
 from google.ads.googleads.errors import GoogleAdsException
+from logger import logger
+from models import Audience
+from queries import OfflineJobQuery, UserListCampaignMetrics, UserListCampaigns
+
 #from google.ads.googleads.client import GoogleAdsClient  # type: ignore
 
-from gaarf.api_clients import GoogleAdsApiClient
-from gaarf.query_executor import AdsReportFetcher, AdsQueryExecutor
 
-from logger import logger
-from config import Config, ConfigTarget
-from models import Audience
-from queries import OfflineJobQuery, UserListCampaigns, UserListCampaignMetrics
-from gaarf.base_query import BaseQuery
 
 _MEMBERSHIP_LIFESPAN = 10000
 _MAX_OPERATIONS_PER_JOB = 100000

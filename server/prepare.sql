@@ -19,8 +19,7 @@ WITH
       ARRAY_AGG(event_name) AS events,
       ANY_VALUE(user_first_touch_timestamp) AS user_first_touch_timestamp,
       SUM(IF(event_name = 'session_start', 1, 0)) AS n_sessions
-    FROM
-      `{source_table}`
+    FROM `{source_table}`
     WHERE
       _TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
       AND app_info.id = '{app_id}'
@@ -42,9 +41,9 @@ WITH
       UserEvents.user_first_touch_timestamp,
       UserEvents.n_sessions,
       F.country
-    FROM
-      UserEvents
-      INNER JOIN `{all_users_table}` AS F USING (user)
+    FROM UserEvents
+    INNER JOIN `{all_users_table}` AS F
+      USING (user)
     WHERE
       {countries_clause}
       AND F.app_id = '{app_id}'

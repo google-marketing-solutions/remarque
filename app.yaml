@@ -16,22 +16,24 @@ runtime: python311
 default_expiration: 0
 
 #uncomment these lines if longer timeout (>10mins) needed
-#instance_class: B4
-#basic_scaling:
-#  max_instances: 1
-
-instance_class: F4
-automatic_scaling:
-  min_instances: 0
+instance_class: B4
+basic_scaling:
   max_instances: 1
 
+#instance_class: F4
+#automatic_scaling:
+#  min_instances: 0
+#  max_instances: 1
+
 # instance classes and free tier quotas (don't forget to adjust gunicorn's --workers flag):
-#   F1: 256MB / 600MHz - 28 free hours per day (default)
-#   F2: 512MB / 1.2GHz - 14 free hours per day
-#   F4: 1024MB / 2.4GHz - 7 free hours per day
-#   B1: 256MB / 600MHz - 9 free hours per day
-#   B2: 512MB / 1.2GHz - 4:30 free hours per day (default)
-#   B4: 1024MB / 2.4GHz - 2:15 free hours per day
+#   F1: 384MB / 600MHz - 28 free hours per day (default)
+#   F2: 768MB / 1.2GHz - 14 free hours per day
+#   F4: 1536MB / 2.4GHz - 7 free hours per day
+#   F4_1G: 3072MB / 2.4 GHz -
+#   B1: 384MB / 600MHz - 9 free hours per day
+#   B2: 768MB / 1.2GHz - 4:30 free hours per day (default)
+#   B4: 1536MB / 2.4GHz - 2:15 free hours per day
+#   B8: 3072MB / 4.8Ghz
 # request timeout:
 #   F - 10 minutes
 #   B - 24 hours
