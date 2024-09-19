@@ -13,19 +13,21 @@
     "build": "quasar build"
   },
   "dependencies": {
-    "@quasar/extras": "^1.16.7",
-    "apexcharts": "^3.44.0",
-    "axios": "^1.5.1",
+    "@quasar/extras": "^1.16.12",
+    "apexcharts": "^3.53.0",
+    "axios": "^1.7.7",
     "date-fns": "^2.30.0",
-    "pinia": "^2.1.7",
-    "quasar": "^2.13.0",
-    "vue": "^3.3.7",
-    "vue-router": "^4.2.5",
-    "vue3-apexcharts": "^1.4.4"
+    "lodash": "^4.17.21",
+    "pinia": "^2.2.2",
+    "quasar": "^2.17.0",
+    "vue": "^3.5.4",
+    "vue-router": "^4.4.3",
+    "vue3-apexcharts": "^1.6.0"
   },
   "devDependencies": {
-    "@quasar/app-vite": "^1.6.2",
-    "@types/node": "^12.20.21",
+    "@quasar/app-vite": "^1.10.0",
+    "@types/lodash": "^4.17.7",
+    "@types/node": "^22.5.4",
     "@typescript-eslint/eslint-plugin": "^5.10.0",
     "@typescript-eslint/parser": "^5.10.0",
     "autoprefixer": "^10.4.2",

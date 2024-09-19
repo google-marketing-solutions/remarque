@@ -64,7 +64,7 @@
         <q-card-actions class="q-pa-md">
           <q-btn
             label="Load"
-            icon="download"
+            icon="sync"
             size="md"
             @click="onFetchAudiencesStatus"
             color="primary"
@@ -72,11 +72,11 @@
             class="q-mr-lg"
           />
           <q-toggle
-            v-model="data.include_log_duplicates"
+            v-model="data.includeLogDuplicates"
             label="Include log duplicates"
             class="q-mx-md"
           />
-          <q-toggle v-model="data.skip_ads" label="Skip Ads info"></q-toggle>
+          <q-toggle v-model="data.skipLoadAds" label="Skip Ads info"></q-toggle>
           <q-icon name="info" size="sm" color="grey"
             ><q-tooltip>Enabling can speed up the loading</q-tooltip></q-icon
           >
@@ -92,14 +92,14 @@
               style="height: 400px"
               flat
               bordered
-              :rows="data.audiences"
+              :rows="audiences"
               row-key="name"
-              :columns="data.audiences_columns"
+              :columns="data.audiencesColumns"
               virtual-scroll
               :pagination="{ rowsPerPage: 0 }"
               :rows-per-page-options="[0]"
               v-model:selected="data.selectedAudience"
-              :wrap-cells="data.audiences_wrap"
+              :wrap-cells="data.audiencesTableTextWrap"
               selection="single"
               :hide-bottom="true"
             >
@@ -107,7 +107,10 @@
                 <div class="col-2 q-table__title">Audiences</div>
                 <q-space />
                 <div class="col" align="right">
-                  <q-toggle v-model="data.audiences_wrap" label="Word wrap" />
+                  <q-toggle
+                    v-model="data.audiencesTableTextWrap"
+                    label="Word wrap"
+                  />
                 </div>
                 <q-btn
                   flat
@@ -186,10 +189,13 @@
 
               <template v-slot:body-cell-countries="props">
                 <q-td :props="props">
-                  <div v-if="data.audiences_wrap">
+                  <div v-if="data.audiencesTableTextWrap">
                     {{ formatArray(props.row.countries) }}
                   </div>
-                  <div class="limited-width" v-if="!data.audiences_wrap">
+                  <div
+                    class="limited-width"
+                    v-if="!data.audiencesTableTextWrap"
+                  >
                     {{ formatArray(props.row.countries) }}
                     <q-tooltip>{{
                       formatArray(props.row.countries)
@@ -200,6 +206,7 @@
             </q-table>
             <div
               v-if="
+                data.selectedAudience &&
                 data.selectedAudience.length &&
                 data.selectedAudience[0].ads &&
                 data.selectedAudience[0].ads.tree.length
@@ -214,7 +221,7 @@
                 direction-links
               />
               <q-splitter
-                v-model="data.audience_adstree_splitter"
+                v-model="data.audienceAdsTreeSplitterWith"
                 class="q-table--bordered"
               >
                 <template v-slot:before>
@@ -309,7 +316,9 @@
         <q-card-section>
           <q-expansion-item
             :default-opened="true"
-            :label="data.isLogPanelExpanded ? '' : 'Upload history'"
+            :label="
+              data.isLogPanelExpanded ? '' : 'Upload history (click to expand)'
+            "
             v-model="data.isLogPanelExpanded"
             style="font-size: 20px"
           >
@@ -332,13 +341,23 @@
                 style="height: 300px"
                 flat
                 bordered
-                :rows="data.audience_log"
+                :rows="
+                  (data.selectedAudience.length
+                    ? data.selectedAudience[0].log
+                    : []) || []
+                "
                 row-key="name"
-                :columns="data.audience_status_columns"
+                :columns="data.currentAudienceLogColumns"
+                :no-data-label="
+                  data.selectedAudience && data.selectedAudience.length
+                    ? data.selectedAudience[0].log
+                      ? 'Audience has no uploads'
+                      : 'Audiences logs are not loaded. Please reload audiences'
+                    : 'Please select an audience'
+                "
                 virtual-scroll
                 :pagination="{ rowsPerPage: 0 }"
                 :rows-per-page-options="[0]"
-                hide-bottom
               >
                 <template v-slot:top="props">
                   <div class="col-2 q-table__title">Upload history</div>
@@ -359,7 +378,9 @@
           </q-expansion-item>
         </q-card-section>
 
-        <q-card-section v-if="data.selectedAudience.length">
+        <q-card-section
+          v-if="data.selectedAudience && data.selectedAudience.length"
+        >
           <q-banner class="bg-grey-2">
             <div class="row">
               <div class="col q-pa-xs">
@@ -383,7 +404,7 @@
               <div class="col q-pa-xs" style="max-width: 250px">
                 <q-input
                   filled
-                  v-model="data.conversions_from"
+                  v-model="data.conversionsFilterStartDate"
                   mask="####-##-##"
                   label="Start date"
                   clearable
@@ -397,10 +418,12 @@
                         transition-hide="scale"
                       >
                         <q-date
-                          v-model="data.conversions_from"
+                          v-model="data.conversionsFilterStartDate"
                           mask="YYYY-MM-DD"
                           :no-unset="true"
-                          @update:model-value="$refs.qStartProxy.hide()"
+                          @update:model-value="
+                            ($refs.qStartProxy as any).hide()
+                          "
                         >
                         </q-date>
                       </q-popup-proxy>
@@ -411,7 +434,7 @@
               <div class="col q-pa-xs" style="max-width: 250px">
                 <q-input
                   filled
-                  v-model="data.conversions_to"
+                  v-model="data.conversionsFilterEndDate"
                   mask="####-##-##"
                   label="End date"
                   clearable
@@ -425,11 +448,11 @@
                         transition-hide="scale"
                       >
                         <q-date
-                          v-model="data.conversions_to"
+                          v-model="data.conversionsFilterEndDate"
                           mask="YYYY-MM-DD"
                           today-btn
                           :no-unset="true"
-                          @update:model-value="$refs.qEndProxy.hide()"
+                          @update:model-value="($refs.qEndProxy as any).hide()"
                         >
                         </q-date>
                       </q-popup-proxy>
@@ -440,7 +463,7 @@
               <div class="col q-pa-xs" style="width: 250px">
                 <q-select
                   filled
-                  v-model="data.conversions_selected_countries"
+                  v-model="data.conversionsFilterCountries"
                   multiple
                   :options="data.conversions_countries"
                   label="Country"
@@ -452,15 +475,17 @@
                   filled
                   v-model="data.conversions_events"
                   label="Conv. event"
+                  hint="By default 'exclude events' is used but you can enter any other event (please make sure they are in GA dataset)"
                   clearable
                 />
               </div>
               <div class="col q-pa-xs">
                 <q-banner class="bg-grey-3">
                   p-val:
-                  <q-badge :color="data.pval <= 0.05 ? 'green' : 'blue'">{{
-                    formatFloat(data.pval, 6)
-                  }}</q-badge>
+                  <q-badge
+                    :color="data.pval && data.pval <= 0.05 ? 'green' : 'blue'"
+                    >{{ formatFloat(data.pval, 6) }}</q-badge
+                  >
                   <br />If pval &lt;=0.05, then results are statistically
                   significant
                 </q-banner>
@@ -469,9 +494,8 @@
             <div class="row">
               <div class="col q-pa-xs">
                 <q-btn-toggle
-                  class="q-mx-lg"
                   style="margin-left: 0"
-                  v-model="data.conversions_strategy"
+                  v-model="data.conversionsCalcStrategy"
                   no-wrap
                   outline
                   alight="right"
@@ -480,15 +504,18 @@
                     { label: 'Unbounded', value: 'unbounded' },
                   ]"
                 />
+                &nbsp;
                 <q-icon name="info" size="sm" color="grey"
                   ><q-tooltip
-                    ><strong>Bounded</strong> means we take conversions only for days when users were included in the treatment group. <br>
-                    <strong>Unbounded</strong> means we take conversions for all time after users got into the treatment group</q-tooltip
+                    ><strong>Bounded</strong> means we take conversions only for
+                    days when users were included in the treatment group. <br />
+                    <strong>Unbounded</strong> means we take conversions for all
+                    time after users got into the treatment group</q-tooltip
                   ></q-icon
                 >
-
+                &nbsp;
                 <q-toggle
-                  v-model="data.load_ads_graph"
+                  v-model="data.loadAdsGraph"
                   label="Load Ads metrics"
                   :disable="
                     !(
@@ -543,6 +570,7 @@
           ></apexchart>
           <div
             v-if="
+              data.selectedAudience &&
               data.selectedAudience[0].ads &&
               data.selectedAudience[0].ads.campaigns.length &&
               data.selectedAudience[0].conversions &&
@@ -592,83 +620,117 @@
 <style></style>
 
 <script lang="ts">
-import { computed, defineComponent, ref, watch } from 'vue';
+import { defineComponent, ref, watch, computed } from 'vue';
 import { useQuasar } from 'quasar';
+import { useConfigurationStore } from 'stores/configuration';
 import {
+  AudienceWithLog,
+  Conversions,
+  ConversionsData,
+  AdsMetric,
+  useAudiencesStore,
   AudienceInfo,
-  AudienceMode,
-  configurationStore,
-} from 'stores/configuration';
+  AudienceLog,
+  CampaignInfo,
+  UserlistAssignementData,
+  AdsTreeData,
+  AdsTreeNodeType,
+} from 'stores/audiences';
 import { postApi, postApiUi, getApiUi } from 'boot/axios';
-import { formatArray, formatDate, formatFloat } from '../helpers/utils';
+import {
+  assertIsError,
+  formatArray,
+  formatDate,
+  formatFloat,
+} from '../helpers/utils';
 
-interface AudienceLog {
-  //status: any;
-  date: any;
+enum GraphMode {
+  CONV_RATE = 'cr',
+  ABSOLUTE = 'abs',
+}
+enum ConversionStrategy {
+  BOUNDED = 'bounded',
+  UNBOUNDED = 'unbounded',
+}
+interface AudienceProcessResult {
+  job_resource_name: string;
   test_user_count: number;
   control_user_count: number;
+  failed_user_count: number;
   uploaded_user_count: number;
   new_test_user_count: number;
   new_control_user_count: number;
   total_test_user_count: number;
   total_control_user_count: number;
+}
+type AudiencesProcessResult = Record<string, AudienceProcessResult>;
+/**
+ * Response type for 'process' and 'ads/upload' endpoints.
+ */
+interface AudiencesProcessResponse {
+  result: AudiencesProcessResult;
+}
+interface AudienceSamplingResult {
+  test_count: number;
+  control_count: number;
+}
+/**
+ * Response type for 'sampling/run' endpoint.
+ */
+interface AudiencesSamplingResponse {
+  result: Record<string, AudienceSamplingResult>;
+}
+interface AudienceConversionsResult {
+  conversions: ConversionsData[];
+  ads_metrics: AdsMetric[];
+  date_start: string;
+  date_end: string;
+  pval: number | undefined;
+  chi: number | undefined;
+}
+/**
+ * Response type for 'conversions/' endpoint.
+ */
+interface AudienceConversionsResponse {
+  results: Record<string, AudienceConversionsResult>;
+}
+/**
+ * Response type for 'conversions/query' endpoint.
+ */
+interface AudienceConversionsQueryResponse {
+  query: string;
+  date_start: string;
+  date_end: string;
+}
 
-  job_status: any;
-  job_failure: any;
-}
-interface Conversions {
-  data: ConversionsData[];
-  start_date: string;
-  end_date: string;
-  pval: number;
-  ads_metrics?: Record<string, AdsMetric[]>;
-}
-interface ConversionsData {
-  date: string;
-  cr_test: number;
-  cr_control: number;
-  cum_test_regs: number;
-  cum_control_regs: number;
-}
-interface AdsMetric {
-  date: string;
-  unique_users: number;
-  clicks: number;
-  average_impression_frequency_per_user?: number;
-}
-interface AudienceWithLog extends AudienceInfo {
+interface AudienceStatusResult extends AudienceInfo {
   log?: AudienceLog[];
   conversions?: Conversions;
-  ads: {
-    campaigns: any[];
-    adgroups: any[];
-    tree: any;
-  };
+  campaigns: UserlistAssignementData[];
 }
-enum GraphMode {
-  cr = 'cr',
-  abs = 'abs',
-}
-enum ConversionStrategy {
-  bounded = 'bounded',
-  unbounded = 'unbounded',
+/**
+ * Response type for 'audiences/status' endpoint.
+ */
+interface AudiencesStatusResponse {
+  result: Record<string, AudienceStatusResult>;
 }
 
 export default defineComponent({
   name: 'GoogleAdsPage',
   components: {},
   setup: () => {
-    const store = configurationStore();
+    const store = useConfigurationStore();
+    const storeAudiences = useAudiencesStore();
     const $q = useQuasar();
+    const audiences = computed(
+      (): AudienceWithLog[] => storeAudiences.audiences,
+    );
     const data = ref({
-      audiences: [] as AudienceWithLog[], //TODO: use store.audiences,
-      audiences_data: {},
-      audience_log: [] as AudienceLog[] | undefined,
       selectedAudience: [] as AudienceWithLog[],
       currentAdgroupIndex: 1,
       currentCampaignIndex: 1,
       adsTreeSelectedNode: null,
-      audiences_columns: [
+      audiencesColumns: [
         { name: 'mode', label: 'Mode', field: 'mode' },
         { name: 'name', label: 'Name', field: 'name', sortable: true },
         { name: 'app_id', label: 'App id', field: 'app_id', sortable: true },
@@ -697,6 +759,11 @@ export default defineComponent({
         { name: 'days_ago_end', label: 'End', field: 'days_ago_end' },
         { name: 'ttl', label: 'TTL', field: 'ttl' },
         {
+          name: 'uploads',
+          label: 'Uploads',
+          field: (row: AudienceWithLog) => (row.log ? row.log.length : '?'),
+        },
+        {
           name: 'created',
           label: 'Created',
           field: 'created',
@@ -704,17 +771,16 @@ export default defineComponent({
         },
         { name: 'actions', label: 'Actions', field: '' },
       ],
-      audiences_wrap: true,
-      include_log_duplicates: false,
-      skip_ads: false,
-      audience_status_columns: [
-        //{ name: 'status', label: 'Status', field: 'status', sortable: true },
+      audiencesTableTextWrap: true,
+      includeLogDuplicates: false,
+      skipLoadAds: false,
+      currentAudienceLogColumns: [
         {
           name: 'date',
           label: 'Date',
           field: 'date',
           sortable: true,
-          format: (v: any) => formatDate(v, true),
+          format: (v: unknown) => formatDate(v, true),
         },
         {
           name: 'test_user_count',
@@ -771,9 +837,9 @@ export default defineComponent({
           sortable: true,
         },
       ],
-      audience_adstree_splitter: 70,
+      audienceAdsTreeSplitterWith: 70,
       isLogPanelExpanded: true,
-      load_ads_graph: true,
+      loadAdsGraph: true,
       chart: {
         options: {
           chart: {
@@ -817,7 +883,7 @@ export default defineComponent({
             },
           ],
         },
-        series: [] as any,
+        series: [] as ApexAxisChartSeries,
       },
       chartAds: {
         options: {
@@ -870,38 +936,25 @@ export default defineComponent({
             },
           ],
         },
-        series: [] as any,
+        series: [] as ApexAxisChartSeries,
       },
       resultDialog: {
         show: false,
         header: '',
         message: '',
       },
-      conversions_from: <string | undefined>undefined,
-      conversions_to: <string | undefined>undefined,
-      conversions_selected_countries: <string[]>[],
+      conversionsFilterStartDate: <string | undefined>undefined,
+      conversionsFilterEndDate: <string | undefined>undefined,
+      conversionsFilterCountries: <string[]>[],
       conversions_countries: [] as string[],
       conversions_events: '',
-      conversions_mode: GraphMode.cr,
-      conversions_strategy: ConversionStrategy.bounded,
+      conversions_mode: GraphMode.CONV_RATE,
+      conversionsCalcStrategy: ConversionStrategy.BOUNDED,
       pval: <number | undefined>undefined,
     });
 
-    function showExecutionResultDialog(results: Record<string, any>) {
+    function showExecutionResultDialog(results: AudiencesProcessResult) {
       let html = '';
-      /*
-        {
-          "userlist1": {
-            "control_user_count": 5806,
-            "failed_user_count": 0,
-            "job_resource_name": "customers/xxx/offlineUserDataJobs/yyy",
-            "new_test_user_count": 0,
-            "test_user_count": 10856,
-            "uploaded_user_count": 10856
-          }
-        }
-      */
-
       for (const item of Object.entries(results)) {
         html += `<div class="text-subtitle1">Audience '${item[0]}' results:</div>`;
         const result = item[1];
@@ -921,7 +974,7 @@ export default defineComponent({
       data.value.resultDialog.show = true;
     }
     const onExecute = async () => {
-      let res = await postApiUi(
+      const res = await postApiUi<AudiencesProcessResponse>(
         'process',
         {},
         'Running sampling and uploading...',
@@ -934,7 +987,7 @@ export default defineComponent({
       audience: AudienceWithLog,
       mode: string,
     ) => {
-      let res = await postApiUi(
+      const res = await postApiUi<AudiencesProcessResponse>(
         'process',
         { audience: audience.name, mode: mode },
         'Processing the audience...',
@@ -944,27 +997,19 @@ export default defineComponent({
       }
     };
     const onSampling = async (audience?: AudienceWithLog) => {
-      let res = await postApiUi(
+      const res = await postApiUi<AudiencesSamplingResponse>(
         'sampling/run',
         { audience: audience ? audience.name : null },
         audience
           ? 'Running sampling for the audience...'
           : 'Running sampling for audiences...',
       );
-      /* Expect:
-        "result": {
-          "userlist1": {
-            "control_count": 0,
-            "test_count": 0
-          }
-        }
-       */
       if (res?.data.result) {
-        let results = Object.entries(res.data.result);
+        const results = Object.entries(res.data.result);
         let html = '';
         for (const item of results) {
           html += `<div class="text-subtitle1">Audience '${item[0]}' results:</div>`;
-          const result = <any>item[1];
+          const result = item[1];
           html += `<div class="text-caption">Control user count: ${result.control_count}<br>Test count: ${result.test_count}<br></div>`;
         }
         data.value.resultDialog.header = 'Sampling completed';
@@ -983,7 +1028,7 @@ export default defineComponent({
       });
       const loading = () => progressDlg.hide();
       try {
-        let res = await postApi(
+        const res = await postApi<AudiencesProcessResponse>(
           'ads/upload',
           { audience: audience ? audience.name : null },
           loading,
@@ -991,7 +1036,8 @@ export default defineComponent({
         if (res.data && res.data.result) {
           showExecutionResultDialog(res.data.result);
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
+        assertIsError(e);
         $q.dialog({
           title: 'Error',
           message: e.message,
@@ -1001,24 +1047,24 @@ export default defineComponent({
 
     watch(
       () => data.value.selectedAudience,
-      (newValue: any[]) => {
+      (newValue: AudienceWithLog[]) => {
         data.value.currentAdgroupIndex = 1;
         if (newValue && newValue.length) {
-          let newActiveAudience = <AudienceWithLog>newValue[0];
-          data.value.audience_log = newActiveAudience.log;
-          data.value.conversions_selected_countries = [];
+          const newActiveAudience = newValue[0];
+          data.value.conversionsFilterCountries = [];
           data.value.conversions_events = '';
           data.value.conversions_countries = newActiveAudience.countries;
           updateConversionsChart(newActiveAudience.conversions);
-          data.value.load_ads_graph =
-            newActiveAudience.ads && newActiveAudience.ads.campaigns.length > 0;
+          data.value.loadAdsGraph = !!(
+            newActiveAudience.ads && newActiveAudience.ads.campaigns.length > 0
+          );
         }
       },
     );
 
     watch(
       () => data.value.currentCampaignIndex,
-      (newValue: number) => {
+      () => {
         if (data.value.selectedAudience && data.value.selectedAudience.length) {
           const audience = data.value.selectedAudience[0];
           if (
@@ -1034,7 +1080,7 @@ export default defineComponent({
 
     watch(
       () => data.value.conversions_mode,
-      (newValue: any) => {
+      () => {
         if (data.value.selectedAudience && data.value.selectedAudience.length) {
           const audience = data.value.selectedAudience[0];
           updateConversionsChart(audience.conversions);
@@ -1042,85 +1088,90 @@ export default defineComponent({
       },
     );
 
-    function getNodeInfo(obj: any, prefix: string) {
+    function getNodeInfo(
+      obj: UserlistAssignementData,
+      prefix: string,
+    ): Record<string, string | number> | undefined {
       const keys = Object.keys(obj).filter(
         (n) =>
           n.startsWith(prefix + '_') &&
-          ['id', 'name', 'status'].indexOf(n.substring(prefix.length + 1)) ==
+          ['id', 'name', 'status'].indexOf(n.substring(prefix.length + 1)) ===
             -1,
       );
-      let info: any = {};
-      for (let key of keys) {
-        info[key] = obj[key];
+      const info: Record<string, string | number> = {};
+      for (const key of keys) {
+        info[key] = obj[key as keyof UserlistAssignementData];
       }
-      return keys.length ? info : null;
+      return keys.length ? info : undefined;
     }
+
     const onFetchAudiencesStatus = async () => {
-      data.value.audiences = [];
-      data.value.audience_log = [];
-      let res = await getApiUi(
+      const res = await getApiUi<AudiencesStatusResponse>(
         'audiences/status',
         {
-          include_log_duplicates: data.value.include_log_duplicates,
-          skip_ads: data.value.skip_ads,
+          include_log_duplicates: data.value.includeLogDuplicates,
+          skip_ads: data.value.skipLoadAds,
         },
         'Fetching audiences status...',
       );
       if (!res?.data.result) return;
       const result = res.data.result;
-      let audiences = <any[]>[];
+      const audiences: AudienceWithLog[] = [];
       Object.keys(result).map((name) => {
         const audience = result[name];
         let logs = audience.log;
         // convert dates from strings to Date objects
         if (logs) {
-          logs = logs.map((i: any) => {
+          logs = logs.map((i: AudienceLog) => {
             i.date = new Date(i.date);
             return i;
           });
         }
         let ads = {
-          campaigns: [],
-          adgroups: [],
-          tree: [],
+          campaigns: <CampaignInfo[]>[],
+          adgroups: <UserlistAssignementData[]>[],
+          tree: <AdsTreeData[]>[],
         };
         if (audience.campaigns) {
-          let campaigns = audience.campaigns.reduce((r: any, a: any) => {
-            r[a.campaign_id] = r[a.campaign_id] || {};
-            r[a.campaign_id].campaign_id = a.campaign_id;
-            r[a.campaign_id].customer_id = a.customer_id;
-            r[a.campaign_id].campaign_name = a.campaign_name;
-            return r;
-          }, Object.create(null));
+          const campaigns = audience.campaigns.reduce(
+            (r: Record<string, CampaignInfo>, a: CampaignInfo) => {
+              r[a.campaign_id] = r[a.campaign_id] || {};
+              r[a.campaign_id].campaign_id = a.campaign_id;
+              r[a.campaign_id].customer_id = a.customer_id;
+              r[a.campaign_id].campaign_name = a.campaign_name;
+              return r;
+            },
+            Object.create(null),
+          );
           ads = {
             campaigns: Object.values(campaigns),
             adgroups: audience.campaigns,
-            tree: audience.campaigns.map((i) => {
+            tree: audience.campaigns.map((i: UserlistAssignementData) => {
               return {
                 label: `CID ${i.customer_id} - ${i.customer_name}`,
-                type: 'customer',
+                type: <AdsTreeNodeType>'customer',
                 id: i.customer_id,
                 selected: true,
                 info: getNodeInfo(i, 'customer'),
                 children: [
-                  {
+                  <AdsTreeData>{
                     label: `Campaign ${i.campaign_id} - ${i.campaign_name} (${i.campaign_status})`,
                     status: i.campaign_status,
                     id: i.campaign_id,
-                    type: 'campaign',
+                    type: <AdsTreeNodeType>'campaign',
                     info: getNodeInfo(i, 'campaign'),
                     children: [
-                      {
+                      <AdsTreeData>{
                         label: `AdGroup ${i.ad_group_id} - ${i.ad_group_name} (${i.ad_group_status})`,
                         status: i.ad_group_status,
                         id: i.ad_group_id,
-                        type: 'ad_group',
+                        type: <AdsTreeNodeType>'ad_group',
                         info: getNodeInfo(i, 'ad_group'),
                         children: [
-                          {
+                          <AdsTreeData>{
                             label: `UserList ${i.user_list_id} - ${i.user_list_name}`,
                             id: i.user_list_id,
-                            type: 'user_list',
+                            type: <AdsTreeNodeType>'user_list',
                             info: getNodeInfo(i, 'user_list'),
                           },
                         ],
@@ -1132,26 +1183,31 @@ export default defineComponent({
             }),
           };
         }
+
+        // the object in response is actually AudienceInfo,
+        // now we just extend it with log and campaigns (ads)
         audiences.push({
-          mode: audience.mode,
-          name: audience.name,
-          app_id: audience.app_id,
-          countries: audience.countries,
-          events_include: audience.events_include,
-          events_exclude: audience.events_exclude,
-          days_ago_start: audience.days_ago_start,
-          days_ago_end: audience.days_ago_end,
-          user_list: audience.user_list,
-          ttl: audience.ttl,
-          created: audience.created,
+          ...audience,
           log: logs,
           ads: ads,
         });
       });
-      console.log(audiences);
-      data.value.audiences = audiences;
+
+      storeAudiences.audiences = audiences;
       if (audiences.length > 0) {
-        data.value.selectedAudience = [audiences[0]];
+        if (data.value.selectedAudience.length) {
+          // let's restore selection
+          const previouslySelected = audiences.find(
+            (val) => val.name === data.value.selectedAudience[0].name,
+          );
+          if (previouslySelected) {
+            data.value.selectedAudience = [previouslySelected];
+          } else {
+            data.value.selectedAudience = [audiences[0]];
+          }
+        } else {
+          data.value.selectedAudience = [audiences[0]];
+        }
       }
     };
 
@@ -1169,21 +1225,27 @@ export default defineComponent({
     const onLoadConversions = async () => {
       if (data.value.selectedAudience && data.value.selectedAudience.length) {
         const audience = data.value.selectedAudience[0];
-        let date_start = <string | undefined>data.value.conversions_from;
-        let date_end = <string | undefined>data.value.conversions_to;
-        let country = data.value.conversions_selected_countries;
+        const date_start = <string | undefined>(
+          data.value.conversionsFilterStartDate
+        );
+        const date_end = <string | undefined>(
+          data.value.conversionsFilterEndDate
+        );
+        const country = data.value.conversionsFilterCountries;
         let country_str;
         if (country && country.length) {
           country_str = country.join(',');
         }
-        let events = data.value.conversions_events;
+        const events = data.value.conversions_events;
         audience.conversions = await loadConversions(
           audience.name,
           date_start,
           date_end,
           country_str,
           events,
-          data.value.load_ads_graph ? audience.ads.campaigns : null,
+          data.value.loadAdsGraph && audience.ads
+            ? audience.ads.campaigns
+            : undefined,
         );
         updateConversionsChart(audience.conversions);
       }
@@ -1192,18 +1254,22 @@ export default defineComponent({
     const onGetConversionsQuery = async () => {
       if (data.value.selectedAudience && data.value.selectedAudience.length) {
         const audience = data.value.selectedAudience[0];
-        let date_start = <string | undefined>data.value.conversions_from;
-        let date_end = <string | undefined>data.value.conversions_to;
-        let country = data.value.conversions_selected_countries;
+        const date_start = <string | undefined>(
+          data.value.conversionsFilterStartDate
+        );
+        const date_end = <string | undefined>(
+          data.value.conversionsFilterEndDate
+        );
+        const country = data.value.conversionsFilterCountries;
         let country_str;
         if (country && country.length) {
           country_str = country.join(',');
         }
-        let res = await getApiUi(
+        const res = await getApiUi<AudienceConversionsQueryResponse>(
           'conversions/query',
           {
             audience: audience.name,
-            strategy: data.value.conversions_strategy,
+            strategy: data.value.conversionsCalcStrategy,
             date_start,
             date_end,
             country: country_str,
@@ -1228,25 +1294,25 @@ export default defineComponent({
 
     const loadConversions = async (
       audienceName: string,
-      date_start: string | undefined,
-      date_end: string | undefined,
+      dateStart: string | undefined,
+      dateEnd: string | undefined,
       country: string | undefined,
       events: string | undefined,
-      campaigns?: any,
+      campaigns?: CampaignInfo[],
     ): Promise<Conversions | undefined> => {
       data.value.chart.series = [];
       data.value.chartAds.series = [];
       // NOTE: if 'campaigns' is specified it says that we want to fetch campaign's metrics
-      let res = await postApiUi(
+      const res = await postApiUi<AudienceConversionsResponse>(
         'conversions',
         {
           audience: audienceName,
-          strategy: data.value.conversions_strategy,
-          date_start,
-          date_end,
-          country,
-          events,
-          campaigns,
+          strategy: data.value.conversionsCalcStrategy,
+          date_start: dateStart,
+          date_end: dateEnd,
+          country: country,
+          events: events,
+          campaigns: campaigns,
         },
         'Fetching the audience conversion history...',
       );
@@ -1263,15 +1329,20 @@ export default defineComponent({
         });
         return;
       }
-      // 'result' object for a particular audience is expected to be: conversions, date_start, date_end, pval, chi
-      // 'result.conversions' is an array of objects with fields: date, cum_test_regs, cum_control_regs
+      // 'result' object for a particular audience is expected to be:
+      //  conversions, date_start, date_end, pval, chi
+      // 'result.conversions' is an array of objects with fields:
+      //  date, cum_test_regs, cum_control_regs
       console.log(result);
-      let ads_metrics_grouped = result.ads_metrics
-        ? result.ads_metrics.reduce((r: any, a: any) => {
-            r[a.campaign] = r[a.campaign] || [];
-            r[a.campaign].push(a);
-            return r;
-          }, Object.create(null))
+      const ads_metrics_grouped = result.ads_metrics
+        ? result.ads_metrics.reduce(
+            (r: Record<string, AdsMetric[]>, a: AdsMetric) => {
+              r[a.campaign] = r[a.campaign] || [];
+              r[a.campaign].push(a);
+              return r;
+            },
+            Object.create(null),
+          )
         : {};
 
       return {
@@ -1283,9 +1354,12 @@ export default defineComponent({
       };
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     function formatGraphValue(val: any) {
       if (Number.isFinite(val)) {
-        return GraphMode.cr ? formatFloat(val) : val;
+        return data.value.conversions_mode === GraphMode.CONV_RATE
+          ? formatFloat(val)
+          : val;
       }
       return 0;
     }
@@ -1294,28 +1368,31 @@ export default defineComponent({
       if (!conversions || !conversions.data || !conversions.data.length) {
         data.value.chart.series = [];
         data.value.chartAds.series = [];
-        data.value.conversions_from = undefined;
-        data.value.conversions_to = undefined;
+        data.value.conversionsFilterStartDate = undefined;
+        data.value.conversionsFilterEndDate = undefined;
         data.value.pval = undefined;
         return;
       }
-      data.value.conversions_from = conversions.start_date;
-      data.value.conversions_to = conversions.end_date;
+      data.value.conversionsFilterStartDate = conversions.start_date;
+      data.value.conversionsFilterEndDate = conversions.end_date;
       data.value.pval = conversions.pval;
-      let graph_data = {} as Record<string, any>;
+      const graph_data = {} as Record<
+        string,
+        { date: string; test: number; control: number }
+      >;
       // TODO: should we limit graph with on X axis back only N days from the end date?
       for (const item of conversions.data) {
         //const label = new Date(item.date);
-        const label = formatDate(new Date(item.date));
+        const label = <string>formatDate(new Date(item.date));
         // NOTE: dates should not repeat otherwise there will be no graph
         graph_data[label] = {
           date: item.date,
           test:
-            data.value.conversions_mode === GraphMode.cr
+            data.value.conversions_mode === GraphMode.CONV_RATE
               ? item.cr_test
               : item.cum_test_regs,
           control:
-            data.value.conversions_mode === GraphMode.cr
+            data.value.conversions_mode === GraphMode.CONV_RATE
               ? item.cr_control
               : item.cum_control_regs,
         };
@@ -1380,23 +1457,29 @@ export default defineComponent({
       }
     };
 
-    const getAdsTreeNode = (node: any, nodeKey: string): any | undefined => {
-      if (node.type == nodeKey) {
+    const getAdsTreeNode = (
+      node: AdsTreeData,
+      nodeKey: AdsTreeNodeType,
+    ): AdsTreeData | undefined => {
+      if ((node.type = nodeKey)) {
         return node;
       }
       if (node.children) {
-        for (let child of node.children) {
+        for (const child of node.children) {
           const res = getAdsTreeNode(child, nodeKey);
           if (res) return res;
         }
       }
     };
 
-    const renderNodeInfo = (node: any, nodeKey: string): string | undefined => {
-      node = getAdsTreeNode(node, nodeKey);
+    const renderNodeInfo = (
+      nodeRoot: AdsTreeData,
+      nodeKey: AdsTreeNodeType,
+    ): string | undefined => {
+      const node = getAdsTreeNode(nodeRoot, nodeKey);
       if (node && node.info) {
         let html = '';
-        for (let key of Object.keys(node.info)) {
+        for (const key of Object.keys(node.info)) {
           const prop = key.substring(nodeKey.length + 1).replace('_', ' ');
           if (prop === 'link') {
             html =
@@ -1416,6 +1499,7 @@ export default defineComponent({
     return {
       store,
       data,
+      audiences,
       onExecute,
       onProcessAudience,
       onSampling,

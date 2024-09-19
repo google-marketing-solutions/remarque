@@ -143,7 +143,9 @@
                 stack-label
               />
               <q-item-label caption class="q-pt-sm">
-                Loopback window for GA4 users data used for users_normalized table, by default 1 year (1Y). Format: nYmMoD where n = number of years, m - number of months, o - number of days
+                Loopback window for GA4 users data used for users_normalized
+                table, by default 1 year (1Y). Format: nYmMoD where n = number
+                of years, m - number of months, o - number of days
               </q-item-label>
             </q-item-section>
           </q-item>
@@ -154,12 +156,12 @@
               <q-item-label>Recreate users_normalized table</q-item-label>
               <q-item-label caption
                 ><code>users_normalized</code> table contains user ids with
-                attributes for "loopback window" period (1 year bu default).
+                attributes for "loopback window" period (1 year by default).
                 When the option is enabled the table will be recreated every
                 day. This might incur significant costs in BigQuery. By default
-                (when disabled) very day will created a wildcard table
-                users_normalized_yyyymmdd and all such tables are unioned via a
-                view <code>users_normalized</code>.
+                (when disabled) every day a wildcard table
+                users_normalized_yyyymmdd will be created and all such tables
+                are unioned via a view <code>users_normalized</code>.
               </q-item-label>
             </q-item-section>
             <q-item-section side>
@@ -225,7 +227,7 @@
             hint=""
           />
 
-          <div class="row  q-col-gutter-lg">
+          <div class="row q-col-gutter-lg">
             <q-file
               class="col-6"
               v-model="data.file"
@@ -248,7 +250,7 @@
               ></q-btn>
             </div>
           </div>
-          <div class="row  q-col-gutter-lg">
+          <div class="row q-col-gutter-lg">
             <div class="col-6"></div>
             <div class="col-6">
               <q-btn
@@ -302,18 +304,40 @@
 import { useQuasar } from 'quasar';
 import { onBeforeRouteLeave } from 'vue-router';
 import { postApiUi, getFile } from 'boot/axios';
-import { States, configurationStore } from 'stores/configuration';
+import {
+  ConfigTarget,
+  States,
+  useConfigurationStore,
+} from 'stores/configuration';
 import { defineComponent, ref } from 'vue';
+import { assertIsError } from '../helpers/utils';
 
+/**
+ * Response type for 'setup' endpoint.
+ */
+interface SetupResponse {
+  targets: ConfigTarget[];
+}
+/**
+ * Response type for 'setup/upload_ads_cred' endpoint.
+ */
+interface UploadAdsCredentialsResponse {
+  client_id: string;
+  client_secret: string;
+  customer_id: string;
+  developer_token: string;
+  login_customer_id: string;
+  refresh_token: string;
+}
 export default defineComponent({
   name: 'DatasourcePage',
   components: {},
   setup: () => {
-    const store = configurationStore();
+    const store = useConfigurationStore();
     const $q = useQuasar();
 
     const onGA4Connect = async () => {
-      let res = await postApiUi(
+      const res = await postApiUi(
         'setup/connect_ga4',
         {
           ga4_project: store.ga4_project,
@@ -354,7 +378,7 @@ export default defineComponent({
           'Saving...',
         );
         // now remove locally
-        let index = store.targets.findIndex(
+        const index = store.targets.findIndex(
           (t) => t.name === store.activeTarget,
         );
         if (index >= 0) {
@@ -364,13 +388,13 @@ export default defineComponent({
       });
     };
     const onCancel = () => {
-      let target = store.targets[0];
+      const target = store.targets[0];
       store.initTarget(target);
       store.is_new = false;
       store.activeTarget = target.name;
     };
     const onSetup = async () => {
-      let res = await postApiUi(
+      const res = await postApiUi<SetupResponse>(
         'setup',
         {
           name: store.name,
@@ -407,24 +431,25 @@ export default defineComponent({
       try {
         await store.loadConfiguration();
         loading();
-      } catch (e: any) {
+      } catch (e: unknown) {
         loading();
+        assertIsError(e);
         $q.dialog({
           title: 'Error',
           message: e.message,
         });
       }
     };
-    let data = ref({
+    const data = ref({
       notInitialized: false,
-      file: null,
+      file: <File | null>null,
     });
     store.$subscribe((mutation, state) => {
-      if (state.state === States.NotInitialized) {
+      if (state.state === States.NOT_INITIALIZED) {
         data.value.notInitialized = true;
       }
     });
-    onBeforeRouteLeave((to, from) => {
+    onBeforeRouteLeave(() => {
       if (store.is_new) {
         const answer = window.confirm(
           'You have unsaved changes. Do you really want to leave?',
@@ -440,10 +465,17 @@ export default defineComponent({
     };
 
     const uploadGoogleAdsConfig = async () => {
-      let formData = new FormData();
-      formData.append('file', <any>data.value.file);
+      if (!data.value.file) {
+        $q.dialog({
+          ok: true,
+          message: 'Please choose a file to upload (google-ads.yaml)',
+        });
+        return;
+      }
+      const formData = new FormData();
+      formData.append('file', data.value.file);
 
-      const response = await postApiUi(
+      const response = await postApiUi<UploadAdsCredentialsResponse>(
         'setup/upload_ads_cred',
         formData,
         'Saving...',
@@ -467,7 +499,7 @@ export default defineComponent({
         store.ads_developer_token = response.data.developer_token;
         store.ads_login_customer_id = response.data.login_customer_id;
         store.ads_refresh_token = response.data.refresh_token;
-        let target = store.targets.find((t) => t.name === store.activeTarget);
+        const target = store.targets.find((t) => t.name === store.activeTarget);
         if (target) {
           target.ads_client_id = store.ads_client_id;
           target.ads_client_secret = store.ads_client_secret;
@@ -479,7 +511,7 @@ export default defineComponent({
       }
     };
     const validateGoogleAdsConfig = async () => {
-      let config = {
+      const config = {
         ads_client_id: store.ads_client_id,
         ads_client_secret: store.ads_client_secret,
         ads_customer_id: store.ads_customer_id,

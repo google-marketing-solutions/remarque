@@ -18,10 +18,12 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref } from 'vue';
+import { defineComponent } from 'vue';
 import { useQuasar } from 'quasar';
-import { configurationStore } from 'stores/configuration';
+import { useConfigurationStore } from 'stores/configuration';
+import { useAudiencesStore } from 'stores/audiences';
 import { useRouter } from 'vue-router';
+import { assertIsError } from 'src/helpers/utils';
 
 export default defineComponent({
   name: 'App',
@@ -38,14 +40,15 @@ export default defineComponent({
   methods: {
     async initialize() {
       const $q = useQuasar();
-      const store = configurationStore();
+      const store = useConfigurationStore();
+      const storeAudiences = useAudiencesStore();
       const router = useRouter();
 
       const progress = $q.dialog({
         message: 'Initializing. Loading configuration...',
         progress: true, // we enable default settings
         persistent: true, // we want the user to not be able to close it
-        ok: false // we want the user to not be able to close it
+        ok: false, // we want the user to not be able to close it
       });
 
       try {
@@ -53,21 +56,22 @@ export default defineComponent({
         progress.update({
           message: 'Initializing. Fetching audiences...',
         });
-        await store.loadAudiences();
+        await storeAudiences.loadAudiences();
         progress.hide();
         console.log('App.created completed');
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.log('App failed to initialize');
         console.log(e);
         progress.hide();
+        assertIsError(e);
         $q.dialog({
           title: 'Error',
           message: e.message,
         }).onDismiss(() => {
-          router.push({ path: '/configuration' })
+          router.push({ path: '/configuration' });
         });
       }
-    }
-  }
+    },
+  },
 });
 </script>

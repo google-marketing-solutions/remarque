@@ -21,7 +21,11 @@
 
     <div class="q-mt-md">
       <q-card class="stat-card" flat bordered>
-        <q-expansion-item :default-opened=true label="GA4 statistics" style="font-size: 20px;">
+        <q-expansion-item
+          :default-opened="true"
+          label="GA4 statistics"
+          style="font-size: 20px"
+        >
           <q-card-section>
             <!-- <div class="text-h6">GA4 statistics</div> -->
             <div>
@@ -29,43 +33,90 @@
                 <template v-slot:avatar>
                   <q-icon name="info" color="primary" />
                 </template>
-                Define time window and load events from Google Analytics. Then choose an app id, you'll see available
-                events
-                and countries,
+                Define time window and load events from Google Analytics. Then
+                choose an app id, you'll see available events and countries,
                 which you can use for defining audiences below.
               </q-banner>
             </div>
           </q-card-section>
-          <q-card-section class="row q-col-gutter-md" style="padding-top: 0; padding-bottom: 0;">
-            <div class="col-2 ">
-              <q-input outlined v-model="store.days_ago_start" label="Period start (days ago)" placeholder="" hint="" />
+          <q-card-section
+            class="row q-col-gutter-md"
+            style="padding-top: 0; padding-bottom: 0"
+          >
+            <div class="col-2">
+              <q-input
+                outlined
+                v-model="store.days_ago_start"
+                label="Period start (days ago)"
+                placeholder=""
+                hint=""
+              />
             </div>
-            <div class="col-2 ">
-              <q-input outlined v-model="store.days_ago_end" label="Period end (days ago)" placeholder="" hint="" />
+            <div class="col-2">
+              <q-input
+                outlined
+                v-model="store.days_ago_end"
+                label="Period end (days ago)"
+                placeholder=""
+                hint=""
+              />
             </div>
           </q-card-section>
 
-          <q-card-section class="row q-col-gutter-md" style="padding-top: 0;">
-            <div class="col-md-auto ">
-              <q-table title="GA4 Apps" style="height: 400px" flat bordered :rows="data.app_ids" :row-key="r => r"
-                :columns="data.appid_columns" virtual-scroll :pagination="{ rowsPerPage: 0 }"
-                :rows-per-page-options="[0]" @row-click="onAppIdSelected" selection="single"
-                v-model:selected="data.selectedAppId" :loading="data.ga_stat_loading" />
+          <q-card-section class="row q-col-gutter-md" style="padding-top: 0">
+            <div class="col-md-auto">
+              <q-table
+                title="GA4 Apps"
+                style="height: 400px"
+                flat
+                bordered
+                :rows="data.appidsTableData"
+                :row-key="(r) => r"
+                :columns="data.appidsTableColumns"
+                virtual-scroll
+                :pagination="{ rowsPerPage: 0 }"
+                :rows-per-page-options="[0]"
+                @row-click="onAppIdSelected"
+                selection="single"
+                v-model:selected="data.selectedAppId"
+                :loading="data.ga_stat_loading"
+              />
             </div>
 
             <div class="col">
-              <q-table title="GA4 Events" class="qtable-sticky-header" style="height: 400px" flat bordered
-                :rows="data.events" row-key="event" :columns="data.events_columns" virtual-scroll
-                :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]"
-                :no-data-label="data.app_ids.length ? 'Choose an app id' : 'Load all events'"
-                :loading="data.ga_stat_loading" :filter-method="filterEvents" :filter="data.eventsSearch">
+              <q-table
+                title="GA4 Events"
+                class="qtable-sticky-header"
+                style="height: 400px"
+                flat
+                bordered
+                :rows="data.eventsTableData"
+                row-key="event"
+                :columns="data.eventsTableColumns"
+                virtual-scroll
+                :pagination="{ rowsPerPage: 0 }"
+                :rows-per-page-options="[0]"
+                :no-data-label="
+                  data.appidsTableData.length
+                    ? 'Choose an app id'
+                    : 'Load all events'
+                "
+                :loading="data.ga_stat_loading"
+                :filter-method="filterEvents"
+                :filter="data.eventsSearch"
+              >
                 <template v-slot:top>
                   <div style="width: 100%" class="row">
                     <div class="col-7">
                       <div class="q-table__title">GA4 Events</div>
                     </div>
                     <div class="col-5">
-                      <q-input dense debounce="400" color="primary" v-model="data.eventsSearch">
+                      <q-input
+                        dense
+                        debounce="400"
+                        color="primary"
+                        v-model="data.eventsSearch"
+                      >
                         <template v-slot:append>
                           <q-icon name="search" />
                         </template>
@@ -77,19 +128,41 @@
             </div>
 
             <div class="col">
-              <q-table title="GA4 Countries" class="qtable-sticky-header" style="height: 400px" flat bordered
-                :rows="data.countries" row-key="country" :columns="data.countries_columns" virtual-scroll
-                :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" selection="multiple"
-                :no-data-label="data.app_ids.length ? 'Choose an app id' : 'Load all events'"
-                :loading="data.ga_stat_loading" v-model:selected="data.selectedCountries"
-                :filter-method="filterCountries" :filter="data.countriesSearch">
+              <q-table
+                title="GA4 Countries"
+                class="qtable-sticky-header"
+                style="height: 400px"
+                flat
+                bordered
+                :rows="data.countriesTableData"
+                row-key="country"
+                :columns="data.countriesTableColumns"
+                virtual-scroll
+                :pagination="{ rowsPerPage: 0 }"
+                :rows-per-page-options="[0]"
+                selection="multiple"
+                :no-data-label="
+                  data.appidsTableData.length
+                    ? 'Choose an app id'
+                    : 'Load all events'
+                "
+                :loading="data.ga_stat_loading"
+                v-model:selected="data.selectedCountries"
+                :filter-method="filterCountries"
+                :filter="data.countriesSearch"
+              >
                 <template v-slot:top>
                   <div style="width: 100%" class="row">
                     <div class="col-7">
                       <div class="q-table__title">GA4 Countries</div>
                     </div>
                     <div class="col-5">
-                      <q-input dense debounce="400" color="primary" v-model="data.countriesSearch">
+                      <q-input
+                        dense
+                        debounce="400"
+                        color="primary"
+                        v-model="data.countriesSearch"
+                      >
                         <template v-slot:append>
                           <q-icon name="search" />
                         </template>
@@ -102,7 +175,12 @@
           </q-card-section>
 
           <q-card-actions class="q-pa-md">
-            <q-btn color="primary" label="Load" icon="sync" @click="onLoad"></q-btn>
+            <q-btn
+              color="primary"
+              label="Load"
+              icon="sync"
+              @click="onLoad"
+            ></q-btn>
           </q-card-actions>
         </q-expansion-item>
       </q-card>
@@ -116,11 +194,13 @@
             <template v-slot:avatar>
               <q-icon name="warning" color="warning" />
             </template>
-            Audience name is crucial, it's used to uniquely identify an audience.
-            It will be used as a name for customer match user list and as a prefix for all tables in BigQuery with user
-            ids. As soon as you change the name an audience will be recreated, effectively loosing all accumulated
-            data.<br>
-            If you have a lot of audiences you will probably want to use country names/codes in their names.
+            Audience name is crucial, it's used to uniquely identify an
+            audience. It will be used as a name for customer match user list and
+            as a prefix for all tables in BigQuery with user ids. As soon as you
+            change the name an audience will be recreated, effectively loosing
+            all accumulated data.<br />
+            If you have a lot of audiences you will probably want to use country
+            names/codes in their names.
           </q-banner>
         </div>
       </q-card-section>
@@ -128,110 +208,290 @@
         <q-form @reset="onAudienceFormReset" ref="audienceForm">
           <div class="row q-col-gutter-md" style="width: 100%">
             <div class="col q-gutter-md">
-              <q-input filled v-model="audience.name" label="Name *"
-                hint="Audience (a.k.a. user list) name in Google Ads" lazy-rules
-                :rules="[val => val && val.length > 0 || 'Please enter a name']" />
+              <q-input
+                filled
+                v-model="audience.name"
+                label="Name *"
+                hint="Audience (a.k.a. user list) name in Google Ads"
+                lazy-rules
+                :rules="[
+                  (val) => (val && val.length > 0) || 'Please enter a name',
+                ]"
+              />
 
-              <q-input filled v-model="audience.app_id" label="App id *" lazy-rules :rules="[
-          val => val !== null && val !== '' || 'Please enter app_id'
-        ]" />
+              <q-input
+                filled
+                v-model="audience.app_id"
+                label="App id *"
+                lazy-rules
+                :rules="[
+                  (val) =>
+                    (val !== null && val !== '') || 'Please enter app_id',
+                ]"
+              />
 
-              <q-select filled v-model="audience.countries" :options="audience.allCountriesSelect" use-input use-chips
-                multiple @filter="onAudienceFilterCountries" input-debounce="0" label="Countries" clearable
+              <q-select
+                filled
+                v-model="audience.countries"
+                :options="audience.allCountriesSelect"
+                use-input
+                use-chips
+                multiple
+                @filter="onAudienceFilterCountries"
+                input-debounce="0"
+                label="Countries"
+                clearable
                 hint="Countries to include in the audience. To see available countries load your GA4 statistics"
-                new-value-mode="add-unique" />
+                new-value-mode="add-unique"
+              />
 
               <div>
-                <label class="q-mt-md" style="margin-left: 12px; margin-right: 12px;">Mode</label>
-                <q-btn-toggle class="" v-model="audience.mode" no-wrap outline
-                  :toggle-color="audience.mode == 'off' ? 'red' : audience.mode == 'test' ? 'blue' : 'green'" :options="[
-          { label: 'Off', value: 'off' },
-          { label: 'Testing', value: 'test' },
-          { label: 'Always-on', value: 'prod' }
-        ]" />
+                <label
+                  class="q-mt-md"
+                  style="margin-left: 12px; margin-right: 12px"
+                  >Mode</label
+                >
+                <q-btn-toggle
+                  class=""
+                  v-model="audience.mode"
+                  no-wrap
+                  outline
+                  :toggle-color="
+                    audience.mode == 'off'
+                      ? 'red'
+                      : audience.mode == 'test'
+                        ? 'blue'
+                        : 'green'
+                  "
+                  :options="[
+                    { label: 'Off', value: 'off' },
+                    { label: 'Testing', value: 'test' },
+                    { label: 'Always-on', value: 'prod' },
+                  ]"
+                />
               </div>
             </div>
             <div class="col q-gutter-md">
               <div>
-                <q-select filled v-model="audience.events_include" :options="audience.allEventsSelect"
-                  @filter="onAudienceFilterEvents" use-input use-chips multiple input-debounce="0"
-                  label="Events to include" hint="GA4 events that happened for users" new-value-mode="add-unique" />
+                <q-select
+                  filled
+                  v-model="audience.events_include"
+                  :options="audience.allEventsSelect"
+                  @filter="onAudienceFilterEvents"
+                  use-input
+                  use-chips
+                  multiple
+                  input-debounce="0"
+                  label="Events to include"
+                  hint="GA4 events that happened for users"
+                  new-value-mode="add-unique"
+                />
               </div>
               <div>
-                <q-select filled v-model="audience.events_exclude" :options="audience.allEventsSelect"
-                  @filter="onAudienceFilterEvents" use-input use-chips multiple input-debounce="0"
+                <q-select
+                  filled
+                  v-model="audience.events_exclude"
+                  :options="audience.allEventsSelect"
+                  @filter="onAudienceFilterEvents"
+                  use-input
+                  use-chips
+                  multiple
+                  input-debounce="0"
                   label="Events to exclude *"
                   hint="GA4 events that did NOT happen for users (app_remove always included)"
-                  new-value-mode="add-unique" />
+                  new-value-mode="add-unique"
+                />
               </div>
               <div class="">
                 <div class="row q-col-gutter-md">
-                  <q-input class="col-3" outlined v-model="audience.days_ago_start" label="Period start" placeholder=""
-                    hint="days ago" />
-                  <q-input class="col-3" outlined v-model="audience.days_ago_end" label="Period end" placeholder=""
-                    hint="days ago" />
-                  <q-input class="col-3" outlined v-model="audience.ttl" type="number" min="1"
-                    @blur="() => audience.ttl = audience.ttl < 1 ? 1 : audience.ttl" label="Time to live" placeholder=""
-                    hint="Days to stay in treatment group" />
+                  <q-input
+                    class="col-3"
+                    outlined
+                    v-model="audience.days_ago_start"
+                    label="Period start"
+                    placeholder=""
+                    hint="days ago"
+                  />
+                  <q-input
+                    class="col-3"
+                    outlined
+                    v-model="audience.days_ago_end"
+                    label="Period end"
+                    placeholder=""
+                    hint="days ago"
+                  />
+                  <q-input
+                    class="col-3"
+                    outlined
+                    v-model="audience.ttl"
+                    type="number"
+                    min="1"
+                    @blur="
+                      () => (audience.ttl = audience.ttl < 1 ? 1 : audience.ttl)
+                    "
+                    label="Time to live"
+                    placeholder=""
+                    hint="Days to stay in treatment group"
+                  />
                   <div class="col-3">
                     <q-badge>
-                      Split ratio: {{ isFinite(<any>audience.split_ratio) ? audience.split_ratio : "default (0.5)" }}
+                      Split ratio:
+                      {{
+                        isFinite(audience.split_ratio)
+                          ? audience.split_ratio
+                          : 'default (0.5)'
+                      }}
                     </q-badge>
-                    <q-checkbox label="Custom ratio" v-model="data.isSplitRatioChecked"
-                      @update:model-value="(val: any) => { audience.split_ratio = val ? 0.5 : undefined }" />
-                    <q-slider v-model="audience.split_ratio" :min="0" :max="1" :step=0.01 label
-                      @update:model-value="(val: any) => data.isSplitRatioChecked = val !== undefined" />
+                    <q-checkbox
+                      label="Custom ratio"
+                      v-model="data.isSplitRatioChecked"
+                      @update:model-value="
+                        (val: any) => {
+                          audience.split_ratio = val ? 0.5 : undefined;
+                        }
+                      "
+                    />
+                    <q-slider
+                      v-model="audience.split_ratio"
+                      :min="0"
+                      :max="1"
+                      :step="0.01"
+                      label
+                      @update:model-value="
+                        (val: any) =>
+                          (data.isSplitRatioChecked = val !== undefined)
+                      "
+                    />
                   </div>
                 </div>
               </div>
               <div class="row">
-                <div class="col" style="display: inline; margin-left: 50px; text-align: right;" alaign="right">
-                  <q-btn @click="data.showEditQueryDialog = true">Customize Query</q-btn>
+                <div
+                  class="col"
+                  style="display: inline; margin-left: 50px; text-align: right"
+                  alaign="right"
+                >
+                  <q-btn @click="data.showEditQueryDialog = true"
+                    >Customize Query</q-btn
+                  >
                 </div>
               </div>
             </div>
           </div>
           <div class="q-pa-md">
             <q-btn label="Update" @click="onAudienceFormSave" color="primary" />
-            <q-btn label="Reset" type="reset" color="primary" flat class="q-ml-sm" />
-            <q-btn label="Preview" @click="onAudiencePreview" flat class="q-ml-sm" />
-            <q-btn label="Get Query" @click="onAudienceGetQuery" flat class="q-ml-sm" />
-            <q-btn label="Power Analysis" @click="data.powerAnalysis.showDialog = true" flat class="q-ml-sm" />
+            <q-btn
+              label="Reset"
+              type="reset"
+              color="primary"
+              flat
+              class="q-ml-sm"
+            />
+            <q-btn
+              label="Preview"
+              @click="onAudiencePreview"
+              flat
+              class="q-ml-sm"
+            />
+            <q-btn
+              label="Get Query"
+              @click="onAudienceGetQuery"
+              flat
+              class="q-ml-sm"
+            />
+            <q-btn
+              label="Power Analysis"
+              @click="data.powerAnalysis.showDialog = true"
+              flat
+              class="q-ml-sm"
+            />
           </div>
         </q-form>
       </q-card-section>
       <q-card-section>
         <div class="">
-          <q-table title="Audiences" class="qtable-sticky-header" style="height: 400px" flat bordered
-            :rows="data.audiences" row-key="name" :columns="data.audiences_columns" virtual-scroll
-            :pagination="{ rowsPerPage: 0 }" :rows-per-page-options="[0]" :wrap-cells="data.audiences_wrap">
+          <q-table
+            title="Audiences"
+            class="qtable-sticky-header"
+            style="height: 400px"
+            flat
+            bordered
+            :rows="data.audiences"
+            row-key="name"
+            :columns="data.audiences_columns"
+            virtual-scroll
+            :pagination="{ rowsPerPage: 0 }"
+            :rows-per-page-options="[0]"
+            :wrap-cells="data.audiences_wrap"
+          >
             <template v-slot:top="props">
               <div class="q-table__title">Audiences</div>
               <q-space />
               <div class="col" align="right">
                 <q-toggle v-model="data.audiences_wrap" label="Word wrap" />
               </div>
-              <q-btn flat round dense :icon="props.inFullscreen ? 'fullscreen_exit' : 'fullscreen'"
-                @click="props.toggleFullscreen" class="q-ml-md" />
+              <q-btn
+                flat
+                round
+                dense
+                :icon="props.inFullscreen ? 'fullscreen_exit' : 'fullscreen'"
+                @click="props.toggleFullscreen"
+                class="q-ml-md"
+              />
             </template>
 
             <template v-slot:body-cell-actions="props">
               <q-td :props="props">
-                <q-btn dense round flat color="grey" @click="onAudienceListEdit(props)" icon="edit"></q-btn>
-                <q-btn dense round flat color="grey" @click="onAudienceListDelete(props)" icon="delete"></q-btn>
+                <q-btn
+                  dense
+                  round
+                  flat
+                  color="grey"
+                  @click="onAudienceListEdit(props)"
+                  icon="edit"
+                ></q-btn>
+                <q-btn
+                  dense
+                  round
+                  flat
+                  color="grey"
+                  @click="onAudienceListDelete(props)"
+                  icon="delete"
+                ></q-btn>
               </q-td>
             </template>
             <template v-slot:body-cell-mode="props">
               <q-td :props="props">
-                <q-chip :color="props.row.mode === 'off' ? 'red' : props.row.mode === 'test' ? 'blue' : 'green'"
-                  text-color="white" dense class="text-weight-bolder" square>{{ props.row.mode === 'off' ? 'Off' :
-          props.row.mode === 'test' ?
-            'Test ' : 'Prod' }}</q-chip>
+                <q-chip
+                  :color="
+                    props.row.mode === 'off'
+                      ? 'red'
+                      : props.row.mode === 'test'
+                        ? 'blue'
+                        : 'green'
+                  "
+                  text-color="white"
+                  dense
+                  class="text-weight-bolder"
+                  square
+                  >{{
+                    props.row.mode === 'off'
+                      ? 'Off'
+                      : props.row.mode === 'test'
+                        ? 'Test '
+                        : 'Prod'
+                  }}</q-chip
+                >
               </q-td>
             </template>
             <template v-slot:body-cell-query="props">
               <q-td :props="props">
-                <q-icon name="check" color="red" size="sm" v-if="props.row.query" />
+                <q-icon
+                  name="check"
+                  color="red"
+                  size="sm"
+                  v-if="props.row.query"
+                />
               </q-td>
             </template>
             <template v-slot:body-cell-countries="props">
@@ -249,10 +509,25 @@
         </div>
       </q-card-section>
       <q-card-actions class="q-pa-md">
-        <q-btn label="Save" icon="upload" size="md" @click="onAudiencesUpload" color="primary" style="width:130px" />
-        <q-btn label="Reload" icon="download" size="md" @click="onAudiencesDownload" color="primary"
-          style="width:130px" />
-        <q-badge color="grey" class="q-ml-md">{{ getAudiencesChangeStatus() }}</q-badge>
+        <q-btn
+          label="Save"
+          icon="upload"
+          size="md"
+          @click="onAudiencesUpload"
+          color="primary"
+          style="width: 130px"
+        />
+        <q-btn
+          label="Reload"
+          icon="sync"
+          size="md"
+          @click="onAudiencesDownload"
+          color="primary"
+          style="width: 130px"
+        />
+        <q-badge color="grey" class="q-ml-md">{{
+          getAudiencesChangeStatus()
+        }}</q-badge>
       </q-card-actions>
     </q-card>
   </q-page>
@@ -263,32 +538,59 @@
         <div class="text-h6">Customize audience query</div>
       </q-card-section>
       <q-card-section>
-        <div class="text-body1">A query to customize user audience. It will be executed to fetch user ids and
-          attributes. It will be used as a subquery for <code>CREATE OR REPLACE TABLE `destination_table` AS</code>,
-          where destination_table is the name of audience table (audience_{name})<br>
+        <div class="text-body1">
+          A query to customize user audience. It will be executed to fetch user
+          ids and attributes. It will be used as a subquery for
+          <code>CREATE OR REPLACE TABLE `destination_table` AS</code>, where
+          destination_table is the name of audience table (audience_{name})<br />
           <q-expansion-item label="Details">
-            Query must return the following columns:<br>
+            Query must return the following columns:<br />
             <ul>
               <li><code>user</code> - user id, i.e. device.advertising_id</li>
               <li><code>brand</code> - device.mobile_brand_name</li>
               <li><code>osv</code> - device.operating_system_version</li>
-              <li><code>days_since_install</code> - number of days between today and last first_open event</li>
-              <li><code>src</code> - traffic_source.source + "_" + traffic_source.medium</li>
-              <li><code>n_sessions</code> - number of session_start events for the period</li>
+              <li>
+                <code>days_since_install</code> - number of days between today
+                and last first_open event
+              </li>
+              <li>
+                <code>src</code> - traffic_source.source + "_" +
+                traffic_source.medium
+              </li>
+              <li>
+                <code>n_sessions</code> - number of session_start events for the
+                period
+              </li>
             </ul>
 
             Inside your query your can use macros in this format:
-            <code>{macro}</code>.<br>
+            <code>{macro}</code>.<br />
             The following macros are available:
             <ul>
               <li><code>source_table</code> - full name of a GA4 table</li>
-              <li><code>dataset</code> - application dataset id (usually 'remarque')</li>
-              <li><code>day_start</code> - start date of time window as yyyymmdd</li>
-              <li><code>day_end</code> - end date of time windiw as yyyymmdd</li>
+              <li>
+                <code>dataset</code> - application dataset id (usually
+                'remarque')
+              </li>
+              <li>
+                <code>day_start</code> - start date of time window as yyyymmdd
+              </li>
+              <li>
+                <code>day_end</code> - end date of time windiw as yyyymmdd
+              </li>
               <li><code>app_id</code> - app id from the audience definition</li>
-              <li><code>countries</code> - a list of countries from the audience definition</li>
-              <li><code>all_users_table</code> - fullyqualified name of the users_normalized table</li>
-              <li><code>all_events_list</code> - list of all events names from the audience definition, plus 'session_start' and 'app_remove'</li>
+              <li>
+                <code>countries</code> - a list of countries from the audience
+                definition
+              </li>
+              <li>
+                <code>all_users_table</code> - fullyqualified name of the
+                users_normalized table
+              </li>
+              <li>
+                <code>all_events_list</code> - list of all events names from the
+                audience definition, plus 'session_start' and 'app_remove'
+              </li>
             </ul>
           </q-expansion-item>
         </div>
@@ -298,13 +600,17 @@
       </q-card-section>
       <q-separator />
       <q-card-actions align="right">
-        <q-btn label="Close" color="primary" @click="data.showEditQueryDialog = false" />
+        <q-btn
+          label="Close"
+          color="primary"
+          @click="data.showEditQueryDialog = false"
+        />
       </q-card-actions>
     </q-card>
   </q-dialog>
 
   <q-dialog v-model="data.powerAnalysis.showDialog">
-    <q-card style="max-width: 80%; width: 800px;" class="q-px-sm q-pb-md">
+    <q-card style="max-width: 80%; width: 800px" class="q-px-sm q-pb-md">
       <q-card-section>
         <div class="text-h6">Power Analysis</div>
       </q-card-section>
@@ -315,60 +621,119 @@
             <template v-slot:avatar>
               <q-icon name="info" color="primary" />
             </template>
-            Power analysis tells us the minimum amount of users in a user list for an experiment to make sense.
-            To calculate power we need to calculate baseline conversion first (conversion that usually happens without
-            any
-            tests).
-            To do this we'll take users (device_id's) from your GA4 data by criteria from the current audience and find
-            how many of them were converted to the next "conversion window" days. Alternately you can enter the baseline
-            conversion manually.
+            Power analysis tells us the minimum amount of users in a user list
+            for an experiment to make sense. To calculate power we need to
+            calculate baseline conversion first (conversion that usually happens
+            without any tests). To do this we'll take users (device_id's) from
+            your GA4 data by criteria from the current audience and find how
+            many of them were converted to the next "conversion window" days.
+            Alternately you can enter the baseline conversion manually.
           </q-banner>
         </div>
         <div class="row q-col-gutter-md q-my-xs">
-          <div class="col " style="max-width:250px">
-            <q-input filled v-model="data.powerAnalysis.from" mask="####-##-##" label="Start date" clearable>
+          <div class="col" style="max-width: 250px">
+            <q-input
+              filled
+              v-model="data.powerAnalysis.from"
+              mask="####-##-##"
+              label="Start date"
+              clearable
+            >
               <template v-slot:append>
                 <q-icon name="event" class="cursor-pointer">
-                  <q-popup-proxy ref="qStartProxy" cover transition-show="scale" transition-hide="scale">
-                    <q-date v-model="data.powerAnalysis.from" mask="YYYY-MM-DD" :no-unset="true"
-                      @update:model-value="(<any>$refs.qStartProxy).hide()">
+                  <q-popup-proxy
+                    ref="qStartProxy"
+                    cover
+                    transition-show="scale"
+                    transition-hide="scale"
+                  >
+                    <q-date
+                      v-model="data.powerAnalysis.from"
+                      mask="YYYY-MM-DD"
+                      :no-unset="true"
+                      @update:model-value="(<any>$refs.qStartProxy).hide()"
+                    >
                     </q-date>
                   </q-popup-proxy>
                 </q-icon>
               </template>
             </q-input>
           </div>
-          <div class="col " style="max-width:250px">
-            <q-input filled v-model="data.powerAnalysis.to" mask="####-##-##" label="End date" clearable>
+          <div class="col" style="max-width: 250px">
+            <q-input
+              filled
+              v-model="data.powerAnalysis.to"
+              mask="####-##-##"
+              label="End date"
+              clearable
+            >
               <template v-slot:append>
                 <q-icon name="event" class="cursor-pointer">
-                  <q-popup-proxy ref="qEndProxy" cover transition-show="scale" transition-hide="scale">
-                    <q-date v-model="data.powerAnalysis.to" mask="YYYY-MM-DD" today-btn :no-unset="true"
-                      @update:model-value="(<any>$refs.qEndProxy).hide()">
+                  <q-popup-proxy
+                    ref="qEndProxy"
+                    cover
+                    transition-show="scale"
+                    transition-hide="scale"
+                  >
+                    <q-date
+                      v-model="data.powerAnalysis.to"
+                      mask="YYYY-MM-DD"
+                      today-btn
+                      :no-unset="true"
+                      @update:model-value="(<any>$refs.qEndProxy).hide()"
+                    >
                     </q-date>
                   </q-popup-proxy>
                 </q-icon>
               </template>
             </q-input>
           </div>
-          <q-input class="col " outlined v-model="data.powerAnalysis.conversion_window" type="number" min="1"
-            label="Conversion window (days)" placeholder="" hint="Days for users to convert" />
+          <q-input
+            class="col"
+            outlined
+            v-model="data.powerAnalysis.conversion_window"
+            type="number"
+            min="1"
+            label="Conversion window (days)"
+            placeholder=""
+            hint="Days for users to convert"
+          />
         </div>
         <div class="row q-col-gutter-md q-my-xs">
-          <q-input class="col-3" outlined v-model="data.powerAnalysis.conversion_rate" type="number" min="0"
-            label="Conversion rate" placeholder="" hint="Baseline conversion"
-            :readonly="!data.powerAnalysis.conversion_manual" />
-          <q-toggle v-model="data.powerAnalysis.conversion_manual" label="Enter manually" />
+          <q-input
+            class="col-3"
+            outlined
+            v-model="data.powerAnalysis.conversion_rate"
+            type="number"
+            min="0"
+            label="Conversion rate"
+            placeholder=""
+            hint="Baseline conversion"
+            :readonly="!data.powerAnalysis.conversion_manual"
+          />
+          <q-toggle
+            v-model="data.powerAnalysis.conversion_manual"
+            label="Enter manually"
+          />
         </div>
       </q-card-section>
       <q-card-section>
         <div class="row q-col-gutter-md">
           <div class="col">
-            <div>Users in the audience: {{ data.powerAnalysis.users_audience }}</div>
-            <div>Baseline conversion: {{ data.powerAnalysis.users_converted }}</div>
+            <div>
+              Users in the audience: {{ data.powerAnalysis.users_audience }}
+            </div>
+            <div>
+              Baseline conversion: {{ data.powerAnalysis.users_converted }}
+            </div>
           </div>
           <div class="col">
-            <q-btn label="Show query" color="primary" @click="onGetPowerQuery" :disable="!data.powerAnalysis.query" />
+            <q-btn
+              label="Show query"
+              color="primary"
+              @click="onGetPowerQuery"
+              :disable="!data.powerAnalysis.query"
+            />
           </div>
         </div>
         <!-- <br> -->
@@ -376,25 +741,69 @@
       </q-card-section>
       <q-card-section>
         <div class="row q-col-gutter-md q-my-xs">
-          <q-input class="col " outlined v-model="data.powerAnalysis.power" type="number" min="0" label="Power"
-            placeholder="" hint="" />
-          <q-input class="col " outlined v-model="data.powerAnalysis.uplift" type="number" min="0" max="100"
-            label="Uplift" placeholder="" hint="Uplift rate (between 0-1) of conversion (desired/expected)" />
-          <q-input class="col " outlined v-model="data.powerAnalysis.alpha" type="number" min="0" max="100"
-            label="Alpha" placeholder="" hint="" />
-          <q-input class="col " outlined v-model="data.powerAnalysis.ratio" type="number" min="0" label="ratio"
-            placeholder="" hint="" />
+          <q-input
+            class="col"
+            outlined
+            v-model="data.powerAnalysis.power"
+            type="number"
+            min="0"
+            label="Power"
+            placeholder=""
+            hint=""
+          />
+          <q-input
+            class="col"
+            outlined
+            v-model="data.powerAnalysis.uplift"
+            type="number"
+            min="0"
+            max="100"
+            label="Uplift"
+            placeholder=""
+            hint="Uplift rate (between 0-1) of conversion (desired/expected)"
+          />
+          <q-input
+            class="col"
+            outlined
+            v-model="data.powerAnalysis.alpha"
+            type="number"
+            min="0"
+            max="100"
+            label="Alpha"
+            placeholder=""
+            hint=""
+          />
+          <q-input
+            class="col"
+            outlined
+            v-model="data.powerAnalysis.ratio"
+            type="number"
+            min="0"
+            label="ratio"
+            placeholder=""
+            hint=""
+          />
         </div>
       </q-card-section>
       <q-card-section>
-        <div>Sample size: <b>{{ data.powerAnalysis.sample_size }}</b> (calculated for t-test)</div>
-        <div>Power: {{ data.powerAnalysis.new_power }} (recalculated for sample size as z-test)</div>
-        <br>
+        <div>
+          Sample size: <b>{{ data.powerAnalysis.sample_size }}</b> (calculated
+          for t-test)
+        </div>
+        <div>
+          Power: {{ data.powerAnalysis.new_power }} (recalculated for sample
+          size as z-test)
+        </div>
+        <br />
         <q-btn label="Calculate" color="primary" @click="onGetPower" />
       </q-card-section>
       <q-separator />
       <q-card-actions align="right">
-        <q-btn label="Close" color="primary" @click="data.powerAnalysis.showDialog = false" />
+        <q-btn
+          label="Close"
+          color="primary"
+          @click="data.powerAnalysis.showDialog = false"
+        />
       </q-card-actions>
     </q-card>
   </q-dialog>
@@ -411,17 +820,76 @@
 </style>
 
 <script lang="ts">
-import { defineComponent, ref, watch, computed } from 'vue';
-import { AudienceInfo, AudienceMode, configurationStore } from 'stores/configuration';
-import { getApi, postApiUi, getApiUi } from 'boot/axios';
+import { defineComponent, ref, watch, nextTick } from 'vue';
+import { onBeforeRouteLeave } from 'vue-router';
+import { FirebaseStat, useConfigurationStore } from 'stores/configuration';
+import {
+  AudienceInfo,
+  AudienceMode,
+  useAudiencesStore,
+} from 'stores/audiences';
+import { getApi, postApiUi, getApiUi, executeWithWaiting } from 'boot/axios';
 import { useQuasar, QForm } from 'quasar';
 import { formatArray, formatDate, isFinite } from '../helpers/utils';
+
+interface CountriesTableRow {
+  country: string;
+  country_code: string;
+  count: number;
+}
+interface EventsTableRow {
+  event: string;
+  count: number;
+}
+/**
+ * Response type for 'audience/preview' endpoint.
+ */
+interface AudiencePreviewResponse {
+  users_count: number;
+  cost: number;
+  total_bytes_billed: number;
+}
+/**
+ * Response type for 'audience/query' endpoint.
+ */
+interface AudienceGetQueryResponse {
+  query: string;
+}
+interface AudienceBaseConversionResult {
+  audience: number;
+  converted: number;
+  cr: number | undefined;
+  query: string;
+  conversion_window_days: number;
+  date_start: string;
+  date_end: string;
+}
+/**
+ * Response type for 'audience/base_conversion' endpoint.
+ */
+interface AudienceBaseConversionResponse {
+  result: AudienceBaseConversionResult;
+}
+/**
+ * Response type of 'audience/power' endpoint
+ */
+interface AudiencePowerResponse {
+  sample_size: number;
+  new_power: number;
+}
+/**
+ * Response type of 'stat' endpoint
+ */
+interface FirebaseStatResponse {
+  results: FirebaseStat;
+}
 
 export default defineComponent({
   name: 'AudiencesPage',
   components: {},
   setup: () => {
-    const store = configurationStore();
+    const store = useConfigurationStore();
+    const storeAudiences = useAudiencesStore();
     const $q = useQuasar();
 
     const data = ref({
@@ -441,52 +909,92 @@ export default defineComponent({
         // response:
         query: '',
         users_audience: 0,
-        conversion_rate: undefined,
+        conversion_rate: <number | undefined>undefined,
         users_converted: 0,
         sample_size: 0,
-        new_power: undefined
+        new_power: <number | undefined>undefined,
       },
       isGA4PanelExpanded: true,
       selectedAppId: [] as string[],
-      selectedCountries: [] as any[],
-      app_ids: [] as any[],
-      events: [] as any[],
-      countries: [] as any[],
-      isSplitRatioChecked: false,
-      appid_columns: [
-        { name: 'id', label: 'app_id', field: (row: any) => row }
+      appidsTableData: [] as unknown[],
+      appidsTableColumns: [
+        { name: 'id', label: 'app_id', field: (row: unknown) => row },
       ],
-      events_columns: [
+      eventsTableData: [] as EventsTableRow[],
+      eventsTableColumns: [
         { name: 'event', label: 'Event name', field: 'event', sortable: true },
-        { name: 'count', label: 'Event count', field: 'count', sortable: true, format: (v: number) => v && v.toLocaleString() },
+        {
+          name: 'count',
+          label: 'Event count',
+          field: 'count',
+          sortable: true,
+          format: (v: number) => v && v.toLocaleString(),
+        },
       ],
-      countries_columns: [
+      countriesTableData: [] as CountriesTableRow[],
+      selectedCountries: [] as CountriesTableRow[],
+      countriesTableColumns: [
         { name: 'country', label: 'Country', field: 'country', sortable: true },
-        { name: 'country_code', label: 'Code', field: 'country_code', sortable: true },
-        { name: 'count', label: 'User count', field: 'count', sortable: true, format: (v: number) => v && v.toLocaleString() },
+        {
+          name: 'country_code',
+          label: 'Code',
+          field: 'country_code',
+          sortable: true,
+        },
+        {
+          name: 'count',
+          label: 'User count',
+          field: 'count',
+          sortable: true,
+          format: (v: number) => v && v.toLocaleString(),
+        },
       ],
+      audiences: storeAudiences.audiences,
       audiences_columns: [
         { name: 'name', label: 'Name', field: 'name', sortable: true },
         { name: 'app_id', label: 'App id', field: 'app_id', sortable: true },
         { name: 'query', label: 'Custom query', field: 'query' },
-        { name: 'countries', label: 'Countries', field: 'countries', sortable: true, format: formatArray },
-        { name: 'events_include', label: 'Include events', field: 'events_include', sortable: true, format: formatArray },
-        { name: 'events_exclude', label: 'Exclude events', field: 'events_exclude', sortable: true, format: formatArray },
+        {
+          name: 'countries',
+          label: 'Countries',
+          field: 'countries',
+          sortable: true,
+          format: formatArray,
+        },
+        {
+          name: 'events_include',
+          label: 'Include events',
+          field: 'events_include',
+          sortable: true,
+          format: formatArray,
+        },
+        {
+          name: 'events_exclude',
+          label: 'Exclude events',
+          field: 'events_exclude',
+          sortable: true,
+          format: formatArray,
+        },
         { name: 'days_ago_start', label: 'Start', field: 'days_ago_start' },
         { name: 'days_ago_end', label: 'End', field: 'days_ago_end' },
         { name: 'ratio', label: 'Ratio', field: 'split_ratio' },
         { name: 'ttl', label: 'TTL', field: 'ttl' },
         { name: 'mode', label: 'Mode', field: 'mode' },
-        { name: 'created', label: 'Created', field: 'created', format: formatDate },
+        {
+          name: 'created',
+          label: 'Created',
+          field: 'created',
+          format: formatDate,
+        },
         { name: 'actions', label: 'Actions', field: '' },
       ],
       audiences_wrap: true,
       ga_stat_loading: false,
+      isSplitRatioChecked: false,
       eventsSearch: '',
       countriesSearch: '',
-      audiences: computed(() => store.audiences)
     });
-    let audience = ref({
+    const audience = ref({
       name: '',
       id: '',
       mode: 'off',
@@ -506,65 +1014,93 @@ export default defineComponent({
       split_ratio: <number | undefined>undefined,
     });
     const audienceForm = ref(null as unknown as QForm);
+    const audienceFormHasChanges = ref(false);
 
     // Stats
     // On app_id change we update the lists of events and countries to show data for that app_id
-    watch(() => data.value.selectedAppId, (newValue) => {
-      if (newValue && newValue.length) {
-        const app_id = newValue[0];
-        data.value.events = store.stat.events[app_id];
-        data.value.countries = store.stat.countries[app_id];
-        if (data.value.countries && data.value.countries.length) {
-          audience.value.allCountries = data.value.countries.map(r => r.country).sort();
+    watch(
+      () => data.value.selectedAppId,
+      (newValue) => {
+        if (newValue && newValue.length) {
+          const app_id = newValue[0];
+          data.value.eventsTableData = store.stat.events[app_id];
+          data.value.countriesTableData = store.stat.countries[app_id];
+          if (
+            data.value.countriesTableData &&
+            data.value.countriesTableData.length
+          ) {
+            audience.value.allCountries = data.value.countriesTableData
+              .map((r) => r.country)
+              .sort();
+          } else {
+            audience.value.allCountries = [];
+          }
+          audience.value.allCountriesSelect = audience.value.allCountries;
+          if (data.value.eventsTableData && data.value.eventsTableData.length) {
+            audience.value.allEvents = data.value.eventsTableData
+              .map((r) => r.event)
+              .sort();
+          } else {
+            audience.value.allEvents = [];
+          }
+          audience.value.allEventsSelect = audience.value.allEvents;
+          audience.value.app_id = app_id;
+          audience.value.countries = [];
+          data.value.selectedCountries = [];
         } else {
+          data.value.eventsTableData = [];
+          data.value.countriesTableData = [];
           audience.value.allCountries = [];
-        }
-        audience.value.allCountriesSelect = audience.value.allCountries;
-        if (data.value.events && data.value.events.length) {
-          audience.value.allEvents = data.value.events.map(r => r.event).sort();
-        } else {
+          audience.value.allCountriesSelect = audience.value.allCountries;
           audience.value.allEvents = [];
         }
         audience.value.allEventsSelect = audience.value.allEvents;
-        audience.value.app_id = app_id;
-        audience.value.countries = [];
-        data.value.selectedCountries = [];
-      } else {
-        data.value.events = [];
-        data.value.countries = [];
-        audience.value.allCountries = [];
-        audience.value.allCountriesSelect = audience.value.allCountries;
-        audience.value.allEvents = [];
-      }
-      audience.value.allEventsSelect = audience.value.allEvents;
-    }, { deep: true });
-    watch(() => data.value.selectedCountries, (newValue) => {
-      console.log(newValue);
-      audience.value.countries = newValue.map(r => r.country);
-    });
+      },
+      { deep: true },
+    );
+    watch(
+      () => data.value.selectedCountries,
+      (newValue) => {
+        console.log(newValue);
+        audience.value.countries = newValue.map((r) => r.country);
+      },
+    );
+    watch(
+      () => audience.value,
+      () => {
+        // TODO: check with initial state
+        audienceFormHasChanges.value = true;
+      },
+      { deep: true },
+    );
+
     const onStatLoad = () => {
-      const days_ago_start = store.days_ago_start
+      const days_ago_start = store.days_ago_start;
       const days_ago_end = store.days_ago_end;
       if (!days_ago_start) {
         $q.notify({
           color: 'negative',
           //position: 'top',
           message: 'Please define the period first',
-          icon: 'report_problem'
+          icon: 'report_problem',
         });
         return;
       }
       const loading = $q.notify({ message: 'Loading stat', timeout: 0 });
       data.value.ga_stat_loading = true;
-      getApi('stat', { days_ago_start, days_ago_end }, loading)
+      // TODO: think about moving the API call into the store (store.loadStat())
+      getApi<FirebaseStatResponse>(
+        'stat',
+        { days_ago_start, days_ago_end },
+        loading,
+      )
         .then((response) => {
-          // we expect an object with `results` field containing an array of objects
           const results = response.data.results;
-          console.log(results)
+          console.log(results);
 
-          data.value.app_ids = results.app_ids;
-          data.value.events = [];
-          data.value.countries = [];
+          data.value.appidsTableData = results.app_ids;
+          data.value.eventsTableData = [];
+          data.value.countriesTableData = [];
           store.stat.events = results.events;
           store.stat.countries = results.countries;
           data.value.ga_stat_loading = false;
@@ -573,25 +1109,31 @@ export default defineComponent({
           $q.notify({
             color: 'negative',
             message: 'Loading failed: ' + e.message,
-            icon: 'report_problem'
+            icon: 'report_problem',
           });
           data.value.ga_stat_loading = false;
-        })
-    }
-    const onAppIdSelected = (evt: any, row: any, index: any) => {
+        });
+    };
+    const onAppIdSelected = (evt: unknown, row: string) => {
       data.value.selectedAppId = [row];
-    }
-    const filterEvents = (rows: readonly any[], term: string) => {
+    };
+    const filterEvents = (
+      rows: readonly Record<string, string>[],
+      term: string,
+    ) => {
       console.log(term);
       return rows.filter((row) => {
         return row['event'].toLowerCase().includes(term.toLowerCase());
       });
-    }
-    const filterCountries = (rows: readonly any[], term: string) => {
+    };
+    const filterCountries = (
+      rows: readonly CountriesTableRow[],
+      term: string,
+    ) => {
       return rows.filter((row) => {
-        return row['country'].toLowerCase().includes(term.toLowerCase());
-      })
-    }
+        return row.country.toLowerCase().includes(term.toLowerCase());
+      });
+    };
     function getAudienceFromForm(): AudienceInfo {
       const obj = {
         name: audience.value.name?.trim(),
@@ -599,41 +1141,59 @@ export default defineComponent({
         countries: audience.value.countries,
         events_include: audience.value.events_include,
         events_exclude: audience.value.events_exclude,
-        days_ago_start: audience.value.days_ago_start || store.days_ago_start || 0,
+        days_ago_start:
+          audience.value.days_ago_start || store.days_ago_start || 0,
         days_ago_end: audience.value.days_ago_end || store.days_ago_end || 0,
         user_list: audience.value.user_list,
         mode: <AudienceMode>audience.value.mode,
         query: audience.value.query,
         ttl: audience.value.ttl,
-        split_ratio: audience.value.split_ratio
-      }
+        split_ratio: audience.value.split_ratio,
+      };
       return obj;
     }
     // Audiences
     const onAudienceFormSave = () => {
-      audienceForm.value.validate().then(success => {
+      audienceForm.value.validate().then((success) => {
         audience.value.name = audience.value.name.trim().replaceAll(' ', '_');
         // TODO: expand macros
         if (success) {
-          const days_ago_start = audience.value.days_ago_start || store.days_ago_start || audience.value.days_ago_start;
-          const days_ago_end = audience.value.days_ago_end || store.days_ago_end || audience.value.days_ago_end;
-          if (!days_ago_start || !days_ago_end && days_ago_end !== 0) {
-            $q.dialog({ message: 'You need to set a time period for the audience', title: 'Warning' })
+          const days_ago_start =
+            audience.value.days_ago_start ||
+            store.days_ago_start ||
+            audience.value.days_ago_start;
+          const days_ago_end =
+            audience.value.days_ago_end ||
+            store.days_ago_end ||
+            audience.value.days_ago_end;
+          if (!days_ago_start || (!days_ago_end && days_ago_end !== 0)) {
+            $q.dialog({
+              message: 'You need to set a time period for the audience',
+              title: 'Warning',
+            });
             return;
           }
-          if (!audience.value.events_exclude || !audience.value.events_exclude.length) {
-            $q.dialog({ message: 'You need to specify some event(s) in exclude_events field. Even with custom query it will be used for conversions calculation', title: 'Warning' })
+          if (
+            !audience.value.events_exclude ||
+            !audience.value.events_exclude.length
+          ) {
+            $q.dialog({
+              message:
+                'You need to specify some event(s) in exclude_events field. Even with custom query it will be used for conversions calculation',
+              title: 'Warning',
+            });
             return;
           }
           // check countries - w/o countries we'll create audience for ALL users of an app,
           // so such an audience should be the only one.
-          if (audience.value.countries.length == 0) {
+          if (audience.value.countries.length === 0) {
             $q.dialog({
               title: 'Prompt',
-              message: 'Your audience does not contain any country. It means that it will include all users of the app. Are you sure to proceed?',
+              message:
+                'Your audience does not contain any country. It means that it will include all users of the app. Are you sure to proceed?',
               cancel: true,
-              persistent: true
-            }).onOk(data => {
+              persistent: true,
+            }).onOk(() => {
               saveAudience();
             });
           } else {
@@ -642,22 +1202,24 @@ export default defineComponent({
           // TODO: check events
         }
       });
-    }
+    };
     const saveAudience = () => {
-      let idx = store.audiences.findIndex(val => val.name === audience.value.name);
+      const idx = storeAudiences.audiences.findIndex(
+        (val) => val.name === audience.value.name,
+      );
       const obj = getAudienceFromForm();
       if (idx >= 0) {
         // updating
-        Object.assign(store.audiences[idx], obj);
-        store.audiences[idx].isChanged = true;
+        Object.assign(storeAudiences.audiences[idx], obj);
+        storeAudiences.audiences[idx].isChanged = true;
       } else {
         // creating new
-        store.audiences.push(obj);
+        storeAudiences.audiences.push(obj);
         obj.isNew = true;
       }
       // clear the form
       onAudienceFormReset();
-    }
+    };
     const onAudienceFormReset = () => {
       audience.value.name = '';
       audience.value.app_id = '';
@@ -671,18 +1233,54 @@ export default defineComponent({
       audience.value.ttl = 1;
       audience.value.split_ratio = undefined;
       audienceForm.value.resetValidation();
+      nextTick(() => {
+        audienceFormHasChanges.value = false;
+      });
       data.value.isSplitRatioChecked = false;
-    }
-    const onAudienceFilterCountries = (val: string, doneFn: (callbackFn: () => void) => void, abortFn: () => void) => {
+    };
+    onBeforeRouteLeave((to, from, next) => {
+      console.log('onBeforeRouteLeave');
+      if (audienceFormHasChanges.value) {
+        $q.dialog({
+          title: 'Unsaved Changes',
+          message: 'You have unsaved changes. Are you sure you want to leave?',
+          ok: 'Leave',
+          cancel: 'Stay',
+          //persistent: true
+        })
+          .onOk(() => {
+            audienceFormHasChanges.value = false;
+            next(true);
+          })
+          .onCancel(() => {
+            //return false;
+            next(false);
+          });
+      } else {
+        next(true);
+      }
+    });
+
+    const onAudienceFilterCountries = (
+      val: string,
+      doneFn: (callbackFn: () => void) => void,
+    ) => {
       doneFn(() => {
-        audience.value.allCountriesSelect = audience.value.allCountries.filter(r => r.toLowerCase().startsWith(val?.toLowerCase()));
+        audience.value.allCountriesSelect = audience.value.allCountries.filter(
+          (r) => r.toLowerCase().startsWith(val?.toLowerCase()),
+        );
       });
-    }
-    const onAudienceFilterEvents = (val: string, doneFn: (callbackFn: () => void) => void, abortFn: () => void) => {
+    };
+    const onAudienceFilterEvents = (
+      val: string,
+      doneFn: (callbackFn: () => void) => void,
+    ) => {
       doneFn(() => {
-        audience.value.allEventsSelect = audience.value.allEvents.filter(r => r.toLowerCase().includes(val?.toLowerCase()));
+        audience.value.allEventsSelect = audience.value.allEvents.filter((r) =>
+          r.toLowerCase().includes(val?.toLowerCase()),
+        );
       });
-    }
+    };
     const onAudiencePreview = async () => {
       const obj = getAudienceFromForm();
       if (!obj.app_id) {
@@ -690,20 +1288,29 @@ export default defineComponent({
         return;
       }
 
-      let res = await postApiUi('audience/preview', { audience: obj }, 'Getting a preview of the audience...');
+      const res = await postApiUi<AudiencePreviewResponse>(
+        'audience/preview',
+        { audience: obj },
+        'Getting a preview of the audience...',
+      );
       if (res) {
         console.log(res.data);
         $q.dialog({
           title: 'Audience preview',
-          message: `The audience with current conditions returned ${res.data.users_count} users.\n` +
+          message:
+            `The audience with current conditions returned ${res.data.users_count} users.\n` +
             `Query cost: $${res.data.cost.toFixed(2)}, total billed bytes: ${res.data.total_bytes_billed.toLocaleString('en-US')}.\n` +
-            "Please note that it's a total number of users to be split onto treatment/control groups and it doens't take into account TTL (users readded from previous days because of ttl>1)"
+            "Please note that it's a total number of users to be split onto treatment/control groups and it doesn't take into account the TTL (users re-added from previous days because of ttl>1)",
         });
       }
     };
     const onAudienceGetQuery = async () => {
       const obj = getAudienceFromForm();
-      let res = await postApiUi('audience/query', { audience: obj }, 'Getting query...');
+      const res = await postApiUi<AudienceGetQueryResponse>(
+        'audience/query',
+        { audience: obj },
+        'Getting query...',
+      );
       if (!res?.data) {
         return;
       }
@@ -712,27 +1319,31 @@ export default defineComponent({
         title: 'SQL Query for the audience',
         message: res.data.query,
         ok: {
-          push: true
+          push: true,
         },
         class: 'text-pre',
-        fullWidth: true
+        fullWidth: true,
       });
     };
     const onGetPower = async () => {
       if (!data.value.powerAnalysis.conversion_manual) {
         // calculate baseline conversion rate first
         const obj = getAudienceFromForm();
-        let res = await postApiUi('audience/base_conversion', {
-          audience: obj,
-          date_start: data.value.powerAnalysis.from,
-          date_end: data.value.powerAnalysis.to,
-          conversion_window: data.value.powerAnalysis.conversion_window
-        }, 'Calculating baseline conversion...');
+        const res = await postApiUi<AudienceBaseConversionResponse>(
+          'audience/base_conversion',
+          {
+            audience: obj,
+            date_start: data.value.powerAnalysis.from,
+            date_end: data.value.powerAnalysis.to,
+            conversion_window: data.value.powerAnalysis.conversion_window,
+          },
+          'Calculating baseline conversion...',
+        );
         if (!res?.data?.result) {
           return;
         }
         console.log(res.data);
-        let result = res.data.result;
+        const result = res.data.result;
         data.value.powerAnalysis.conversion_rate = result.cr;
         data.value.powerAnalysis.users_audience = result.audience;
         data.value.powerAnalysis.users_converted = result.converted;
@@ -745,13 +1356,17 @@ export default defineComponent({
         data.value.powerAnalysis.query = result.query;
       }
       // calculate power
-      let res = await getApiUi('audience/power', {
-        cr: data.value.powerAnalysis.conversion_rate,
-        power: data.value.powerAnalysis.power,
-        alpha: data.value.powerAnalysis.alpha,
-        ratio: data.value.powerAnalysis.ratio,
-        uplift: data.value.powerAnalysis.uplift,
-      }, 'Calculating power...');
+      const res = await getApiUi<AudiencePowerResponse>(
+        'audience/power',
+        {
+          cr: data.value.powerAnalysis.conversion_rate,
+          power: data.value.powerAnalysis.power,
+          alpha: data.value.powerAnalysis.alpha,
+          ratio: data.value.powerAnalysis.ratio,
+          uplift: data.value.powerAnalysis.uplift,
+        },
+        'Calculating power...',
+      );
       if (!res?.data) {
         return;
       }
@@ -763,22 +1378,27 @@ export default defineComponent({
         title: 'SQL Query for calculating the baseline conversion',
         message: data.value.powerAnalysis.query,
         ok: {
-          push: true
+          push: true,
         },
         class: 'text-pre',
-        fullWidth: true
+        fullWidth: true,
       });
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const onAudienceListEdit = (props: any) => {
       Object.assign(audience.value, props.row);
+      nextTick(() => {
+        audienceFormHasChanges.value = false;
+      });
       data.value.isSplitRatioChecked = isFinite(audience.value.split_ratio);
-    }
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const onAudienceListDelete = (props: any) => {
-      store.removeAudience(props.key);
-    }
+      storeAudiences.removeAudience(props.key);
+    };
     const onAudiencesUpload = async () => {
-      const audiences = store.audiences.map((row) => {
+      const audiences = storeAudiences.audiences.map((row) => {
         return {
           name: row.name,
           app_id: row.app_id,
@@ -792,48 +1412,61 @@ export default defineComponent({
           ttl: row.ttl,
           split_ratio: row.split_ratio,
           // NOTE: we're not sending id, user_list
-        }
+        };
       });
-      let res = await postApiUi('audiences', { audiences }, 'Uploading audiences...');
+      const res = await postApiUi(
+        'audiences',
+        { audiences },
+        'Uploading audiences...',
+      );
       if (res) {
-        $q.notify({ message: 'Audiences successfully updated', icon: 'success', timeout: 1000 });
-        store.deletedAudiences = [];
-        store.audiences.map((obj) => {
-          obj.isNew = false; obj.isChanged = false;
+        $q.notify({
+          message: 'Audiences successfully updated',
+          icon: 'success',
+          timeout: 1000,
+        });
+        storeAudiences.deletedAudiences = [];
+        storeAudiences.audiences.map((obj) => {
+          obj.isNew = false;
+          obj.isChanged = false;
         });
       }
       // TODO: store.commit()
-    }
+    };
     const onAudiencesDownload = async () => {
       $q.dialog({
         title: 'Confirm',
-        message: 'Are sure to reload audiences from the server. It will overwrite any pending changes you have not uploaded',
+        message:
+          'Are sure to reload audiences from the server. It will overwrite any pending changes you have not uploaded',
         cancel: true,
-        persistent: true
+        persistent: true,
       }).onOk(async () => {
-        let res = await getApiUi('audiences', {}, 'Loading audiences...');
+        const res = await executeWithWaiting(
+          storeAudiences.loadAudiences,
+          'Loading audiences...',
+        );
         if (res) {
-          const audiences = res.data.results;
-          store.audiences = audiences;
-          // TODO: store.resetState();
-          store.deletedAudiences = [];
+          storeAudiences.deletedAudiences = [];
+          onAudienceFormReset();
         }
       });
-    }
+    };
+
     const getAudiencesChangeStatus = () => {
-      const deleted = store.deletedAudiences.length;
+      const deleted = storeAudiences.deletedAudiences.length;
       let changed = 0;
       let created = 0;
-      store.audiences.forEach(obj => obj.isChanged ? changed += 1 : obj.isNew ? created += 1 : null);
+      storeAudiences.audiences.forEach((obj) =>
+        obj.isChanged ? (changed += 1) : obj.isNew ? (created += 1) : null,
+      );
       let str = '';
-      if (created > 0)
-        str += `${created} created`;
+      if (created > 0) str += `${created} created`;
       if (changed > 0) {
-        if (str) str += ', '
+        if (str) str += ', ';
         str += `${changed} changed`;
       }
       if (deleted > 0) {
-        if (str) str += ', '
+        if (str) str += ', ';
         str += `${deleted} deleted`;
       }
       if (str) {
@@ -868,6 +1501,6 @@ export default defineComponent({
       formatArray,
       getAudiencesChangeStatus,
     };
-  }
+  },
 });
 </script>

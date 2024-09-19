@@ -22,3 +22,11 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier
+        entry: npm run pre-commit
+        language: system
+        pass_filenames: false
+        always_run: true

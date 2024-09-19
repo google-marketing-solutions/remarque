@@ -131,21 +131,16 @@
               <template v-slot:body-cell-status="props">
                 <q-td :props="props">
                   <q-chip
-                    :color="
-                      props.row.status === 'Failure'
-                        ? 'red' : 'green'
-                    "
+                    :color="props.row.status === 'Failure' ? 'red' : 'green'"
                     text-color="white"
                     dense
                     class="text-weight-bolder"
                     square
-                    >{{
-                      props.row.status
-                    }}</q-chip
+                    >{{ props.row.status }}</q-chip
                   >
                 </q-td>
               </template>
-          </q-table>
+            </q-table>
           </div>
         </div>
       </q-card>
@@ -156,28 +151,38 @@
 <script lang="ts">
 import { defineComponent, ref } from 'vue';
 import { useQuasar } from 'quasar';
-import { configurationStore } from 'stores/configuration';
+import { useConfigurationStore } from 'stores/configuration';
 import { getApiUi, postApiUi } from 'boot/axios';
 import { timeZones } from '../helpers/timezones';
 import { formatDate } from '../helpers/utils';
 
+/**
+ * Response type for 'schedule' endpoint.
+ */
+interface GetScheduleResponse {
+  scheduled: boolean;
+  schedule: string;
+  schedule_timezone: string;
+  schedule_email: string;
+  runs: string[][];
+}
 export default defineComponent({
   name: 'GoogleAdsPage',
   components: {},
   setup: () => {
-    const store = configurationStore();
+    const store = useConfigurationStore();
     const $q = useQuasar();
     const data = ref({
       timeZonesSelect: timeZones,
-      runs: [],
+      runs: <{ date: string; status: string }[]>[],
       runsColumns: [
         {
           name: 'date',
           label: 'Date',
           field: 'date',
+          format: (v: unknown) => formatDate(v, true),
           sortable: true,
           align: 'left',
-          format: (v: any) => formatDate(v, true),
         },
         {
           name: 'status',
@@ -190,7 +195,6 @@ export default defineComponent({
     const onTimezoneFilter = (
       val: string,
       doneFn: (callbackFn: () => void) => void,
-      abortFn: () => void,
     ) => {
       doneFn(() => {
         data.value.timeZonesSelect = timeZones.filter((r) =>
@@ -199,7 +203,7 @@ export default defineComponent({
       });
     };
     const onScheduleLoad = async () => {
-      let res = await getApiUi(
+      const res = await getApiUi<GetScheduleResponse>(
         'schedule',
         {},
         'Fetching Cloud Scheduler job...',
@@ -210,7 +214,7 @@ export default defineComponent({
         store.schedule = res.data.schedule;
         store.schedule_timezone = res.data.schedule_timezone;
         store.schedule_email = res.data.schedule_email;
-        data.value.runs = res.data.runs.map((v: any) => {
+        data.value.runs = res.data.runs.map((v: string[]) => {
           return { date: v[0], status: v[1] };
         });
       } else {

@@ -15,33 +15,43 @@
  */
 
 import format from 'date-fns/format';
+import { isNumber, isDate, isArray, isString } from 'lodash';
 
-export function formatArray(val: any) {
-  if (val && val.length) {
+export function formatArray(val: unknown) {
+  if (isArray(val)) {
     return val.join(', ');
   }
   return val;
 }
 
-export function formatDate(
-  val: Date | string | null | undefined,
-  includeTime = false,
-) {
+export function formatDate(val: unknown, includeTime = false) {
   if (!val) return '';
   if (typeof val === 'string') {
     val = new Date(val);
   }
-  if (includeTime) {
-    return format(val, 'yyyy.MM.dd HH:mm:ss');
+  if (isDate(val) || isNumber(val)) {
+    if (includeTime) {
+      return format(val, 'yyyy.MM.dd HH:mm:ss');
+    }
+    return format(val, 'yyyy.MM.dd');
   }
-  return format(val, 'yyyy.MM.dd');
+  return val;
 }
 
-export function formatFloat(val: number | undefined, digits = 5) {
-  val = Number.parseFloat(<any>val);
-  return val >= 0 ? val.toFixed(digits) : '-';
+export function formatFloat(val: unknown, digits = 5) {
+  if (isString(val)) {
+    val = Number(val);
+  }
+  if (isNumber(val)) {
+    return val >= 0 ? val.toFixed(digits) : '-';
+  }
+  return val;
 }
 
-export function isFinite(value: any) {
-  return typeof value == 'number' && Number.isFinite(value);
+export function isFinite(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+export function assertIsError(e: unknown): asserts e is Error {
+  if (!(e instanceof Error)) throw new Error('e is not an Error');
 }

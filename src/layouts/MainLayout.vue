@@ -17,12 +17,35 @@
   <q-layout view="hHh Lpr lFf">
     <q-header elevated>
       <q-toolbar>
-        <q-btn flat dense round icon="menu" aria-label="Menu" @click="toggleLeftDrawer" />
-        <q-toolbar-title> <router-link to="/" style="text-decoration: none;color: white;">Remarque</router-link></q-toolbar-title>
-        <q-btn-dropdown stretch flat :label="store.activeTarget" v-if="store.targets?.length > 1">
+        <q-btn
+          flat
+          dense
+          round
+          icon="menu"
+          aria-label="Menu"
+          @click="toggleLeftDrawer"
+        />
+        <q-toolbar-title>
+          <router-link to="/" style="text-decoration: none; color: white"
+            >Remarque</router-link
+          ></q-toolbar-title
+        >
+        <q-btn-dropdown
+          stretch
+          flat
+          :label="store.activeTarget"
+          v-if="store.targets?.length > 1"
+        >
           <q-list>
-            <q-item v-for="t in store.targets" :key="`${t.name}`" clickable v-close-popup tabindex="0"
-              @click="store.switchTarget(t.name)" :active="store.activeTarget == t.name">
+            <q-item
+              v-for="t in store.targets"
+              :key="`${t.name}`"
+              clickable
+              v-close-popup
+              tabindex="0"
+              @click="store.switchTarget(t.name)"
+              :active="store.activeTarget == t.name"
+            >
               <q-item-section>
                 <q-item-label>{{ t.name }}</q-item-label>
               </q-item-section>
@@ -47,7 +70,7 @@
 <script lang="ts">
 import { defineComponent, ref } from 'vue';
 
-import { configurationStore } from 'stores/configuration';
+import { useConfigurationStore } from 'stores/configuration';
 import SideMenu from 'components/SideMenu.vue';
 
 export default defineComponent({
@@ -59,7 +82,7 @@ export default defineComponent({
 
   setup() {
     const leftDrawerOpen = ref(false);
-    const store = configurationStore();
+    const store = useConfigurationStore();
 
     return {
       leftDrawerOpen,

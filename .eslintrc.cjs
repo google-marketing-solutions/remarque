@@ -101,6 +101,35 @@ module.exports = {
     'no-unused-vars': 'off',
 
     // allow debugger during development only
-    'no-debugger': process.env.NODE_ENV === 'production' ? 'error' : 'off'
-  }
+    'no-debugger': process.env.NODE_ENV === 'production' ? 'error' : 'off',
+
+    "block-scoped-var": "error",
+    "eqeqeq": "error",
+    "no-var": "error",
+    "prefer-const": "error",
+    "eol-last": "error",
+    "no-trailing-spaces": "error",
+    "quotes": ["warn", "single", { "avoidEscape": true }],
+    "no-restricted-properties": [
+      "error",
+      {
+        "object": "describe",
+        "property": "only"
+      },
+      {
+        "object": "it",
+        "property": "only"
+      }
+    ]
+  },
+
+  ignorePatterns: [
+    '/dist',
+    '/src-capacitor',
+    '/src-cordova',
+    '/.quasar',
+    '/node_modules',
+    '.eslintrc.js',
+    '/src-ssr'
+  ]
 }

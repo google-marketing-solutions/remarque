@@ -15,14 +15,9 @@
  */
 
 import { boot } from 'quasar/wrappers';
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
-import {
-  QVueGlobals,
-  Loading,
-  QSpinnerGears,
-  Dialog,
-  DialogChainObject,
-} from 'quasar';
+import axios, { AxiosError, AxiosInstance, AxiosRequestConfig } from 'axios';
+import { Loading, Dialog, DialogChainObject } from 'quasar';
+import { assertIsError } from '../helpers/utils';
 
 declare module '@vue/runtime-core' {
   interface ComponentCustomProperties {
@@ -50,11 +45,29 @@ export default boot(({ app }) => {
   //       so you can easily perform requests against your app's API
 });
 
+export class ServerError extends Error {
+  debugInfo?: string;
+  type?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  error?: any;
+}
+
 let activeTarget = '';
+
+/**
+ * Set the active target globally in the app
+ * (name of currently active configuration).
+ * @param target a target name
+ */
 function setActiveTarget(target: string | undefined) {
   activeTarget = target || '';
 }
 
+/**
+ * Add a 'api' prefix and 'target' query argument with active target into an url.
+ * @param url a base url
+ * @returns
+ */
 function getUrl(url: string) {
   if (activeTarget) {
     if (url.includes('?')) {
@@ -67,33 +80,46 @@ function getUrl(url: string) {
   return '/api/' + url;
 }
 
-async function postApi(
+function handleServerError(e: unknown) {
+  if (e instanceof AxiosError) {
+    if (e.response?.data) {
+      const debugInfo = e.response.data.error?.debugInfo;
+      if (debugInfo) {
+        const type = e.response.data.error?.type;
+        const ex = new ServerError(
+          e.response.data.error?.message || e.response.data.error,
+        );
+        console.error(debugInfo);
+        ex.debugInfo = debugInfo;
+        ex.type = type;
+        ex.error = e.response.data.error;
+        e = ex;
+      }
+    }
+  }
+  return e;
+}
+
+async function postApi<T>(
   url: string,
-  params: any,
+  params: unknown,
   loading?: () => void,
   options?: AxiosRequestConfig,
 ) {
   try {
-    const res = await api.post(getUrl(url), params, options);
+    const res = await api.post<T>(getUrl(url), params, options);
     loading && loading();
     return res;
-  } catch (e: any) {
+  } catch (e: unknown) {
     loading && loading();
-    if (e.response && e.response.data) {
-      const debugInfo = e.response.data.error?.debugInfo;
-      const type = e.response.data.error?.type;
-      e = new Error(e.response.data.error?.message || e.response.data.error);
-      console.error(debugInfo);
-      e.debugInfo = debugInfo;
-      e.type = type;
-    }
+    e = handleServerError(e);
     throw e;
   }
 }
 
-async function postApiUi(
+async function postApiUi<T>(
   url: string,
-  params: any,
+  params: unknown,
   message: string,
   options?: AxiosRequestConfig,
 ) {
@@ -111,16 +137,13 @@ async function postApiUi(
     constroller.abort();
   });
 
-  // Loading.show({
-  //   message: message,
-  // });
-  //const loading = () => Loading.hide();
   const loading = () => progressDlg && progressDlg.hide();
   options = options || {};
   options.signal = constroller.signal;
   try {
-    return await postApi(url, params, loading, options);
-  } catch (e: any) {
+    return await postApi<T>(url, params, loading, options);
+  } catch (e: unknown) {
+    assertIsError(e);
     Dialog.create({
       title: 'Error',
       message: e.message,
@@ -128,6 +151,7 @@ async function postApiUi(
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function downloadFile(data: any, filename: string, mime: string, bom?: any) {
   const blobData = typeof bom !== 'undefined' ? [bom, data] : [data];
   const blob = new Blob(blobData, { type: mime || 'application/octet-stream' });
@@ -152,13 +176,13 @@ function downloadFile(data: any, filename: string, mime: string, bom?: any) {
   tempLink.click();
 
   // Fixes "webkit blob resource error 1"
-  setTimeout(function () {
+  setTimeout(() => {
     document.body.removeChild(tempLink);
     window.URL.revokeObjectURL(blobURL);
   }, 200);
 }
 
-async function getFile(url: string, params?: any, loading?: () => void) {
+async function getFile(url: string, params?: unknown, loading?: () => void) {
   try {
     const res = await api.get(getUrl(url), { responseType: 'blob', params });
     loading && loading();
@@ -168,36 +192,9 @@ async function getFile(url: string, params?: any, loading?: () => void) {
       'application/text',
     );
     return res;
-  } catch (e: any) {
+  } catch (e: unknown) {
     loading && loading();
-  }
-}
-
-async function getApi(url: string, params?: any, loading?: () => void) {
-  try {
-    const res = await api.get(getUrl(url), { params: params });
-    loading && loading();
-    return res;
-  } catch (e: any) {
-    loading && loading();
-    if (e.response && e.response.data) {
-      const debugInfo = e.response.data.error?.debugInfo;
-      const type = e.response.data.error?.type;
-      e = new Error(e.response.data.error?.message || e.response.data.error);
-      console.error(debugInfo);
-      e.debugInfo = debugInfo;
-      e.type = type;
-    }
-    throw e;
-  }
-}
-
-async function getApiUi(url: string, params: any, message: string) {
-  Loading.show({ message });
-  const loading = () => Loading.hide();
-  try {
-    return await getApi(url, params, loading);
-  } catch (e: any) {
+    assertIsError(e);
     Dialog.create({
       title: 'Error',
       message: e.message,
@@ -205,4 +202,60 @@ async function getApiUi(url: string, params: any, message: string) {
   }
 }
 
-export { api, postApi, getApi, postApiUi, getApiUi, getFile, setActiveTarget };
+async function getApi<T>(url: string, params?: unknown, loading?: () => void) {
+  try {
+    const res = await api.get<T>(getUrl(url), { params: params });
+    loading && loading();
+    return res;
+  } catch (e: unknown) {
+    loading && loading();
+    e = handleServerError(e);
+    throw e;
+  }
+}
+
+async function getApiUi<T>(url: string, params: unknown, message: string) {
+  Loading.show({ message });
+  const loading = () => Loading.hide();
+  try {
+    return await getApi<T>(url, params, loading);
+  } catch (e: unknown) {
+    assertIsError(e);
+    Dialog.create({
+      title: 'Error',
+      message: e.message,
+    });
+    // TODO: show e.debugInfo
+  }
+}
+
+async function executeWithWaiting<T>(
+  callback: () => Promise<T>,
+  message: string,
+) {
+  Loading.show({ message });
+  const loading = () => Loading.hide();
+  try {
+    const res = await callback();
+    loading();
+    return res;
+  } catch (e: unknown) {
+    loading();
+    assertIsError(e);
+    Dialog.create({
+      title: 'Error',
+      message: e.message,
+    });
+  }
+}
+
+export {
+  api,
+  postApi,
+  getApi,
+  postApiUi,
+  getApiUi,
+  getFile,
+  setActiveTarget,
+  executeWithWaiting,
+};
