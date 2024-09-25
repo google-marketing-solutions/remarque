@@ -21,7 +21,7 @@ from dateutil.relativedelta import relativedelta
 from typing import Literal
 from google.auth import credentials
 from google.cloud import bigquery
-from google.api_core import exceptions
+from google.api_core import exceptions, retry
 from google.cloud.bigquery.dataset import Dataset
 #from google.cloud.exceptions import NotFound  # type: ignore
 import pandas as pd
@@ -1336,7 +1336,9 @@ WHERE NOT EXISTS (
 
   def update_audiences_log(self, target: ConfigTarget, logs: list[AudienceLog]):
     table_name = f'{target.bq_dataset_id}.audiences_log'
-    table = self.bq_client.get_table(table_name)
+    custom_retry = retry.Retry(
+        deadline=60, predicate=retry.if_exception_type(exceptions.NotFound))
+    table = self.bq_client.get_table(table_name, retry=custom_retry)
     rows = [{
         'name': i.name,
         'date': i.date if i.date else datetime.now(),
@@ -1570,28 +1572,49 @@ ORDER BY name, date
     # total_user_count, total_control_user_count
     return result, date_start, date_end
 
-  def rebuilt_audiences_log(self, target: ConfigTarget):
+  def rebuilt_audiences_log(
+      self, target: ConfigTarget,
+      audience_name: str | None) -> dict[str, list[AudienceLog]]:
     audiences = self.get_audiences(target)
     audiences_log = self.get_audiences_log(target, include_duplicates=True)
 
-    # drop audiences_log table (because 'delete from' can fail with error:
+    table_fq_name = f'{target.bq_dataset_id}.audiences_log'
+    # 'DELETE FROM' usually fail with error:
     #   "UPDATE or DELETE statement over table 'table_name' would affect rows
     #   in the streaming buffer, which is not supported"
-    table_name = f'{target.bq_dataset_id}.audiences_log'
-    query = f'DROP TABLE `{table_name}`'
-    self.execute_query(query)
-    self._ensure_table(table_name, TableSchemas.audiences_log)
+    # So we're using either DROP TABLE or copying
+    if not audience_name:
+      query = f'DROP TABLE `{table_fq_name}`'
+      self.execute_query(query)
+      self._ensure_table(table_fq_name, TableSchemas.audiences_log)
+    else:
+      # we're asked to rebuild logs only for one audience.
+      # so basically we're recreating the table without rows for that audience
+      query = f"""CREATE TABLE `{table_fq_name}_new` AS
+SELECT * FROM {table_fq_name}
+WHERE name != '{audience_name}';
 
+DROP TABLE `{table_fq_name}`;
+
+-- Rename the new table
+ALTER TABLE `{table_fq_name}_new` RENAME TO audiences_log;
+      """
+      self.execute_query(query)
+
+    result = {}
     # recreate log entries for each audience
     for audience in audiences:
+      if audience_name and audience.name != audience_name:
+        continue
       # we load existing log entries to restore relations with jobs
       audience_log_existing = audiences_log.get(audience.name, None)
-      if audience.mode == 'off':
-        continue
+      # NOTE: here we're not ignoring audiences with mode=off as usual
       audience_log = self.recalculate_audience_log(target, audience,
                                                    audience_log_existing)
       if audience_log:
         self.update_audiences_log(target, audience_log)
+      result[audience_name] = audience_log
+    return result
 
   def recalculate_audience_log(self,
                                target: ConfigTarget,
@@ -1602,7 +1625,6 @@ ORDER BY name, date
     table_users = self._get_user_segment_table_full_name(
         target, audience.table_name, 'test', '*')
     query = f'SELECT MIN(_TABLE_SUFFIX) AS start_day, MAX(_TABLE_SUFFIX) AS end_day FROM `{table_users}`'
-    # TODO: try to restore a JOB relation
     try:
       res = self.execute_query(query)
     except exceptions.NotFound:

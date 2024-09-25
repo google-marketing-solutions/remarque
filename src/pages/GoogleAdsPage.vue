@@ -714,6 +714,12 @@ interface AudienceStatusResult extends AudienceInfo {
 interface AudiencesStatusResponse {
   result: Record<string, AudienceStatusResult>;
 }
+/**
+ * Response type for 'audiences/recalculate_log' endpoint.
+ */
+interface AudiencesLogRebuidResponse {
+  result: Record<string, AudienceLog[]>;
+}
 
 export default defineComponent({
   name: 'GoogleAdsPage',
@@ -797,7 +803,7 @@ export default defineComponent({
         {
           name: 'uploaded_user_count',
           label: 'Uploaded Users',
-          field: 'user_count',
+          field: 'uploaded_user_count',
           sortable: true,
         },
         {
@@ -1212,13 +1218,27 @@ export default defineComponent({
     };
 
     const onRecalculateAudiencesLog = async () => {
+      const audienceName = data.value.selectedAudience?.length
+        ? data.value.selectedAudience[0].name
+        : undefined;
+
       $q.dialog({
         title: 'Confirm',
-        message: 'Are you sure you want to rebuild audiences log?',
+        message: `Are you sure you want to rebuild ${audienceName ? 'log for audience ' + audienceName : 'audiences log'}?`,
         cancel: true,
         persistent: true,
       }).onOk(async () => {
-        await postApiUi('audiences/recalculate_log', {}, 'Recalculating...');
+        const res = await postApiUi<AudiencesLogRebuidResponse>(
+          'audiences/recalculate_log',
+          { audience: audienceName },
+          'Recalculating...',
+        );
+        if (res?.data?.result) {
+          for (const name of Object.keys(res.data.result)) {
+            (storeAudiences.getAudience(name) as AudienceWithLog).log =
+              res.data.result[name];
+          }
+        }
       });
     };
 

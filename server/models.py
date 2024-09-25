@@ -70,24 +70,24 @@ class Audience:
   def __repr__(self):
     return 'Audience: ' + str(self.to_dict())
 
-  @staticmethod
-  def from_dict(map: dict):
-    self = Audience()
-    self.name = map.get('name', None)
-    self.id = map.get('id', None)
-    self.app_id = map.get('app_id', None)
-    self.table_name = map.get('table_name', None)
-    self.countries = map.get('countries', None)
-    self.events_include = map.get('events_include', None)
-    self.events_exclude = map.get('events_exclude', None)
-    self.days_ago_start = map.get('days_ago_start', None)
-    self.days_ago_end = map.get('days_ago_end', None)
-    self.user_list = map.get('user_list', None)
-    self.created = map.get('created', None)
-    self.mode = map.get('mode', 'off')
-    self.query = map.get('query', None)
-    self.ttl = map.get('ttl', None)
-    self.split_ratio = map.get('split_ratio', None)
+  @classmethod
+  def from_dict(cls, obj: dict):
+    self = cls()
+    self.name = obj.get('name', None)
+    self.id = obj.get('id', None)
+    self.app_id = obj.get('app_id', None)
+    self.table_name = obj.get('table_name', None)
+    self.countries = obj.get('countries', None)
+    self.events_include = obj.get('events_include', None)
+    self.events_exclude = obj.get('events_exclude', None)
+    self.days_ago_start = obj.get('days_ago_start', None)
+    self.days_ago_end = obj.get('days_ago_end', None)
+    self.user_list = obj.get('user_list', None)
+    self.created = obj.get('created', None)
+    self.mode = obj.get('mode', 'off')
+    self.query = obj.get('query', None)
+    self.ttl = obj.get('ttl', None)
+    self.split_ratio = obj.get('split_ratio', None)
     return self
 
 

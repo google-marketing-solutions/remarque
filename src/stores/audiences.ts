@@ -98,11 +98,12 @@ export interface AudienceLog {
   test_user_count: number;
   control_user_count: number;
   uploaded_user_count: number;
+  failed_user_count: number;
   new_test_user_count: number;
   new_control_user_count: number;
   total_test_user_count: number;
   total_control_user_count: number;
-
+  job: string;
   job_status: string;
   job_failure: string;
 }
@@ -167,6 +168,16 @@ function removeAudience(this: IAudienceStore, name: string) {
     this.deletedAudiences.push(...deleted);
   }
 }
+
+function getAudience(this: IAudienceStore, name: string) {
+  const idx = this.audiences.findIndex(
+    (val: AudienceInfo) => val.name === name,
+  );
+  if (idx >= 0) {
+    return this.audiences[idx];
+  }
+}
+
 export const useAudiencesStore = defineStore('audiences', () => {
   const audiences = ref([] as AudienceInfo[]);
   const deletedAudiences = ref([] as AudienceInfo[]);
@@ -176,5 +187,6 @@ export const useAudiencesStore = defineStore('audiences', () => {
     deletedAudiences,
     loadAudiences,
     removeAudience,
+    getAudience,
   };
 });

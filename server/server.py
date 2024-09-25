@@ -808,17 +808,7 @@ def get_audiences_status():
     if audience_log:
       audience_dict['log'] = []
       for log_item in audience_log:
-        log_item_dict = {
-            'date': log_item.date,
-            'job': log_item.job_resource_name,
-            'user_count': log_item.uploaded_user_count,
-            'new_test_user_count': log_item.new_test_user_count,
-            'new_control_user_count': log_item.new_control_user_count,
-            'test_user_count': log_item.test_user_count,
-            'control_user_count': log_item.control_user_count,
-            'total_test_user_count': log_item.total_test_user_count,
-            'total_control_user_count': log_item.total_control_user_count,
-        }
+        log_item_dict = log_item.to_dict()
         job_status = next(
             ((j[1], j[2])
              for j in jobs_statuses
@@ -840,8 +830,11 @@ def get_audiences_status():
 @app.route('/api/audiences/recalculate_log', methods=['POST'])
 def recalculate_audiences_status():
   context = create_context(create_ads=True)
-  context.data_gateway.rebuilt_audiences_log(context.target)
-  return jsonify({})
+  params = request.get_json(force=True)
+  audience_name = params.get('audience')
+  result = context.data_gateway.rebuilt_audiences_log(context.target,
+                                                      audience_name)
+  return jsonify({'result': result})
 
 
 @app.route('/api/conversions/query', methods=['GET'])

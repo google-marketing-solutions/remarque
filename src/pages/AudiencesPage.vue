@@ -350,7 +350,13 @@
                           audience.split_ratio = val ? 0.5 : undefined;
                         }
                       "
-                    />
+                    />&nbsp;
+                    <q-icon name="info" size="sm" color="grey">
+                      <q-tooltip
+                        >Changing ratio for ongoing experiments is not
+                        recommended</q-tooltip
+                      ></q-icon
+                    >
                     <q-slider
                       v-model="audience.split_ratio"
                       :min="0"
