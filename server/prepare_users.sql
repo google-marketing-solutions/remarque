@@ -28,14 +28,12 @@ WITH
       event_timestamp,
       ROW_NUMBER() OVER (PARTITION BY device.advertising_id, app_info.id
         ORDER BY event_timestamp DESC) AS row_num
-    FROM
-      `{source_table}`
+    FROM `{source_table}`
     WHERE
       event_name IN ('session_start', 'first_open')
       AND device.operating_system = 'Android'
       AND device.advertising_id IS NOT NULL
-      AND device.advertising_id != ''
-      AND device.advertising_id != '00000000-0000-0000-0000-000000000000'
+      AND device.advertising_id NOT IN ('', '00000000-0000-0000-0000-000000000000', '0000-0000')
       {SEARCH_CONDITIONS}
   )
 SELECT
@@ -51,7 +49,6 @@ SELECT
   NULL AS days_since_install, -- for backward compatibility
   event_date,
   event_timestamp
-FROM
-  UserLatestEvents
+FROM UserLatestEvents
 WHERE
   row_num = 1

@@ -50,8 +50,7 @@
       (SELECT COUNT(DISTINCT trim(user_id)) FROM UNNEST(SPLIT(TU.all_ids, ',')) AS user_id)
         AS total_user_count,
       (SELECT COUNT(DISTINCT trim(user_id)) FROM UNNEST(SPLIT(CU.all_ids, ',')) AS user_id)
-        AS total_control_user_count,
-      1 AS r
+        AS total_control_user_count
     FROM DailyUniqueTestUsersAgg AS TU
     LEFT JOIN DailyUniqueControlUsersAgg AS CU
       USING (table_date)

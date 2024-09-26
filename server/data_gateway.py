@@ -261,7 +261,7 @@ class DataGateway:
         # with date of its creation date
         table_name = f'{target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}'
         suffixed_table_name = f"{TABLE_USERS_NORMALIZED}_{creation_time.strftime('%Y%m%d')}"
-        query = f"ALTER TABLE `{table_name}` RENAME TO `{suffixed_table_name}`"
+        query = f'ALTER TABLE `{table_name}` RENAME TO `{suffixed_table_name}`'
         self.execute_query(query)
         query = f'CREATE OR REPLACE VIEW `{table_name}` AS SELECT * FROM `{table_name}_*`'
         self.execute_query(query)
@@ -1337,7 +1337,7 @@ WHERE NOT EXISTS (
   def update_audiences_log(self, target: ConfigTarget, logs: list[AudienceLog]):
     table_name = f'{target.bq_dataset_id}.audiences_log'
     custom_retry = retry.Retry(
-        deadline=60, predicate=retry.if_exception_type(exceptions.NotFound))
+        timeout=60, predicate=retry.if_exception_type(exceptions.NotFound))
     table = self.bq_client.get_table(table_name, retry=custom_retry)
     rows = [{
         'name': i.name,
@@ -1480,11 +1480,11 @@ ORDER BY name, date
     user_table = target.bq_dataset_id + '.' + audience.table_name
     if country:
       country_list = ','.join([f"'{c}'" for c in country])
-      conversions_conditions = f'country IN ({country_list})'
+      conversions_conditions = f'AND country IN ({country_list})'
       query_TotalCounts = self._read_file(
           'results_parts_TotalCounts_bycountry.sql')
     else:
-      conversions_conditions = 'TRUE'
+      conversions_conditions = ''
       query_TotalCounts = self._read_file('results_parts_TotalCounts_all.sql')
 
     if strategy == 'bounded':

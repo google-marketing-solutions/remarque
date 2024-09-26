@@ -36,7 +36,7 @@ WITH
     WHERE
       device.operating_system = 'Android'
       AND device.advertising_id IS NOT NULL
-      AND device.advertising_id NOT IN ('', '00000000-0000-0000-0000-000000000000')
+      AND device.advertising_id NOT IN ('', '00000000-0000-0000-0000-000000000000', '0000-0000')
       AND _TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
       AND app_info.id = '{app_id}'
       AND event_name IN ({events})
@@ -44,9 +44,10 @@ WITH
   Conversions AS (
     SELECT *
     FROM AllConversions
-    INNER JOIN `{all_users_table}`
+    INNER JOIN `{all_users_table}` AS UN
       USING (user)
     WHERE
+      UN.app_info.id = '{app_id}'
       {SEARCH_CONDITIONS}
   ),
   TestConverted AS (
@@ -106,8 +107,7 @@ WITH
         0
       ) AS total_control_user_count
     FROM GroupedConversions AS C
-    LEFT JOIN
-      (SELECT * FROM TotalCounts WHERE r = 1) AS T
+    LEFT JOIN TotalCounts AS T
       ON C.date = T.day
   )
 SELECT

@@ -18,21 +18,18 @@ WITH
       device.advertising_id AS user,
       event_name,
       event_date,
-    FROM
-      `{source_table}`
+    FROM `{source_table}`
     WHERE
       _TABLE_SUFFIX BETWEEN '{date_start}' AND '{date_end}'
       AND device.operating_system = 'Android'
       AND device.advertising_id IS NOT NULL
-      AND device.advertising_id NOT IN ('', '00000000-0000-0000-0000-000000000000')
+      AND device.advertising_id NOT IN ('', '00000000-0000-0000-0000-000000000000', '0000-0000')
       AND app_info.id = '{app_id}'
       AND event_name IN ({all_events_list})
   ),
   AudienceUsers AS (
-    SELECT DISTINCT
-      F.user
-    FROM
-      `{all_users_table}` AS F
+    SELECT DISTINCT F.user
+    FROM `{all_users_table}` AS F
     WHERE
       {countries_clause}
       AND app_id = '{app_id}'
@@ -50,10 +47,8 @@ WITH
       )
   ),
   ConvertedUsers AS (
-    SELECT DISTINCT
-      F.user
-    FROM
-      `{all_users_table}` AS F
+    SELECT DISTINCT F.user
+    FROM `{all_users_table}` AS F
     WHERE
       {countries_clause}
       AND app_id = '{app_id}'
@@ -75,4 +70,4 @@ SELECT
   COUNT(C.user) AS converted,
   SAFE_DIVIDE(COUNT(C.user), COUNT(A.user)) AS cr
 FROM AudienceUsers AS A
-  LEFT JOIN ConvertedUsers AS C USING(user)
+LEFT JOIN ConvertedUsers AS C USING(user)
