@@ -55,6 +55,17 @@
           <div class="text-h6">GA4 BigQuery Table</div>
           <div class="text-subtitle2">events_* tables with app events</div>
         </q-card-section>
+        <q-banner inline-actions rounded class="bg-grey-3 q-mb-md">
+          <template v-slot:avatar>
+            <q-icon name="info" color="primary" />
+          </template>
+          Please note GA4 dataset is expected to contain events of at least one
+          type: <code>session_start</code> or <code>first_open</code> (or both).
+          They will be used to build <code>user_normalized</code> table with
+          users and their geo information. If your GA4 export has no those
+          events, the <code>user_normalized</code> table will be empty and
+          sampling won't work.
+        </q-banner>
 
         <q-input
           class="q-mb-md"
