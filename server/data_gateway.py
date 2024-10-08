@@ -1109,6 +1109,7 @@ FROM `{audience_table_name}` a
                          suffix: str | None = None):
     """Save sampled users from two DataFrames into two new tables (_test and _control)"""
     project_id = self.config.project_id
+    # test group:
     test_table_name = self._get_user_segment_table_full_name(
         target, audience.table_name, 'test', suffix)
     if len(users_test) == 0:
@@ -1124,6 +1125,7 @@ FROM `{audience_table_name}` a
           project_id,
           if_exists='replace')
 
+    # control group:
     control_table_name = self._get_user_segment_table_full_name(
         target, audience.table_name, 'control', suffix)
     if len(users_control) == 0:
@@ -1624,7 +1626,7 @@ ALTER TABLE `{table_fq_name}_new` RENAME TO audiences_log;
                                target: ConfigTarget,
                                audience: Audience,
                                audience_log_existing: list[AudienceLog] = None):
-    logger.info("Recalculating log for audience '%s'", audience.name)
+    logger.info("Starting recalculating log for audience '%s'", audience.name)
     audience_log_existing = audience_log_existing or []
     table_users = self._get_user_segment_table_full_name(
         target, audience.table_name, 'test', '*')
@@ -1633,16 +1635,26 @@ ALTER TABLE `{table_fq_name}_new` RENAME TO audiences_log;
       res = self.execute_query(query)
     except exceptions.NotFound:
       return
+    except QueryExecutionError:
+      # if the audience wasn't sampled once, then the query fails:
+      # "400 project:remarque.audience1_test_* does not match any table"
+      return
     if not res:
       return
     res = res[0]
     start_day = res['start_day']
     end_day = res['end_day']
+    logger.info(
+        "Recalculating log for audience '%s': detected date range: [%s, %s]",
+        audience.name, start_day, end_day)
+    if start_day is None or end_day is None:
+      return
     start_date = datetime.strptime(start_day, '%Y%m%d')
     end_date = datetime.strptime(end_day, '%Y%m%d')
     num_days = (end_date - start_date).days
     total_test_user_count = 0
     total_control_user_count = 0
+
     logs = []
     for day in range(num_days + 1):
       current_day = start_date + timedelta(days=day)
