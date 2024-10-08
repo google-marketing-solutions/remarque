@@ -112,27 +112,95 @@ export interface Conversions {
   start_date: string;
   end_date: string;
   pval: number | undefined;
+  pval_events: number | undefined;
   ads_metrics?: Record<string, AdsMetric[]>;
 }
 export interface ConversionsData {
   date: string;
   /**
-   * Conversion rate of the test group.
+   * Cumulative number of users in the test group.
+   */
+  total_test_user_count: number;
+  /**
+   * Cumulative number of users in the control group.
+   */
+  total_control_user_count: number;
+  /**
+   * Cumulative number of sessions (session_start) of the test group.
+   */
+  test_session_count: number;
+  /**
+   * Cumulative number of sessions (session_start) of the control group.
+   */
+  control_session_count: number;
+  /**
+   * Cumulative number of converted users in the test group.
+   */
+  cum_test_users: number;
+  /**
+   * Cumulative number of converted users in the control group.
+   */
+  cum_control_users: number;
+  /**
+   * Cumulative number of conversion events in the test group.
+   */
+  cum_test_events: number;
+  /**
+   * Cumulative number of conversion events in the control group.
+   */
+  cum_control_events: number;
+  /**
+   * Cumulative conversion value of the test group.
+   */
+  cum_test_conv_value: number;
+  /**
+   * Cumulative conversion value of the control group.
+   */
+  cum_control_conv_value: number;
+
+  // the metrics below are calculated on the client-side.
+  /**
+   * Conversion rate for users of the test group.
    */
   cr_test: number;
   /**
-   * Conversion rate of the control group.
+   * Conversion rate for users of the control group.
    */
   cr_control: number;
   /**
-   * Cummulative number of conversions of the test group.
+   * Avg event count per user in the test group.
    */
-  cum_test_regs: number;
+  events_per_user_test: number;
   /**
-   * Cummulative number of conversions of the control group.
+   * Avg event count per user in the control group.
    */
-  cum_control_regs: number;
+  events_per_user_control: number;
+  /**
+   * Avg event count per session in the test group.
+   */
+  events_per_session_test: number;
+  /**
+   * Avg event count per session in the control group.
+   */
+  events_per_session_control: number;
+  /**
+   * Value per conversion event in the test group.
+   */
+  value_per_event_test: number;
+  /**
+   * Value per conversion event in the control group.
+   */
+  value_per_event_control: number;
+  /**
+   * Value per converted user in the test group.
+   */
+  value_per_user_test: number;
+  /**
+   * Value per converted user in the control group.
+   */
+  value_per_user_control: number;
 }
+
 export interface AdsMetric {
   campaign: string;
   date: string;
@@ -170,12 +238,7 @@ function removeAudience(this: IAudienceStore, name: string) {
 }
 
 function getAudience(this: IAudienceStore, name: string) {
-  const idx = this.audiences.findIndex(
-    (val: AudienceInfo) => val.name === name,
-  );
-  if (idx >= 0) {
-    return this.audiences[idx];
-  }
+  return this.audiences.find((audience) => audience.name === name);
 }
 
 export const useAudiencesStore = defineStore('audiences', () => {

@@ -124,16 +124,17 @@
 
               <template v-slot:body-cell-actions="props">
                 <q-td :props="props">
-                  <q-btn
-                    dense
-                    round
-                    flat
-                    color="grey"
-                    @click="onOpenChart(props.row)"
-                    icon="query_stats"
-                  ></q-btn>
                   <q-btn-dropdown dense icon="electric_bolt">
                     <q-list>
+                      <q-item
+                        clickable
+                        v-close-popup
+                        @click="onOpenChart(props.row)"
+                      >
+                        <q-item-section>
+                          <q-item-label>Open conversions graph</q-item-label>
+                        </q-item-section>
+                      </q-item>
                       <q-item
                         clickable
                         v-close-popup
@@ -400,8 +401,8 @@
                 </q-banner>
               </div>
             </div>
-            <div class="row">
-              <div class="col q-pa-xs" style="max-width: 250px">
+            <div class="row justify-start">
+              <div class="col col-xl-2 q-pa-xs">
                 <q-input
                   filled
                   v-model="data.conversionsFilterStartDate"
@@ -431,7 +432,7 @@
                   </template>
                 </q-input>
               </div>
-              <div class="col q-pa-xs" style="max-width: 250px">
+              <div class="col col-xl-2 q-pa-xs">
                 <q-input
                   filled
                   v-model="data.conversionsFilterEndDate"
@@ -460,39 +461,61 @@
                   </template>
                 </q-input>
               </div>
-              <div class="col q-pa-xs" style="width: 250px">
+              <div class="col col-lg-3 q-pa-xs" style="width: 250px">
                 <q-select
                   filled
                   v-model="data.conversionsFilterCountries"
                   multiple
-                  :options="data.conversions_countries"
+                  :options="data.conversionsFilterCountriesOptions"
                   label="Country"
                   clearable
                 />
               </div>
-              <div class="col q-pa-xs">
+              <div class="col col-lg-3 q-pa-xs">
                 <q-input
                   filled
-                  v-model="data.conversions_events"
+                  v-model="data.conversionsFilterEvents"
                   label="Conv. event"
                   hint="By default 'exclude events' is used but you can enter any other event (please make sure they are in GA dataset)"
                   clearable
+                  hide-bottom-space
                 />
               </div>
-              <div class="col q-pa-xs">
-                <q-banner class="bg-grey-3">
-                  p-val:
-                  <q-badge
-                    :color="data.pval && data.pval <= 0.05 ? 'green' : 'blue'"
-                    >{{ formatFloat(data.pval, 6) }}</q-badge
-                  >
-                  <br />If pval &lt;=0.05, then results are statistically
-                  significant
-                </q-banner>
-              </div>
             </div>
-            <div class="row">
-              <div class="col q-pa-xs">
+            <div class="row justify-start">
+              <div class="col col-6 col-lg-3 q-pa-xs">
+                <q-btn-toggle
+                  style="margin-left: 0"
+                  v-model="data.conversionsType"
+                  no-wrap
+                  outline
+                  alight="right"
+                  :options="[
+                    { label: 'users', value: 'users' },
+                    { label: 'events', value: 'events' },
+                    { label: 'value', value: 'value' },
+                  ]"
+                />
+                &nbsp;
+                <q-icon name="info" size="sm" color="grey"
+                  ><q-tooltip
+                    >Conversion type: <br /><strong>Users</strong> shows numbers
+                    of unique users who made conversion events. <br />
+                    <strong>Events</strong> shows numbers of conversion
+                    events.<br />
+                    <strong>Value</strong> shows summary conversion value.
+                  </q-tooltip></q-icon
+                >
+              </div>
+              <div class="col col-6 col-lg-4 q-pa-xs">
+                <q-btn-toggle
+                  v-model="data.conversionsMode"
+                  no-wrap
+                  outline
+                  alight="right"
+                  :options="getConversionsModeOptions()"
+                />
+              </div>
               <div class="col col-6 col-lg-3 q-pa-xs">
                 <q-btn-toggle
                   style="margin-left: 0"
@@ -527,9 +550,10 @@
                   :disable="data.conversionsCalcStrategy !== 'unbounded'"
                 />
               </div>
+              <div class="col q-pa-xs"></div>
             </div>
-            <div class="row">
-              <div class="col q-pa-xs">
+            <div class="row items-center">
+              <div class="col col-4 col-md-3 q-pa-xs">
                 <q-btn
                   label="Load conversions"
                   @click="onLoadConversions"
@@ -537,24 +561,27 @@
                   icon="query_stats"
                   class="q-my-md"
                 ></q-btn>
-
-                <q-btn-toggle
-                  class="q-mx-lg"
-                  v-model="data.conversions_mode"
-                  no-wrap
-                  outline
-                  alight="right"
-                  :options="[
-                    { label: 'Conv Rate', value: 'cr' },
-                    { label: 'Absolute', value: 'abs' },
-                  ]"
+              </div>
+              <div class="col col-4 col-md-3q-pa-xs">
+                <q-toggle
+                  v-model="data.loadAdsGraph"
+                  label="Load Ads metrics"
+                  :disable="
+                    !(
+                      data.selectedAudience[0].ads &&
+                      data.selectedAudience[0].ads.adgroups.length > 0
+                    )
+                  "
                 />
+              </div>
+              <div class="col col-4 col-md-3 q-pa-xs">
                 <q-btn
                   label="Get query"
                   @click="onGetConversionsQuery"
-                  class="q-my-md"
+                  class="q-my-md q-px-xl"
                 ></q-btn>
               </div>
+              <div class="col q-pa-xs"></div>
             </div>
           </q-banner>
           <apexchart
@@ -564,6 +591,167 @@
             height="600"
           >
           </apexchart>
+          <div class="row">
+            <div class="col q-pa-xs">
+              <q-banner class="bg-grey-3">
+                p-value:
+                <q-badge
+                  :color="data.pval && data.pval <= 0.05 ? 'green' : 'blue'"
+                  >{{ formatFloat(data.pval, 6) }}</q-badge
+                >
+                <br />If p-value &lt;=0.05, then results are statistically
+                significant
+              </q-banner>
+            </div>
+          </div>
+          <div class="row q-pt-sm">
+            <div class="q-table-container">
+              <q-markup-table separator="horizontal" :wrap-cells="true">
+                <thead>
+                  <tr>
+                    <th class="text-left">Group</th>
+                    <th class="text-right">Total user count</th>
+                    <th class="text-right">Converted users</th>
+                    <th class="text-right">CR of users, %</th>
+                    <th class="text-right">Conversions (events)</th>
+                    <th class="text-right">Avg conversions per session</th>
+                    <th class="text-right">Avg conversions per user</th>
+                    <th class="text-right">Total conv. value, $</th>
+                    <th class="text-right">Avg value per user, $</th>
+                    <th class="text-right">Avg value per conv, $</th>
+                    <th class="text-right">Total session count</th>
+                    <th class="text-right">Avg sessions per user</th>
+                  </tr>
+                </thead>
+                <tbody v-if="data.conversionsSummary">
+                  <tr>
+                    <td class="text-left">Test</td>
+                    <td class="text-right">
+                      {{ data.conversionsSummary.total_test_user_count }}
+                    </td>
+                    <td class="text-right">
+                      {{ data.conversionsSummary.cum_test_users }}
+                    </td>
+                    <td class="text-right">
+                      {{ formatFloat(data.conversionsSummary.cr_test * 100) }}
+                    </td>
+                    <td class="text-right">
+                      {{ data.conversionsSummary.cum_test_events }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        formatFloat(
+                          data.conversionsSummary.events_per_session_test,
+                          5,
+                        )
+                      }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        formatFloat(
+                          data.conversionsSummary.events_per_user_test,
+                          5,
+                        )
+                      }}
+                    </td>
+                    <td class="text-right">
+                      {{ data.conversionsSummary.cum_test_conv_value }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        formatFloat(
+                          data.conversionsSummary.value_per_user_test,
+                          4,
+                        )
+                      }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        formatFloat(
+                          data.conversionsSummary.value_per_event_test,
+                          4,
+                        )
+                      }}
+                    </td>
+                    <td class="text-right">
+                      {{ data.conversionsSummary.test_session_count }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        formatFloat(
+                          data.conversionsSummary.test_session_count /
+                            data.conversionsSummary.total_test_user_count,
+                        )
+                      }}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="text-left">Control</td>
+                    <td class="text-right">
+                      {{ data.conversionsSummary.total_control_user_count }}
+                    </td>
+                    <td class="text-right">
+                      {{ data.conversionsSummary.cum_control_users }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        formatFloat(data.conversionsSummary.cr_control * 100)
+                      }}
+                    </td>
+                    <td class="text-right">
+                      {{ data.conversionsSummary.cum_control_events }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        formatFloat(
+                          data.conversionsSummary.events_per_session_control,
+                          5,
+                        )
+                      }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        formatFloat(
+                          data.conversionsSummary.events_per_user_control,
+                          5,
+                        )
+                      }}
+                    </td>
+                    <td class="text-right">
+                      {{ data.conversionsSummary.cum_control_conv_value }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        formatFloat(
+                          data.conversionsSummary.value_per_user_control,
+                          4,
+                        )
+                      }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        formatFloat(
+                          data.conversionsSummary.value_per_event_control,
+                          4,
+                        )
+                      }}
+                    </td>
+                    <td class="text-right">
+                      {{ data.conversionsSummary.control_session_count }}
+                    </td>
+                    <td class="text-right">
+                      {{
+                        formatFloat(
+                          data.conversionsSummary.control_session_count /
+                            data.conversionsSummary.total_control_user_count,
+                        )
+                      }}
+                    </td>
+                  </tr>
+                </tbody>
+              </q-markup-table>
+            </div>
+          </div>
           <apexchart
             v-if="data.chartAds.series.length"
             :options="data.chartAds.options"
@@ -622,7 +810,7 @@
 <style></style>
 
 <script lang="ts">
-import { defineComponent, ref, watch, computed } from 'vue';
+import { defineComponent, ref, watch, nextTick, computed } from 'vue';
 import { useQuasar } from 'quasar';
 import { useConfigurationStore } from 'stores/configuration';
 import {
@@ -645,12 +833,28 @@ import {
   formatDate,
   formatFloat,
 } from '../helpers/utils';
+import { ApexOptions } from 'apexcharts';
 
-enum GraphMode {
-  CONV_RATE = 'cr',
-  ABSOLUTE = 'abs',
+enum ConversionType {
+  USERS = 'users',
+  EVENTS = 'events',
+  VALUE = 'value',
 }
-enum ConversionStrategy {
+enum ConversionUsersMode {
+  CONV_RATE = 'cr',
+  ABSOLUTE = 'users_abs',
+}
+enum ConversionEventsMode {
+  ABSOLUTE = 'events_abs',
+  AVG_BY_USER = 'events_by_user',
+  AVG_BY_SESSION = 'events_by_session',
+}
+enum ConversionValueMode {
+  ABSOLUTE = 'value_abs',
+  AVG_BY_USER = 'value_by_user',
+  AVG_BY_EVENT = 'value_by_event',
+}
+enum ConversionCalcStrategy {
   BOUNDED = 'bounded',
   UNBOUNDED = 'unbounded',
 }
@@ -688,6 +892,7 @@ interface AudienceConversionsResult {
   date_start: string;
   date_end: string;
   pval: number | undefined;
+  pval_events: number | undefined;
   chi: number | undefined;
 }
 /**
@@ -765,6 +970,7 @@ export default defineComponent({
         },
         { name: 'days_ago_start', label: 'Start', field: 'days_ago_start' },
         { name: 'days_ago_end', label: 'End', field: 'days_ago_end' },
+        { name: 'ratio', label: 'Ratio', field: 'split_ratio' },
         { name: 'ttl', label: 'TTL', field: 'ttl' },
         {
           name: 'uploads',
@@ -849,7 +1055,7 @@ export default defineComponent({
       isLogPanelExpanded: true,
       loadAdsGraph: true,
       chart: {
-        options: {
+        options: <ApexOptions>{
           chart: {
             type: 'line',
           },
@@ -876,7 +1082,6 @@ export default defineComponent({
           },
           labels: [],
           xaxis: {
-            //type: 'category',
             type: 'datetime',
           },
           yaxis: [
@@ -894,7 +1099,7 @@ export default defineComponent({
         series: [] as ApexAxisChartSeries,
       },
       chartAds: {
-        options: {
+        options: <ApexOptions>{
           chart: {
             type: 'line',
           },
@@ -954,11 +1159,15 @@ export default defineComponent({
       conversionsFilterStartDate: <string | undefined>undefined,
       conversionsFilterEndDate: <string | undefined>undefined,
       conversionsFilterCountries: <string[]>[],
-      conversions_countries: [] as string[],
-      conversions_events: '',
-      conversions_mode: GraphMode.CONV_RATE,
-      conversionsCalcStrategy: ConversionStrategy.BOUNDED,
+      conversionsFilterCountriesOptions: [] as string[],
+      conversionsFilterEvents: '',
+      conversionsType: ConversionType.USERS,
+      conversionsMode: <
+        ConversionUsersMode | ConversionEventsMode | ConversionValueMode
+      >ConversionUsersMode.ABSOLUTE,
+      conversionsCalcStrategy: ConversionCalcStrategy.BOUNDED,
       conversionsFilterConvWindow: <number | undefined>undefined,
+      conversionsSummary: <ConversionsData | undefined>undefined,
       pval: <number | undefined>undefined,
     });
 
@@ -1054,6 +1263,7 @@ export default defineComponent({
       }
     };
 
+    // on selected audience change we update conversions graph
     watch(
       () => data.value.selectedAudience,
       (newValue: AudienceWithLog[]) => {
@@ -1061,8 +1271,9 @@ export default defineComponent({
         if (newValue && newValue.length) {
           const newActiveAudience = newValue[0];
           data.value.conversionsFilterCountries = [];
-          data.value.conversions_events = '';
-          data.value.conversions_countries = newActiveAudience.countries;
+          data.value.conversionsFilterEvents = '';
+          data.value.conversionsFilterCountriesOptions =
+            newActiveAudience.countries;
           updateConversionsChart(newActiveAudience.conversions);
           data.value.loadAdsGraph = !!(
             newActiveAudience.ads && newActiveAudience.ads.campaigns.length > 0
@@ -1088,11 +1299,31 @@ export default defineComponent({
     );
 
     watch(
-      () => data.value.conversions_mode,
+      () => data.value.conversionsType,
+      (convType: ConversionType) => {
+        switch (convType) {
+          case ConversionType.USERS:
+            data.value.conversionsMode = ConversionUsersMode.ABSOLUTE;
+            break;
+          case ConversionType.EVENTS:
+            data.value.conversionsMode = ConversionEventsMode.ABSOLUTE;
+            break;
+          case ConversionType.VALUE:
+            data.value.conversionsMode = ConversionValueMode.ABSOLUTE;
+            break;
+          default:
+        }
+      },
+    );
+
+    watch(
+      [() => data.value.conversionsMode, () => data.value.conversionsType],
       () => {
         if (data.value.selectedAudience && data.value.selectedAudience.length) {
           const audience = data.value.selectedAudience[0];
-          updateConversionsChart(audience.conversions);
+          nextTick(() => {
+            updateConversionsChart(audience.conversions);
+          });
         }
       },
     );
@@ -1241,6 +1472,14 @@ export default defineComponent({
             (storeAudiences.getAudience(name) as AudienceWithLog).log =
               res.data.result[name];
           }
+          if (audienceName && !res.data.result[audienceName]) {
+            // if we was asked to rebuild only one audience
+            // then report if its new upload history is empty
+            $q.dialog({
+              title: 'Upload history recalculation',
+              message: 'The audience has no upload history',
+            });
+          }
         }
       });
     };
@@ -1259,7 +1498,7 @@ export default defineComponent({
         if (country && country.length) {
           country_str = country.join(',');
         }
-        const events = data.value.conversions_events;
+        const events = data.value.conversionsFilterEvents;
         audience.conversions = await loadConversions(
           audience.name,
           date_start,
@@ -1328,6 +1567,7 @@ export default defineComponent({
     ): Promise<Conversions | undefined> => {
       data.value.chart.series = [];
       data.value.chartAds.series = [];
+      data.value.conversionsSummary = undefined;
       // NOTE: if 'campaigns' is specified it says that we want to fetch campaign's metrics
       const res = await postApiUi<AudienceConversionsResponse>(
         'conversions',
@@ -1356,11 +1596,61 @@ export default defineComponent({
         });
         return;
       }
-      // 'result' object for a particular audience is expected to be:
-      //  conversions, date_start, date_end, pval, chi
-      // 'result.conversions' is an array of objects with fields:
-      //  date, cum_test_regs, cum_control_regs
-      console.log(result);
+      /* In result.conversions we expect:
+        date
+        cum_test_users
+        cum_control_users
+        cum_test_events
+        cum_control_events
+        cum_control_conv_value
+        cum_test_conv_value
+        total_test_user_count
+        total_control_user_count
+        test_session_count
+        control_session_count
+       */
+      // calculate more metrics (rations based on returned ones)
+      if (result.conversions) {
+        for (const i of result.conversions) {
+          if (i.total_test_user_count > 0) {
+            // conversion rate (cr) - avg converted user counts:
+            i.cr_test = i.cum_test_users / i.total_test_user_count;
+            // avg conv events per user
+            i.events_per_user_test =
+              i.cum_test_events / i.total_test_user_count;
+            // avg value per user
+            i.value_per_user_test =
+              i.cum_test_conv_value / i.total_test_user_count;
+          }
+          if (i.total_control_user_count > 0) {
+            // conversion rate (cr) - avg converted user counts:
+            i.cr_control = i.cum_control_users / i.total_control_user_count;
+            // avg conv events per user
+            i.events_per_user_control =
+              i.cum_control_events / i.total_control_user_count;
+            // avg value per user
+            i.value_per_user_control =
+              i.cum_control_conv_value / i.total_control_user_count;
+          }
+          // avg conv events per session
+          if (i.test_session_count) {
+            i.events_per_session_test =
+              i.cum_test_events / i.test_session_count;
+          }
+          if (i.control_session_count) {
+            i.events_per_session_control =
+              i.cum_control_events / i.control_session_count;
+          }
+          // avg conversion value:
+          if (i.cum_test_events > 0) {
+            i.value_per_event_test = i.cum_test_conv_value / i.cum_test_events;
+          }
+          if (i.cum_control_events > 0) {
+            i.value_per_event_control =
+              i.cum_control_conv_value / i.cum_control_events;
+          }
+        }
+      }
       const ads_metrics_grouped = result.ads_metrics
         ? result.ads_metrics.reduce(
             (r: Record<string, AdsMetric[]>, a: AdsMetric) => {
@@ -1377,18 +1667,65 @@ export default defineComponent({
         start_date: result.date_start,
         end_date: result.date_end,
         pval: result.pval,
+        pval_events: result.pval_events,
         ads_metrics: ads_metrics_grouped,
       };
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    function formatGraphValue(val: any) {
-      if (Number.isFinite(val)) {
-        return data.value.conversions_mode === GraphMode.CONV_RATE
-          ? formatFloat(val)
-          : val;
+    function selectConversionsGraphItem(
+      item: ConversionsData,
+      groupName: 'test' | 'control',
+    ) {
+      const convType = data.value.conversionsType;
+      const convMode = data.value.conversionsMode;
+      if (convType === ConversionType.USERS) {
+        if (groupName === 'test') {
+          return convMode === ConversionUsersMode.CONV_RATE
+            ? item.cr_test
+            : item.cum_test_users;
+        } else {
+          return convMode === ConversionUsersMode.CONV_RATE
+            ? item.cr_control
+            : item.cum_control_users;
+        }
+      } else if (convType === ConversionType.EVENTS) {
+        if (groupName === 'test') {
+          if (convMode === ConversionEventsMode.ABSOLUTE) {
+            return item.cum_test_events;
+          } else if (convMode === ConversionEventsMode.AVG_BY_SESSION) {
+            return item.events_per_session_test;
+          } else if (convMode === ConversionEventsMode.AVG_BY_USER) {
+            return item.events_per_user_test;
+          }
+        } else {
+          if (convMode === ConversionEventsMode.ABSOLUTE) {
+            return item.cum_control_events;
+          } else if (convMode === ConversionEventsMode.AVG_BY_SESSION) {
+            return item.events_per_session_control;
+          } else if (convMode === ConversionEventsMode.AVG_BY_USER) {
+            return item.events_per_user_control;
+          }
+        }
+      } else if (convType === ConversionType.VALUE) {
+        if (groupName === 'test') {
+          if (convMode === ConversionValueMode.ABSOLUTE) {
+            return item.cum_test_conv_value;
+          } else if (convMode === ConversionValueMode.AVG_BY_EVENT) {
+            return item.value_per_event_test;
+          } else if (convMode === ConversionValueMode.AVG_BY_USER) {
+            return item.value_per_user_test;
+          }
+        } else {
+          if (convMode === ConversionValueMode.ABSOLUTE) {
+            return item.cum_control_conv_value;
+          } else if (convMode === ConversionValueMode.AVG_BY_EVENT) {
+            return item.value_per_event_control;
+          } else if (convMode === ConversionValueMode.AVG_BY_USER) {
+            return item.value_per_user_control;
+          }
+        }
       }
-      return 0;
+      return 0; // it should never happen
     }
 
     const updateConversionsChart = (conversions?: Conversions) => {
@@ -1397,44 +1734,110 @@ export default defineComponent({
         data.value.chartAds.series = [];
         data.value.conversionsFilterStartDate = undefined;
         data.value.conversionsFilterEndDate = undefined;
+        data.value.conversionsSummary = undefined;
         data.value.pval = undefined;
         return;
       }
       data.value.conversionsFilterStartDate = conversions.start_date;
       data.value.conversionsFilterEndDate = conversions.end_date;
-      data.value.pval = conversions.pval;
+      data.value.conversionsSummary =
+        conversions.data[conversions.data.length - 1];
+      switch (data.value.conversionsType) {
+        case ConversionType.USERS:
+          data.value.pval = conversions.pval;
+          break;
+        case ConversionType.EVENTS:
+          data.value.pval = conversions.pval_events;
+          break;
+        default:
+          data.value.pval = undefined;
+          break;
+      }
+      let title = '';
+      switch (data.value.conversionsMode) {
+        case ConversionUsersMode.ABSOLUTE:
+          title = 'Conversions: absolute number of converted users';
+          break;
+        case ConversionUsersMode.CONV_RATE:
+          title =
+            'Conversion rate: number of converted users / number of users in a group (treatment/control)';
+          break;
+        case ConversionEventsMode.ABSOLUTE:
+          title = 'Conversions: absolute numebr of conversion events';
+          break;
+        case ConversionEventsMode.AVG_BY_SESSION:
+          title =
+            'Averange number of conversion events per session (by users in a group)';
+          break;
+        case ConversionEventsMode.AVG_BY_USER:
+          title = 'Averange number of conversion events per user (in a group)';
+          break;
+        case ConversionValueMode.ABSOLUTE:
+          title = 'Total conversion value (by users in a group)';
+          break;
+        case ConversionValueMode.AVG_BY_EVENT:
+          title = 'Averange conversion value per conversion event';
+          break;
+        case ConversionValueMode.AVG_BY_USER:
+          title = 'Averange conversion value per converted user';
+          break;
+        default:
+      }
       const graph_data = {} as Record<
         string,
-        { date: string; test: number; control: number }
+        {
+          date: string;
+          test: number;
+          control: number;
+        }
       >;
       // TODO: should we limit graph with on X axis back only N days from the end date?
       for (const item of conversions.data) {
-        //const label = new Date(item.date);
         const label = <string>formatDate(new Date(item.date));
         // NOTE: dates should not repeat otherwise there will be no graph
         graph_data[label] = {
           date: item.date,
-          test:
-            data.value.conversions_mode === GraphMode.CONV_RATE
-              ? item.cr_test
-              : item.cum_test_regs,
-          control:
-            data.value.conversions_mode === GraphMode.CONV_RATE
-              ? item.cr_control
-              : item.cum_control_regs,
+          test: selectConversionsGraphItem(item, 'test'),
+          control: selectConversionsGraphItem(item, 'control'),
         };
       }
       const entries = Object.entries(graph_data);
       const test_data = entries.map((item) => {
-        return { x: item[1].date, y: formatGraphValue(item[1].test) };
+        return { x: item[1].date, y: item[1].test };
       });
       const control_data = entries.map((item) => {
-        return { x: item[1].date, y: formatGraphValue(item[1].control) };
+        return { x: item[1].date, y: item[1].control };
       });
       data.value.chart.series = [
         { name: 'treatment', data: test_data },
         { name: 'control', data: control_data },
       ];
+      const getYAxisFormatter = (val: number) => {
+        if (data.value.conversionsType === ConversionType.VALUE) {
+          return `$${val.toFixed(2)}`;
+        }
+        if (data.value.conversionsMode === ConversionUsersMode.CONV_RATE) {
+          return `${(val * 100).toFixed(2)}%`;
+        }
+        if (
+          data.value.conversionsMode === ConversionUsersMode.ABSOLUTE ||
+          data.value.conversionsMode === ConversionEventsMode.ABSOLUTE
+        ) {
+          return `${val.toFixed(0)}`;
+        }
+        return `${val.toFixed(2)}`;
+      };
+      data.value.chart.options = {
+        ...data.value.chart.options,
+        title: {
+          text: title,
+        },
+        yaxis: {
+          labels: {
+            formatter: getYAxisFormatter,
+          },
+        },
+      };
       if (conversions.ads_metrics) {
         updateAdsMetricsChart(conversions.ads_metrics);
       }
@@ -1523,6 +1926,32 @@ export default defineComponent({
       }
     };
 
+    const getConversionsModeOptions = () => {
+      switch (data.value.conversionsType) {
+        case ConversionType.USERS:
+          return [
+            { label: 'Absolute', value: ConversionUsersMode.ABSOLUTE },
+            { label: 'Conv Rate', value: ConversionUsersMode.CONV_RATE },
+          ];
+        case ConversionType.EVENTS:
+          return [
+            { label: 'Absolute', value: ConversionEventsMode.ABSOLUTE },
+            { label: 'Avg per user', value: ConversionEventsMode.AVG_BY_USER },
+            {
+              label: 'Avg per session',
+              value: ConversionEventsMode.AVG_BY_SESSION,
+            },
+          ];
+        case ConversionType.VALUE:
+          return [
+            { label: 'Absolute', value: ConversionValueMode.ABSOLUTE },
+            { label: 'Avg per user', value: ConversionValueMode.AVG_BY_USER },
+            { label: 'Avg per conv', value: ConversionValueMode.AVG_BY_EVENT },
+          ];
+        default:
+      }
+    };
+
     return {
       store,
       data,
@@ -1539,6 +1968,7 @@ export default defineComponent({
       formatArray,
       formatFloat,
       renderNodeInfo,
+      getConversionsModeOptions,
     };
   },
 });

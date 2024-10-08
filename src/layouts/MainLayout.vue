@@ -63,7 +63,9 @@
       <router-view />
     </q-page-container>
 
-    <q-footer></q-footer>
+    <div class="text-body1 text-center q-ma-sm">
+      &copy;&nbsp;Google gTech Ads, 2024.
+    </div>
   </q-layout>
 </template>
 

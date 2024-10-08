@@ -18,7 +18,7 @@ import os
 import re
 from datetime import date, datetime, timedelta, timezone
 from dateutil.relativedelta import relativedelta
-from typing import Literal
+from typing import Any, Literal
 from google.auth import credentials
 from google.cloud import bigquery
 from google.api_core import exceptions, retry
@@ -155,12 +155,12 @@ class DataGateway:
         # the current dataset's location and desired one are different,
         # we need to recreate the dataset
         logger.info(
-            'Existing dataset needs to be recreated due to different locations (current: %s, needed: %s).',
-            ds.location, dataset_location)
+            'Existing dataset needs to be recreated due to different locations'
+            ' (current: %s, needed: %s).', ds.location, dataset_location)
         # but before doing so let's copy everything aside
         if backup_existing_tables:
           logger.debug('Backing up existing tables in the %s', dataset_id)
-          # we'll create a backup dataset in the same location as the current one
+          # we'll create a backup dataset in the same location as the current
           ds_backup = bigquery.Dataset(fully_qualified_dataset_id + '_backup_' +
                                        datetime.now().strftime('%Y%m%d_%H%M'))
           ds_backup.location = ds.location
@@ -190,12 +190,6 @@ class DataGateway:
       ds = self.bq_client.create_dataset(dataset)
       logger.info('Dataset %s created in %s.', fully_qualified_dataset_id,
                   dataset_location)
-      # copy tables from backup dataset back
-      # NOTE: looks like copying won't work between locations anyway
-      # if ds_backup:
-      #   logger.debug(f'Copying tables from backup dataset {ds_backup.dataset_id} back to {ds.dataset_id}')
-      #   for t in self.bq_client.list_tables(ds_backup):
-      #     self.bq_client.copy_table(ds_backup.dataset_id + '.' + t.table_id, ds.dataset_id + '.' + t.table_id)
 
     return ds
 
@@ -223,7 +217,9 @@ class DataGateway:
     # audiences = self.get_audiences(target)
     # for audience in audiences:
     #   if audience.table_name:
-    #     query = f"SELECT table_name FROM {bq_dataset_id}.INFORMATION_SCHEMA.TABLES WHERE table_name like '{audience.table_name}_control_%' ORDER BY 1"
+    #     query = f"""SELECT table_name
+    # FROM {bq_dataset_id}.INFORMATION_SCHEMA.TABLES
+    # WHERE table_name like '{audience.table_name}_control_%' ORDER BY 1"""
     #     rows = self.execute_query(query)
     #     for row in rows:
     #       table_name = row['table_name']
@@ -248,7 +244,9 @@ class DataGateway:
         query = f'DROP TABLE IF EXISTS `{target.bq_dataset_id}.{table}`'
         self.execute_query(query)
       # drop the view users_normalized if it exists
-      query = f'DROP VIEW IF EXISTS {target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}'
+      query = (
+          f'DROP VIEW IF EXISTS {target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}'
+      )
       self.execute_query(query)
     else:
       # initialization in default mode from old schema (pre v3)
@@ -260,10 +258,13 @@ class DataGateway:
         # first we need to rename existing users_normalized to suffixed table
         # with date of its creation date
         table_name = f'{target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}'
-        suffixed_table_name = f"{TABLE_USERS_NORMALIZED}_{creation_time.strftime('%Y%m%d')}"
-        query = f'ALTER TABLE `{table_name}` RENAME TO `{suffixed_table_name}`'
+        suffixed_table_name = (
+            f"{TABLE_USERS_NORMALIZED}_{creation_time.strftime('%Y%m%d')}")
+        query = (
+            f'ALTER TABLE `{table_name}` RENAME TO `{suffixed_table_name}`')
         self.execute_query(query)
-        query = f'CREATE OR REPLACE VIEW `{table_name}` AS SELECT * FROM `{table_name}_*`'
+        query = (f'CREATE OR REPLACE VIEW `{table_name}` AS '
+                 f'SELECT * FROM `{table_name}_*`')
         self.execute_query(query)
         logger.warning(
             'users_normalized renamed to %s, view users_normalized created',
@@ -272,10 +273,8 @@ class DataGateway:
       # it won't go into effect as we're not recreating the table and
       # don't know for what period it was created originally.
 
-  def _ensure_table(self,
-                    table_name,
-                    expected_schema: list[bigquery.SchemaField],
-                    strict=False):
+  def _ensure_table(self, table_name,
+                    expected_schema: list[bigquery.SchemaField]):
     table_ref = bigquery.TableReference.from_string(table_name,
                                                     self.config.project_id)
     try:
@@ -314,24 +313,28 @@ class DataGateway:
         for field in deleted_fields:
           sql = f'ALTER TABLE `{table_name}` DROP COLUMN {field.name}'
           self.execute_query(sql)
-        # refresh the table as w/o it we'll have 'PRECONDITION_FAILED: 412' error on update_table
+        # refresh the table reference, otherwise we'll get:
+        #  'PRECONDITION_FAILED: 412' error on update_table
         table = self.bq_client.get_table(table_ref)
       if added_fields:
         logger.debug('Adding new columns to %s: %s', table_name, added_fields)
         for field in added_fields:
-          sql = f'ALTER TABLE `{table_name}` ADD COLUMN {field.name} {field.field_type}'
+          sql = f"""ALTER TABLE `{table_name}`
+  ADD COLUMN {field.name} {field.field_type}"""
           self.execute_query(sql)
           if field.default_value_expression:
             if isinstance(field.default_value_expression, (str)):
-              default_value_expression = "'" + field.default_value_expression + "'"
+              default_value_expression = f"'{field.default_value_expression}'"
             else:
               default_value_expression = field.default_value_expression
             # 1. ALTER TABLE my_table ADD COLUMN field;
             # 2. ALTER TABLE my_table ALTER COLUMN field SET DEFAULT '';
             # 3. UPDATE my_table SET field = '' WHERE TRUE;
-            sql = f'ALTER TABLE `{table_name}` ALTER COLUMN {field.name} SET DEFAULT {default_value_expression}'
+            sql = f"""ALTER TABLE `{table_name}`
+  ALTER COLUMN {field.name} SET DEFAULT {default_value_expression}"""
             self.execute_query(sql)
-            sql = f'UPDATE `{table_name}` SET {field.name} = {default_value_expression} WHERE TRUE'
+            sql = f"""UPDATE `{table_name}`
+  SET {field.name} = {default_value_expression} WHERE TRUE"""
             self.execute_query(sql)
         table = self.bq_client.get_table(table_ref)
 
@@ -349,14 +352,14 @@ class DataGateway:
                                None) and e.errors[0]['debugInfo'].startswith(
                                    '[SCHEMA_INCOMPATIBLE]'):
               logger.warning(
-                  'Table %s schema is incompatible and the table has to be recreated',
-                  table_name)
+                  'Table %s schema is incompatible and'
+                  ' the table has to be recreated', table_name)
               backup_table_id = table_name + '_backup'
               try:
                 self.bq_client.delete_table(backup_table_id, not_found_ok=True)
-              except:
-                logger.warning('Failed to delete backup table %s',
-                               backup_table_id)
+              except Exception as e2:
+                logger.warning('Failed to delete backup table %s: %s',
+                               backup_table_id, e2)
               try:
                 self.bq_client.copy_table(table, backup_table_id)
               except Exception as e1:
@@ -367,9 +370,8 @@ class DataGateway:
               table = bigquery.Table(table_ref, schema=expected_schema)
               self.bq_client.create_table(table)
               return
-          logger.warning(
-              'The error is not a scheme_incompatible error or we failed to parse it'
-          )
+          logger.warning('The error is not a scheme_incompatible error '
+                         'or we failed to parse it')
           raise
       else:
         logger.debug('Table %s has compatible schema', table_name)
@@ -411,8 +413,8 @@ class DataGateway:
             f' or schema incompatibility. {e.errors[0]["message"]}.'
             ' Please re-initialize application') from e
       raise QueryExecutionError(
-          f'Query execution error: {e.errors[0]["message"] if e.errors else str(e)}',
-          query) from e
+          'Query execution error:' +
+          e.errors[0]['message'] if e.errors else str(e), query) from e
 
     fields = [field.name for field in results.schema]
     data_list = []
@@ -425,7 +427,8 @@ class DataGateway:
 
     elapsed = datetime.now() - ts_start
     logger.debug(
-        'Query executed successfully (elapsed: %s, cost: %.4f, total bytes billed: %s)',
+        'Query executed successfully '
+        '(elapsed: %s, cost: %.4f, total bytes billed: %s)',
         format_duration(elapsed), cost, query_job.total_bytes_billed)
     if return_stat:
       return data_list, cost, query_job.total_bytes_billed
@@ -439,7 +442,10 @@ class DataGateway:
     return ga_fqn
 
   def check_ga4(self, ga4_project: str, ga4_dataset: str, ga4_table='events'):
-    query = f"SELECT table_name FROM `{ga4_project}.{ga4_dataset}.INFORMATION_SCHEMA.TABLES` WHERE table_name LIKE '{ga4_table}_%' ORDER BY 1 DESC"
+    query = f"""SELECT table_name
+  FROM `{ga4_project}.{ga4_dataset}.INFORMATION_SCHEMA.TABLES`
+  WHERE table_name LIKE '{ga4_table}_%'
+  ORDER BY 1 DESC"""
     try:
       # TODO: if the target config has't been configured then we don't have a BQ
       # location so we don't know where execute the query,
@@ -450,14 +456,15 @@ class DataGateway:
       logger.error(e)
       sa = f"{self.config.project_id}@appspot.gserviceaccount.com"
       raise Exception(
-          f"Incorrect GA4 table name or the application's service account ({sa})"
-          " doesn't have access permissions to the BigQuery dataset.\n"
+          "Incorrect GA4 table name or the application's service account "
+          f"({sa}) doesn't have access permissions to the BigQuery dataset.\n"
           f"Original error: {e}") from e
 
     if logger.isEnabledFor(logger.level):
       logger.debug('Found GA4 events tables: %s', tables)
     yesterday = (date.today() - timedelta(days=2)).strftime('%Y%m%d')
-    # first row should be 'events_intraday_yyymmdd' (for today), and previous one 'events_yyyymmdd' for tomorrow
+    # first row should be 'events_intraday_yyymmdd' (for today),
+    # and previous one 'events_yyyymmdd' for tomorrow
     found = next((t for t in tables if t == ga4_table + '_' + yesterday), None)
     if not found:
       raise Exception(
@@ -680,7 +687,8 @@ WHEN NOT MATCHED THEN
     sql_names_to_delete = ','.join(
         ["'" + item.name + "'" for item in to_remove])
     if sql_names_to_delete:
-      query = f'DELETE FROM `{table_name}` WHERE name in ({sql_names_to_delete})'
+      query = (f'DELETE FROM `{table_name}` '
+               f'WHERE name in ({sql_names_to_delete})')
       logger.debug(query)
       self.bq_client.query(query).result()
 
@@ -700,7 +708,10 @@ WHEN NOT MATCHED THEN
   def _delete_audience_tables(self, target: ConfigTarget, table_name: str,
                               suffix: str):
     meta_table_name = target.bq_dataset_id + '.INFORMATION_SCHEMA.TABLES'
-    query = f"SELECT table_name FROM {meta_table_name} WHERE table_name like '{table_name}_{suffix}_%' ORDER BY 1"
+    query = f"""SELECT table_name
+  FROM {meta_table_name}
+  WHERE table_name like '{table_name}_{suffix}_%'
+  ORDER BY 1"""
     rows = self.execute_query(query)
     for row in rows:
       table_name = target.bq_dataset_id + '.' + row['table_name']
@@ -780,8 +791,8 @@ WHEN NOT MATCHED THEN
           })
     except KeyError as e:
       raise Exception(
-          f'An error occured during substituting macros into audience query, unknown macro {e} was used'
-      ) from e
+          'An error occurred during substituting macros into audience query, '
+          f'unknown macro {e} was used') from e
 
     return query
 
@@ -795,7 +806,7 @@ WHEN NOT MATCHED THEN
     days_ago_end = int(audience.days_ago_end)
     audience_duration = abs(days_ago_end - days_ago_start)
     if date_start and date_end:
-      # date_start AND date_end: we might need to adjust one of them (start or end)
+      # date_start AND date_end: we might need to adjust one of them
       delta = audience_duration + conversion_window_days
       if (date_end -
           date_start).days < audience_duration + conversion_window_days:
@@ -868,8 +879,8 @@ WHEN NOT MATCHED THEN
           })
     except KeyError as e:
       raise Exception(
-          f'An error occured during substituting macros into audience query, unknown macro {e} was used'
-      ) from e
+          'An error occurred during substituting macros into audience query, '
+          f'unknown macro {e} was used') from e
     return query, date_start, date_end
 
   def get_base_conversion(self,
@@ -945,25 +956,35 @@ WHEN NOT MATCHED THEN
     if start_day == end_day:
       range_condition = f"AND _TABLE_SUFFIX = '{start_day}'"
     else:
-      range_condition = f"AND _TABLE_SUFFIX BETWEEN '{start_day}' AND '{end_day}'"
+      range_condition = (
+          f"AND _TABLE_SUFFIX BETWEEN '{start_day}' AND '{end_day}'")
     query = query.format(
         **{
             'source_table': self.get_ga4_table_name(target, True),
             'SEARCH_CONDITIONS': range_condition
         })
     if incremental:
-      destination_table_base = f'{target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}'
+      destination_table_base = (
+          f'{target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}')
       destination_table = f'{destination_table_base}_{end_day}'
       query = f'CREATE OR REPLACE TABLE `{destination_table}` AS\n' + query
       self.execute_query(query)
-      query = f'CREATE OR REPLACE VIEW `{destination_table_base}` AS SELECT * FROM `{destination_table_base}_*`'
+      query = (f'CREATE OR REPLACE VIEW `{destination_table_base}` '
+               f'AS SELECT * FROM `{destination_table_base}_*`')
       self.execute_query(query)
     else:
       # just one table 'users_normalized' with all data
-      query = f'CREATE OR REPLACE TABLE `{destination_table_base}` AS\n' + query
+      query = (f'CREATE OR REPLACE TABLE `{destination_table_base}` AS\n' +
+               query)
       self.execute_query(query)
 
   def ensure_users_normalized(self, target: ConfigTarget, today=date.today()):
+    """Make sure users_normalized exist or include data for today.
+
+    Args:
+      target: A target.
+      today: A day, by default today.
+    """
     if target.ga4_loopback_recreate:
       # users_normalized is non-incremental
       # check its creation date and if it's not today
@@ -1007,13 +1028,22 @@ WHEN NOT MATCHED THEN
   def sample_audience_users(self,
                             target: ConfigTarget,
                             audience: Audience,
-                            suffix: str | None  = None,
-                            return_only_new_users=False):
-    """Segment an audience - takes an audience description and fetches the users
-       from GA4 events according to the conditions.
+                            suffix: str | None = None,
+                            return_only_new_users=False) -> pd.DataFrame:
+    """Sample users for an audience.
 
-       Returns:
-        DataFrame with columns user, brand, osv, days_since_install, src, n_sessions
+    It takes an audience description and fetches the users from GA4 events
+    according to the conditions.
+
+    Args:
+      target: A target.
+      audience: An audience description.
+      suffix: A day suffix as yyyymmdd, by default - today.
+      return_only_new_users: true to load only new users (by default - all).
+
+    Returns:
+      DataFrame with columns:
+        user, brand, osv, days_since_install, src, n_sessions
     """
     suffix = datetime.now().strftime('%Y%m%d') if suffix is None else suffix
     audience.ensure_table_name()
@@ -1028,12 +1058,18 @@ WHEN NOT MATCHED THEN
       # test/control tables can not yet exist (on the first day of sampling),
       # so if it's the case we're switching off return_only_new_users flag to
       # prevent feching from them in load_sampled_users
-      query = f"SELECT table_name FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES WHERE table_name like '{audience.table_name}_test_%' LIMIT 1"
+      query = f"""SELECT table_name
+  FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES
+  WHERE table_name like '{audience.table_name}_test_%'
+  LIMIT 1"""
       rows = self.execute_query(query)
       if not rows:
         return_only_new_users = False
       else:
-        query = f"SELECT table_name FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES WHERE table_name like '{audience.table_name}_control_%' LIMIT 1"
+        query = f"""SELECT table_name
+  FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES
+  WHERE table_name like '{audience.table_name}_control_%'
+  LIMIT 1"""
         rows = self.execute_query(query)
         if not rows:
           return_only_new_users = False
@@ -1048,7 +1084,18 @@ WHEN NOT MATCHED THEN
                          suffix: str | None = None,
                          only_new_users=False):
     """Load users of a segment (sampled users of one day).
-       Can be either all users, or only new users.
+
+    Can be either all users, or only new users.
+
+    Args:
+      target: A target.
+      audience: An audience description.
+      suffix: A day suffix as yyyymmdd, by default - today.
+      only_new_users: true to load only new users (by default - all).
+
+    Returns:
+      DataFrame with columns:
+        user, brand, osv, days_since_install, src, n_sessions.
     """
     suffix = datetime.now().strftime('%Y%m%d') if suffix is None else suffix
     audience_table_name = self._get_user_segment_table_full_name(
@@ -1065,9 +1112,15 @@ FROM `{audience_table_name}` a
 """
     if only_new_users:
       query += f"""WHERE
-  NOT EXISTS (SELECT user FROM `{self._get_user_segment_table_full_name(target, audience.table_name, 'control', '*')}` t WHERE t.user=a.user AND _TABLE_SUFFIX < '{suffix}') AND
-  NOT EXISTS (SELECT user FROM `{self._get_user_segment_table_full_name(target, audience.table_name, 'test', '*')}` t WHERE t.user=a.user AND _TABLE_SUFFIX < '{suffix}')
-      """
+  NOT EXISTS (
+    SELECT user
+    FROM `{self._get_user_segment_table_full_name(target, audience.table_name, 'control', '*')}` t
+    WHERE t.user=a.user AND _TABLE_SUFFIX < '{suffix}'
+  ) AND NOT EXISTS (
+    SELECT user
+    FROM `{self._get_user_segment_table_full_name(target, audience.table_name, 'test', '*')}` t
+    WHERE t.user=a.user AND _TABLE_SUFFIX < '{suffix}'
+  )"""
 
     logger.debug('Executing SQL query: %s', query)
     df = pd.read_gbq(
@@ -1079,12 +1132,12 @@ FROM `{audience_table_name}` a
   def _get_user_segment_tables(self,
                                target: ConfigTarget,
                                audience_table_name,
-                               group_name: Literal['test']
-                               | Literal['control'] = 'test',
-                               suffix: str | None = None,
-                               include_dataset=False):
+                               group_name: Literal['test', 'control'] = 'test',
+                               include_dataset=False) -> list[str]:
     bq_dataset_id = target.bq_dataset_id
-    query = f"SELECT table_name FROM {bq_dataset_id}.INFORMATION_SCHEMA.TABLES WHERE table_name LIKE '{audience_table_name}_{group_name}_%' ORDER BY 1 DESC"
+    query = f"""SELECT table_name
+FROM {bq_dataset_id}.INFORMATION_SCHEMA.TABLES
+WHERE table_name LIKE '{audience_table_name}_{group_name}_%' ORDER BY 1 DESC"""
     rows = self.execute_query(query)
     tables = [row['table_name'] for row in rows]
     if include_dataset:
@@ -1094,11 +1147,13 @@ FROM `{audience_table_name}` a
   def _get_user_segment_table_full_name(self,
                                         target: ConfigTarget,
                                         audience_table_name,
-                                        group_name: Literal['test', 'control'],
+                                        group_name: Literal['test', 'control',
+                                                            'testfailed'],
                                         suffix: str | None = None):
     bq_dataset_id = target.bq_dataset_id
     suffix = datetime.now().strftime('%Y%m%d') if suffix is None else suffix
-    test_table_name = f'{bq_dataset_id}.{audience_table_name}_{group_name}_{suffix}'
+    test_table_name = (
+        f'{bq_dataset_id}.{audience_table_name}_{group_name}_{suffix}')
     return test_table_name
 
   def save_sampled_users(self,
@@ -1107,7 +1162,18 @@ FROM `{audience_table_name}` a
                          users_test: pd.DataFrame,
                          users_control: pd.DataFrame,
                          suffix: str | None = None):
-    """Save sampled users from two DataFrames into two new tables (_test and _control)"""
+    """Save sampled users into new tables.
+
+    Save users ids from provided DataFrames into new table with
+    _test and _control suffixes for provided day suffix (by default today).
+
+    Args:
+      target: A target.
+      audience: An audience description.
+      users_test: DataFrame with test users ids (with 'user' column).
+      users_control: DataFrame with control users ids (with 'user' column).
+      suffix: A day suffix as yyyymmdd, by default - today.
+    """
     project_id = self.config.project_id
     # test group:
     test_table_name = self._get_user_segment_table_full_name(
@@ -1141,9 +1207,9 @@ FROM `{audience_table_name}` a
           if_exists='replace')
 
     logger.info(
-        'Sampled users for audience %s saved to %s (%s rows)/%s (%s rows) tables',
-        audience.name, test_table_name, len(users_test), control_table_name,
-        len(users_control))
+        'Sampled users for audience %s saved to '
+        '%s (%s rows)/%s (%s rows) tables', audience.name, test_table_name,
+        len(users_test), control_table_name, len(users_control))
 
   def add_previous_sampled_users(self,
                                  target: ConfigTarget,
@@ -1151,8 +1217,13 @@ FROM `{audience_table_name}` a
                                  suffix: str | None = None):
     """Add users from previous days into today's segment.
 
-      It implements 'user affinity'. We take only users sampled today but
-      their affinity to group (test or control) should not change.
+    It implements 'user affinity'. We take only users sampled today but
+    their affinity to a group (test or control) should not change.
+
+    Args:
+      target: A target.
+      audience: An audience description.
+      suffix: A day suffix as yyyymmdd, by default - today.
     """
     suffix = datetime.now().strftime('%Y%m%d') if suffix is None else suffix
     segment_table_name = self._get_user_segment_table_full_name(
@@ -1199,16 +1270,23 @@ FROM `{audience_table_name}` a
                            target: ConfigTarget,
                            audience: Audience,
                            suffix: str | None = None):
-    """Add test users from yesterday with TTL>1 into today's test users."""
+    """Add users from yesterday with TTL>1 into today's users.
+
+
+    Args:
+      target: A target.
+      audience: An audience description.
+      suffix: A day suffix as yyyymmdd, by default - today.
+    """
     if audience.ttl > 1:
       test_table_name = self._get_user_segment_table_full_name(
           target, audience.table_name, 'test', suffix)
       control_table_name = self._get_user_segment_table_full_name(
           target, audience.table_name, 'control', suffix)
       test_tables = self._get_user_segment_tables(
-          target, audience.table_name, 'test', suffix, include_dataset=True)
+          target, audience.table_name, 'test', include_dataset=True)
       control_tables = self._get_user_segment_tables(
-          target, audience.table_name, 'control', suffix, include_dataset=True)
+          target, audience.table_name, 'control', include_dataset=True)
       if test_tables:
         try:
           idx = test_tables.index(test_table_name)
@@ -1216,7 +1294,7 @@ FROM `{audience_table_name}` a
             test_table_name_yesterday = test_tables[idx + 1]
             self._copy_users_from_previous_day(test_table_name,
                                                test_table_name_yesterday)
-            # NOTE: if a previous test table exists then there should be a control one
+            # if a previous test table exists then there should be a control one
             control_table_name_yesterday = control_tables[idx + 1]
             self._copy_users_from_previous_day(control_table_name,
                                                control_table_name_yesterday)
@@ -1227,10 +1305,19 @@ FROM `{audience_table_name}` a
   def load_audience_segment(self,
                             target: ConfigTarget,
                             audience: Audience,
-                            group_name: Literal['test']
-                            | Literal['control'] = 'test',
+                            group_name: Literal['test', 'control'] = 'test',
                             suffix: str | None = None) -> list[str]:
-    """Loads test users of a given audience for a particular segment (by default - today)"""
+    """Load users of a given audience for a particular day (by default - today).
+
+    Args:
+      target: A target.
+      audience: An audience description.
+      group_name: A group name (test/control).
+      suffix: A day suffix as yyyymmdd, by default - today.
+
+    Returns:
+      A list of users ids.
+    """
     table_name = self._get_user_segment_table_full_name(target,
                                                         audience.table_name,
                                                         group_name, suffix)
@@ -1248,10 +1335,15 @@ FROM `{audience_table_name}` a
                                      audience: Audience, suffix: str,
                                      failed_users: list[str]):
     """Update users statuses in a segment table (by default - for today)
-        Returns:
-          tuple (new_user_count, test_user_count, control_user_count)
+
+    Args:
+      target: A target.
+      audience: An audience description.
+      suffix: A day suffix as yyyymmdd, by default - today.
+      failed_user: A list of user ids that failed to upload.
     """
-    # Originally all users in the segment table ({audience_table_name}_test_yyymmdd) have status=NULL
+    # Originally all users in the segment table
+    # ({audience_table_name}_test_yyymmdd) have status=NULL
     # We'll update the column to 1 for all except ones in the failed_users list
     table_name = self._get_user_segment_table_full_name(target,
                                                         audience.table_name,
@@ -1260,7 +1352,7 @@ FROM `{audience_table_name}` a
       query = f"""UPDATE `{table_name}` SET status = 1 WHERE true"""
       self.execute_query(query)
     else:
-      # NOTE: create a table for failed users, but its name shoud not be one that will be caught by wildcard mask {name}_test_*
+      # create a table for failed users
       table_name_failed = self._get_user_segment_table_full_name(
           target, audience.table_name, 'testfailed', suffix)
       schema = [bigquery.SchemaField('user', 'STRING', mode='REQUIRED')]
@@ -1273,10 +1365,11 @@ FROM `{audience_table_name}` a
         self.bq_client.insert_rows(table, rows_to_insert)
       except BaseException as e:
         logger.error(
-            'An error occurred while inserting failed user ids into %s table: %s',
+            'An error occurred while inserting failed users into %s table: %s',
             table_name_failed, e)
         raise
-      # now join failed users from the newly created _failed table with the segment table
+      # now join failed users from the newly created _failed table
+      # with the segment table
       query = f"""
 UPDATE `{table_name}` t1
 SET status = IF(t2.failed IS NULL, 1, 0)
@@ -1291,11 +1384,26 @@ WHERE t1.user = t2.user
       self.execute_query(query)
 
   def load_user_segment_stat(self, target: ConfigTarget, audience: Audience,
-                             suffix: str):
+                             suffix: str) -> tuple[int, int, int, int]:
+    """Load user counts for a segment.
+
+    Load the number of test and control users in a day segment and how many of
+    them are new.
+
+    Args:
+      target: A target.
+      audience: An audience description.
+      suffix: A day suffix as yyyymmdd, by default - today.
+
+    Returns:
+      A tuple with test_user_count, control_user_count,
+        new_test_user_count, new_control_user_count.
+    """
     # load test and control user counts
     test_table_name = self._get_user_segment_table_full_name(
         target, audience.table_name, 'test', suffix)
-    query = f'SELECT COUNT(1) as count FROM `{test_table_name}` WHERE status = 1'
+    query = (
+        f'SELECT COUNT(1) as count FROM `{test_table_name}` WHERE status = 1')
     try:
       test_user_count = self.execute_query(query)[0]['count']
     except exceptions.NotFound:
@@ -1312,9 +1420,10 @@ WHERE t1.user = t2.user
     table_name_prev = self._get_user_segment_table_full_name(
         target, audience.table_name, 'test', '*')
     suffix = datetime.now().strftime('%Y%m%d') if suffix is None else suffix
-    # we're fetching the number of unique users in all test tables with date suffix below the current
-    # NOTE: actually the fact that a user is in a test table doesn't automatically means it was uploaded to
-    query = f"""SELECT count(DISTINCT t.user) as user_count FROM `{test_table_name}` t
+    # we're fetching the number of unique users in all test tables
+    # with date suffix below the current suffix
+    query = f"""SELECT count(DISTINCT t.user) as user_count
+FROM `{test_table_name}` t
 WHERE status = 1 AND NOT EXISTS (
   SELECT * FROM `{table_name_prev}` t0
   WHERE t0._TABLE_SUFFIX < '{suffix}' AND t.user = t0.user AND t0.status = 1
@@ -1325,7 +1434,8 @@ WHERE status = 1 AND NOT EXISTS (
 
     control_table_name_prev = self._get_user_segment_table_full_name(
         target, audience.table_name, 'control', '*')
-    query = f"""SELECT count(DISTINCT t.user) as user_count FROM `{control_table_name}` t
+    query = f"""SELECT count(DISTINCT t.user) as user_count
+FROM `{control_table_name}` t
 WHERE NOT EXISTS (
   SELECT * FROM `{control_table_name_prev}` t0
   WHERE t0._TABLE_SUFFIX < '{suffix}' AND t.user = t0.user
@@ -1333,9 +1443,16 @@ WHERE NOT EXISTS (
     """
     res = self.execute_query(query)
     new_control_user_count = res[0]['user_count']
-    return test_user_count, control_user_count, new_test_user_count, new_control_user_count
+    return (test_user_count, control_user_count, new_test_user_count,
+            new_control_user_count)
 
   def update_audiences_log(self, target: ConfigTarget, logs: list[AudienceLog]):
+    """Insert audience upload log entries into audience_log table.
+
+    Args:
+      target: A target.
+      logs: Upload log entries.
+    """
     table_name = f'{target.bq_dataset_id}.audiences_log'
     custom_retry = retry.Retry(
         timeout=60, predicate=retry.if_exception_type(exceptions.NotFound))
@@ -1422,40 +1539,41 @@ ORDER BY name, date
       conv_window: int | None = None) -> tuple[str, date, date]:
     """Return a query for calculating conversions.
 
-      Args:
-        target: A target.
-        audience: An audience description.
-        strategy: A strategy to calculate conversions, 'unbounded' means taking
-          events for a user only for periods when they are in a list, while
-          'unbounded' takes events starting a day a user got into a list.
-        date_start: Optional start date of a period.
-        date_end: Optional end date of a period.
-        country: Optional list of countries to additionally filter results.
-        events: Optional list of conversion events to use instead of
-          the audience's event.
-        conv_window: conversion window in days for strategy='unbounded'.
+    Args:
+      target: A target.
+      audience: An audience description.
+      strategy: A strategy to calculate conversions, 'unbounded' means taking
+        events for a user only for periods when they are in a list, while
+        'unbounded' takes events starting a day a user got into a list.
+      date_start: Optional start date of a period.
+      date_end: Optional end date of a period.
+      country: Optional list of countries to additionally filter results.
+      events: Optional list of conversion events to use instead of
+        the audience's event.
+      conv_window: Conversion window in days for strategy='unbounded'.
 
-      Returns:
-        a tuple (query, date_start, date_end) where query is a SQL query,
-        date_start and date_end are dates for a period, if not specified
-        they will be detected as first and last day of audience import.
+    Returns:
+      A tuple (query, date_start, date_end) where query is a SQL query,
+      date_start and date_end are dates for a period, if not specified
+      they will be detected as first and last day of audience import.
     """
     if date_start is None:
       log = self.get_audiences_log(target)
       log_rows = log.get(audience.name, None)
       if log_rows is None:
         # no imports for the audience, then we'll use the audience creation date
-        date_start = audience.created
+        date_start = audience.created.date()
       else:
         # Start listing conversions makes sense from the day when first segment
         # was uploaded to Google Ads
-        date_start = min(log_rows, key=lambda i: i.date).date
+        date_start = min(log_rows, key=lambda i: i.date).date.date()
     if date_end is None:
       # take last day of audience_log
-      rows = self.execute_query(
-          f"""SELECT DATE(date) as day FROM `{target.bq_dataset_id}.audiences_log`
-        WHERE NAME = '{audience.name}'
-        ORDER BY date DESC LIMIT 1""")
+      rows = self.execute_query(f"""SELECT DATE(date) as day
+  FROM `{target.bq_dataset_id}.audiences_log`
+  WHERE NAME = '{audience.name}'
+  ORDER BY date DESC
+  LIMIT 1""")
       if rows:
         date_end = rows[0].get('day', None)
         logger.info('Detected date_end from audience_log (as last upload): %s',
@@ -1484,11 +1602,11 @@ ORDER BY name, date
     if country:
       country_list = ','.join([f"'{c}'" for c in country])
       conversions_conditions = f'AND country IN ({country_list})'
-      query_TotalCounts = self._read_file(
+      query_total_counts = self._read_file(
           'results_parts_TotalCounts_bycountry.sql')
     else:
       conversions_conditions = ''
-      query_TotalCounts = self._read_file('results_parts_TotalCounts_all.sql')
+      query_total_counts = self._read_file('results_parts_TotalCounts_all.sql')
 
     if strategy == 'bounded':
       query = self._read_file('results.sql')
@@ -1501,7 +1619,7 @@ ORDER BY name, date
       def __missing__(self, key):
         return '{' + key + '}'
 
-    query = query.format_map(Default(TotalCounts=query_TotalCounts))
+    query = query.format_map(Default(TotalCounts=query_total_counts))
     query = query.format(
         **{
             'source_table':
@@ -1545,42 +1663,56 @@ ORDER BY name, date
       date_end: date | None = None,
       country: list[str] | None = None,
       events: list[str] | None = None,
-      conv_window: int | None = None) -> tuple[list[dict], date, date]:
+      conv_window: int | None = None
+  ) -> tuple[list[dict[str, Any]], date, date]:
     """Calculate conversions.
 
-      Args:
-        target: A target.
-        audience: An audience description.
-        strategy: A strategy to calculate conversions, 'unbounded' means taking
-          events for a user only for periods when they are in a list, while
-          'unbounded' takes events starting a day a user got into a list.
-        date_start: Optional start date of a period.
-        date_end: Optional end date of a period.
-        country: Optional list of countries to additionally filter results.
-        events: Optional list of conversion events to use instead of
-          the audience's event.
-        conv_window: conversion window in days for strategy='unbounded'.
+    Args:
+      target: A target.
+      audience: An audience description.
+      strategy: A strategy to calculate conversions, 'unbounded' means taking
+        events for a user only for periods when they are in a list, while
+        'unbounded' takes events starting a day a user got into a list.
+      date_start: Optional start date of a period.
+      date_end: Optional end date of a period.
+      country: Optional list of countries to additionally filter results.
+      events: Optional list of conversion events to use instead of
+        the audience's event.
+      conv_window: Conversion window in days for strategy='unbounded'.
 
-      Returns:
-        a tuple (results, date_start, date_end) where results is a list of rows
-        which is a result of executing a query, each row is a dict with columns:
-        date, cum_test_regs, cum_control_regs, total_user_count,
-        total_control_user_count.
-        date_start and date_end are dates for a period, if not specified
-        they will be detected as first and last day of audience import.
+    Returns:
+      A tuple (results, date_start, date_end) where results is a list of rows
+      which is a result of executing a query, each row is a dict with columns:
+      date, cum_test_users, cum_control_users, total_test_user_count,
+      total_control_user_count, cum_test_events, cum_control_events,
+      test_session_count, control_session_count,
+      cum_test_conv_value, cum_control_conv_value,
+      test_median_value, control_median_value.
+      date_start and date_end are dates for a period, if not specified
+      they will be detected as first and last day of audience import.
     """
     query, date_start, date_end = self.get_user_conversions_query(
         target, audience, strategy, date_start, date_end, country, events,
         conv_window)
     result = self.execute_query(query)
-    # expect columns:
-    # date, cum_test_regs, cum_control_regs,
-    # total_user_count, total_control_user_count
     return result, date_start, date_end
 
   def rebuilt_audiences_log(
       self, target: ConfigTarget,
       audience_name: str | None) -> dict[str, list[AudienceLog]]:
+    """Rebuild audience(s) logs.
+
+    Clear logs for all or a specified audience and calculate them based
+    on test/control tables with user ids.
+
+    Args:
+      target: A target.
+      audience_name: An optional audience name to limit processing to only
+        one audience. If empty process all audiences.
+
+    Returns:
+      A mapping of audience name to its upload log entries
+    """
     audiences = self.get_audiences(target)
     audiences_log = self.get_audiences_log(target, include_duplicates=True)
 
@@ -1615,22 +1747,26 @@ ALTER TABLE `{table_fq_name}_new` RENAME TO audiences_log;
       # we load existing log entries to restore relations with jobs
       audience_log_existing = audiences_log.get(audience.name, None)
       # NOTE: here we're not ignoring audiences with mode=off as usual
-      audience_log = self.recalculate_audience_log(target, audience,
-                                                   audience_log_existing)
+      audience_log = self._recalculate_audience_log(target, audience,
+                                                    audience_log_existing)
       if audience_log:
         self.update_audiences_log(target, audience_log)
       result[audience_name] = audience_log
     return result
 
-  def recalculate_audience_log(self,
-                               target: ConfigTarget,
-                               audience: Audience,
-                               audience_log_existing: list[AudienceLog] = None):
+  def _recalculate_audience_log(
+      self,
+      target: ConfigTarget,
+      audience: Audience,
+      audience_log_existing: list[AudienceLog] = None):
     logger.info("Starting recalculating log for audience '%s'", audience.name)
     audience_log_existing = audience_log_existing or []
     table_users = self._get_user_segment_table_full_name(
         target, audience.table_name, 'test', '*')
-    query = f'SELECT MIN(_TABLE_SUFFIX) AS start_day, MAX(_TABLE_SUFFIX) AS end_day FROM `{table_users}`'
+    query = f"""SELECT
+  MIN(_TABLE_SUFFIX) AS start_day,
+  MAX(_TABLE_SUFFIX) AS end_day
+FROM `{table_users}`"""
     try:
       res = self.execute_query(query)
     except exceptions.NotFound:
@@ -1658,8 +1794,10 @@ ALTER TABLE `{table_fq_name}_new` RENAME TO audiences_log;
     logs = []
     for day in range(num_days + 1):
       current_day = start_date + timedelta(days=day)
-      test_user_count, control_user_count, new_test_user_count, new_control_user_count = \
-        self.load_user_segment_stat(target, audience, current_day.strftime('%Y%m%d') )
+      (test_user_count, control_user_count, new_test_user_count,
+       new_control_user_count) = (
+           self.load_user_segment_stat(target, audience,
+                                       current_day.strftime('%Y%m%d')))
       if not test_user_count:
         continue
       total_test_user_count += new_test_user_count

@@ -31,7 +31,15 @@ WITH
     SELECT
       device.advertising_id AS user,
       event_date AS reg_date,
-      RANK() OVER (PARTITION BY device.advertising_id ORDER BY event_date) AS rr
+      event_timestamp AS reg_ts,
+      event_name,
+      CASE
+        WHEN COALESCE(event_value_in_usd, 0)>0 THEN COALESCE(event_value_in_usd, 0)
+        ELSE COALESCE(
+          (SELECT CAST(value.double_value AS FLOAT64)
+            FROM UNNEST(event_params)
+            WHERE key = 'value'), 0)
+        END AS conversion_value
     FROM `{source_table}`
     WHERE
       device.operating_system = 'Android'
@@ -47,24 +55,38 @@ WITH
     INNER JOIN `{all_users_table}` AS UN
       USING (user)
     WHERE
-      UN.app_info.id = '{app_id}'
+      UN.app_id = '{app_id}'
       {SEARCH_CONDITIONS}
   ),
   TestConverted AS (
-    SELECT DISTINCT U.user, reg_date
+    SELECT U.user, reg_date, reg_ts, conversion_value
     FROM `{test_users_table}` AS U
     INNER JOIN Conversions AS C
       ON U.user = C.user AND U._TABLE_SUFFIX = C.reg_date
     WHERE _TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
-    QUALIFY RANK() OVER (PARTITION BY U.user ORDER BY reg_date) = 1
   ),
   ControlConverted AS (
-    SELECT DISTINCT U.user, reg_date
+    SELECT U.user, reg_date, reg_ts, conversion_value
     FROM `{control_users_table}` AS U
     INNER JOIN Conversions AS C
       ON U.user = C.user AND U._TABLE_SUFFIX = C.reg_date
     WHERE _TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
-    QUALIFY RANK() OVER (PARTITION BY U.user ORDER BY reg_date) = 1
+  ),
+  SessionCounts AS (
+    SELECT
+      PARSE_DATE('%Y%m%d', E.event_date) AS `date`,
+      COUNT(TU.user) AS test_session_count,
+      COUNT(CU.user) AS control_session_count
+    FROM `{source_table}` AS E
+    LEFT JOIN `{test_users_table}` AS TU
+      ON E.device.advertising_id = TU.user AND E._TABLE_SUFFIX = TU._TABLE_SUFFIX
+    LEFT JOIN `{control_users_table}` AS CU
+      ON E.device.advertising_id = CU.user AND E._TABLE_SUFFIX = CU._TABLE_SUFFIX
+    WHERE
+      E._TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
+      AND E.event_name = 'session_start'
+      AND E.app_info.id = '{app_id}'
+    GROUP BY 1
   ),
   Dates AS (
     SELECT GENERATE_DATE_ARRAY('{date_start}', '{date_end}', INTERVAL 1 DAY) AS date_array
@@ -77,14 +99,20 @@ WITH
   ),
   GroupedConversions AS (
     SELECT
-      `date`,
-      (SELECT COUNT(DISTINCT user) FROM TestConverted AS T WHERE T.reg_date = date_formatted)
+      DF.`date`,
+      (SELECT COUNT(DISTINCT user) FROM TestConverted WHERE reg_date = DF.date_formatted)
         AS test_regs,
-      (SELECT COUNT(DISTINCT user) FROM ControlConverted AS T WHERE T.reg_date = date_formatted)
+      (SELECT COUNT(*) FROM TestConverted WHERE reg_date = DF.date_formatted)
+        AS test_events,
+      (SELECT COUNT(DISTINCT user) FROM ControlConverted WHERE reg_date = DF.date_formatted)
         AS control_regs,
-    FROM
-      DatesFormatted
-    ORDER BY 1 ASC
+      (SELECT COUNT(*) FROM ControlConverted WHERE reg_date = DF.date_formatted)
+        AS control_events,
+      (SELECT SUM(conversion_value) FROM TestConverted WHERE reg_date = DF.date_formatted)
+        AS test_conv_value,
+      (SELECT SUM(conversion_value) FROM ControlConverted WHERE reg_date = DF.date_formatted)
+        AS control_conv_value,
+    FROM DatesFormatted AS DF
   ),
   TotalCounts AS (
 {TotalCounts}
@@ -92,31 +120,57 @@ WITH
   ConversionsByUsers AS (
     SELECT
       C.date,
-      SUM(test_regs) OVER (ORDER BY C.date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
-        AS cum_test_regs,
-      SUM(control_regs) OVER (ORDER BY C.date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
-        AS cum_control_regs,
-      COALESCE(T.total_user_count,
-        LAST_VALUE(T.total_user_count IGNORE NULLS)
-        OVER (ORDER BY C.date ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
-        0
-      ) AS total_user_count,
+      SUM(C.test_regs) OVER (ORDER BY C.date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+        AS cum_test_users,
+      SUM(C.test_events) OVER (ORDER BY C.date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+        AS cum_test_events,
+      SUM(C.control_regs) OVER (ORDER BY C.date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+        AS cum_control_users,
+      SUM(C.control_events) OVER (ORDER BY C.date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+        AS cum_control_events,
+      COALESCE(T.total_test_user_count,
+        LAST_VALUE(T.total_test_user_count IGNORE NULLS)
+          OVER (ORDER BY C.date ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
+        0)
+        AS total_test_user_count,
       COALESCE(T.total_control_user_count,
         LAST_VALUE(T.total_control_user_count IGNORE NULLS)
-        OVER (ORDER BY C.date ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
-        0
-      ) AS total_control_user_count
+          OVER (ORDER BY C.date ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
+        0)
+        AS total_control_user_count,
+      SUM(C.test_conv_value) OVER (ORDER BY C.date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+        AS cum_test_conv_value,
+      SUM(C.control_conv_value) OVER (ORDER BY C.date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+        AS cum_control_conv_value,
+      SUM(SC.test_session_count) OVER (ORDER BY SC.date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+        AS test_session_count,
+      SUM(SC.control_session_count) OVER (ORDER BY SC.date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+        AS control_session_count
     FROM GroupedConversions AS C
     LEFT JOIN TotalCounts AS T
       ON C.date = T.day
+    LEFT JOIN SessionCounts AS SC
+      ON C.date = SC.date
   )
 SELECT
   `date`,
-  cum_test_regs,
-  cum_control_regs,
-  total_user_count,
+  cum_test_users,
+  cum_control_users,
+  cum_test_events,
+  cum_control_events,
+  total_test_user_count,
   total_control_user_count,
-  SAFE_DIVIDE(cum_test_regs, total_user_count) AS cr_test,
-  SAFE_DIVIDE(cum_control_regs, total_control_user_count) AS cr_control
+  cum_test_conv_value,
+  cum_control_conv_value,
+  COALESCE(test_session_count,
+    LAST_VALUE(test_session_count)
+      OVER (ORDER BY `date` ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
+    0)
+    AS test_session_count,
+  COALESCE(control_session_count,
+    LAST_VALUE(control_session_count)
+      OVER (ORDER BY `date` ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),
+    0)
+    AS control_session_count
 FROM ConversionsByUsers
 ORDER BY 1

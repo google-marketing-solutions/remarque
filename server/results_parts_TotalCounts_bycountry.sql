@@ -10,7 +10,9 @@
             SELECT FORMAT_DATE('%E4Y%m%d', DATE(`date`)) AS day
             FROM `{audiences_log}`
             WHERE name = '{audience_name}'
-          ) AND {SEARCH_CONDITIONS}
+          )
+          AND app_id = '{app_id}'
+          {SEARCH_CONDITIONS}
         GROUP BY _TABLE_SUFFIX
       ),
       DailyUniqueControlUsers AS (
@@ -24,7 +26,9 @@
             SELECT FORMAT_DATE('%E4Y%m%d', DATE(`date`)) AS day
             FROM `{audiences_log}`
             WHERE name = '{audience_name}'
-          ) AND {SEARCH_CONDITIONS}
+          )
+          AND app_id = '{app_id}'
+          {SEARCH_CONDITIONS}
         GROUP BY _TABLE_SUFFIX
       ),
       DailyUniqueTestUsersAgg AS (
@@ -48,7 +52,7 @@
     SELECT
       PARSE_DATE("%Y%m%d", TU.table_date) AS day,
       (SELECT COUNT(DISTINCT trim(user_id)) FROM UNNEST(SPLIT(TU.all_ids, ',')) AS user_id)
-        AS total_user_count,
+        AS total_test_user_count,
       (SELECT COUNT(DISTINCT trim(user_id)) FROM UNNEST(SPLIT(CU.all_ids, ',')) AS user_id)
         AS total_control_user_count
     FROM DailyUniqueTestUsersAgg AS TU

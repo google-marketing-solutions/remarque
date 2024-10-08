@@ -242,7 +242,8 @@ class AdsGateway:
               'Error message: %s\nError code: %s',
               error.location.field_path_elements[0].index, error.message,
               error.error_code)
-          # Keep track of failure indeces to remove them later from the original list
+          # Keep track of failure indices to remove them later
+          # from the original list
           failure_idx.append(error.location.field_path_elements[0].index)
 
       # Remove the id from the user list
@@ -251,7 +252,8 @@ class AdsGateway:
         failed_user_ids.append(users[idx])
         del users[idx]
       logger.info(
-          'Partical failures occured during adding the following user ids to OfflineUserDataJob:'
+          'Partial failures occurred during '
+          'adding the following user ids to OfflineUserDataJob:'
       )
       logger.info(failed_user_ids)
     return failed_user_ids

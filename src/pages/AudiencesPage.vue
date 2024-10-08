@@ -422,7 +422,7 @@
             style="height: 400px"
             flat
             bordered
-            :rows="data.audiences"
+            :rows="audiences"
             row-key="name"
             :columns="data.audiences_columns"
             virtual-scroll
@@ -826,7 +826,7 @@
 </style>
 
 <script lang="ts">
-import { defineComponent, ref, watch, nextTick } from 'vue';
+import { defineComponent, ref, watch, nextTick, computed } from 'vue';
 import { onBeforeRouteLeave } from 'vue-router';
 import { FirebaseStat, useConfigurationStore } from 'stores/configuration';
 import {
@@ -897,7 +897,7 @@ export default defineComponent({
     const store = useConfigurationStore();
     const storeAudiences = useAudiencesStore();
     const $q = useQuasar();
-
+    const audiences = computed((): AudienceInfo[] => storeAudiences.audiences);
     const data = ref({
       showEditQueryDialog: false,
       showPowerAnalysisDialog: false,
@@ -1485,6 +1485,7 @@ export default defineComponent({
 
     return {
       store,
+      audiences,
       data,
       onLoad: onStatLoad,
       onAppIdSelected,

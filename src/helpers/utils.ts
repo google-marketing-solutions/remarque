@@ -38,7 +38,12 @@ export function formatDate(val: unknown, includeTime = false) {
   return val;
 }
 
-export function formatFloat(val: unknown, digits = 5) {
+/**
+ * Format a float to string.
+ * @param val A value
+ * @param digits A number of decimal digits
+ */
+export function formatFloat(val: unknown, digits = 2) {
   if (isString(val)) {
     val = Number(val);
   }

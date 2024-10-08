@@ -42,6 +42,7 @@ from config import Config, ConfigTarget, parse_arguments, get_config, save_confi
 from middleware import run_sampling_for_audience, upload_customer_match_audience, update_customer_match_mappings
 from cloud_scheduler_gateway import Job
 from mailer import send_email
+from sampling import poisson_rate_test
 from utils import format_duration
 
 # NOTE: this module's code is executed each time when a new worker started, so keep it small
@@ -271,7 +272,7 @@ def setup_delete_target():
   if target:
     if target.bq_dataset_id:
       context = Context(config, target, credentials)
-      fully_qualified_dataset_id = f"{config.project_id}.{target.bq_dataset_id}"
+      fully_qualified_dataset_id = f'{config.project_id}.{target.bq_dataset_id}'
       context.data_gateway.bq_client.delete_dataset(fully_qualified_dataset_id,
                                                     True)
       logger.debug("Deleted target's dataset %s", fully_qualified_dataset_id)
@@ -897,12 +898,14 @@ def get_user_conversions():
     raise ValueError(f'Unknown conversion calculation strategy ({strategy})')
   conv_window = params.get('conv_window')
   logger.info(
-      "Calculating conversions graph for '%s' audience and %s-%s timeframe (strategy: %s, conv_window: %s)",
+      "Calculating conversions for '%s' audience and %s-%s timeframe "
+      '(strategy: %s, conv_window: %s)',
       audience_name, date_start, date_end, strategy, conv_window)
   campaigns = params.get('campaigns')
 
   results = {}
   pval = None
+  pval_events = None
   chi = None
   for audience in audiences:
     if audience_name and audience.name != audience_name:
@@ -917,20 +920,44 @@ def get_user_conversions():
           audience_name, len(result), date_start, date_end)
       last_day_result = result[-1]
       logger.debug('Calculating pval for %s', last_day_result)
-      chi, pval, res = proportion.proportions_chisquare(
+      chi, pval, _ = proportion.proportions_chisquare(
           [
-              int(last_day_result['cum_test_regs']),
-              int(last_day_result['cum_control_regs']),
+              int(last_day_result['cum_test_users']),
+              int(last_day_result['cum_control_users']),
           ],
           [
-              int(last_day_result['total_user_count']),
+              int(last_day_result['total_test_user_count']),
               int(last_day_result['total_control_user_count']),
           ],
       )
-      logger.debug('Calculated pval: %s, chi: %s', pval, chi)
+
+      exposure_test = int(
+          last_day_result['test_session_count']
+      ) if last_day_result['test_session_count'] is not None else 0
+      exposure_control = int(
+          last_day_result['control_session_count']
+      ) if last_day_result['control_session_count'] is not None else 0
+      if exposure_test == 0 or exposure_control == 0:
+        # there no sessions counts, we'll take user-days
+        # (multiplication of the number of users by the number of days)
+        days_delta = (date_end - date_start).days
+        exposure_test = days_delta * int(last_day_result['total_user_count']),
+        exposure_control = days_delta * int(
+            last_day_result['total_control_user_count']),
+
+      z_statistic, pval_events = poisson_rate_test(
+          int(last_day_result['cum_test_events']),
+          int(last_day_result['cum_control_events']),
+          exposure_test,
+          exposure_control,
+      )
+      logger.debug(
+          'Calculated pval: %s, chi: %s, pval_events: %s, z_statistic: %s',
+          pval, chi, pval_events, z_statistic)
     else:
       logger.warning('get_user_conversions returned an empty result')
       pval = None
+      pval_events = None
       chi = None
 
     # fetch campaign(s) metrics
@@ -966,12 +993,21 @@ def get_user_conversions():
     logger.debug(ads_metrics)
 
     results[audience.name] = {
-        'conversions': result,
-        'ads_metrics': ads_metrics,
-        'date_start': date_start.strftime('%Y-%m-%d'),
-        'date_end': date_end.strftime('%Y-%m-%d'),
-        'pval': pval if pval is not None and math.isfinite(pval) else None,
-        'chi': chi if chi is not None and math.isfinite(chi) else None,
+        'conversions':
+            result,
+        'ads_metrics':
+            ads_metrics,
+        'date_start':
+            date_start.strftime('%Y-%m-%d'),
+        'date_end':
+            date_end.strftime('%Y-%m-%d'),
+        'pval':
+            pval if pval is not None and math.isfinite(pval) else None,
+        'pval_events':
+            pval_events
+            if pval_events is not None and math.isfinite(pval_events) else None,
+        'chi':
+            chi if chi is not None and math.isfinite(chi) else None,
     }
     if audience_name and audience.name == audience_name:
       break
