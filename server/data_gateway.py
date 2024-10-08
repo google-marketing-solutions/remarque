@@ -1416,7 +1416,8 @@ ORDER BY name, date
       date_start: date | None = None,
       date_end: date | None = None,
       country: list[str] | None = None,
-      events: list[str] | None = None) -> tuple[str, date, date]:
+      events: list[str] | None = None,
+      conv_window: int | None = None) -> tuple[str, date, date]:
     """Return a query for calculating conversions.
 
       Args:
@@ -1430,6 +1431,7 @@ ORDER BY name, date
         country: Optional list of countries to additionally filter results.
         events: Optional list of conversion events to use instead of
           the audience's event.
+        conv_window: conversion window in days for strategy='unbounded'.
 
       Returns:
         a tuple (query, date_start, date_end) where query is a SQL query,
@@ -1528,7 +1530,7 @@ ORDER BY name, date
                 audience.name,
             # forward-looking conversion window for unbounded strategy
             'conv_window':
-                14  # TODO: take the window from args and/or config
+                conv_window or 14
         })
     return query, date_start, date_end
 
@@ -1540,7 +1542,8 @@ ORDER BY name, date
       date_start: date | None = None,
       date_end: date | None = None,
       country: list[str] | None = None,
-      events: list[str] | None = None) -> tuple[list[dict], date, date]:
+      events: list[str] | None = None,
+      conv_window: int | None = None) -> tuple[list[dict], date, date]:
     """Calculate conversions.
 
       Args:
@@ -1554,6 +1557,7 @@ ORDER BY name, date
         country: Optional list of countries to additionally filter results.
         events: Optional list of conversion events to use instead of
           the audience's event.
+        conv_window: conversion window in days for strategy='unbounded'.
 
       Returns:
         a tuple (results, date_start, date_end) where results is a list of rows
@@ -1564,7 +1568,8 @@ ORDER BY name, date
         they will be detected as first and last day of audience import.
     """
     query, date_start, date_end = self.get_user_conversions_query(
-        target, audience, strategy, date_start, date_end, country, events)
+        target, audience, strategy, date_start, date_end, country, events,
+        conv_window)
     result = self.execute_query(query)
     # expect columns:
     # date, cum_test_regs, cum_control_regs,

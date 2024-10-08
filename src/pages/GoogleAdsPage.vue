@@ -493,6 +493,7 @@
             </div>
             <div class="row">
               <div class="col q-pa-xs">
+              <div class="col col-6 col-lg-3 q-pa-xs">
                 <q-btn-toggle
                   style="margin-left: 0"
                   v-model="data.conversionsCalcStrategy"
@@ -510,19 +511,20 @@
                     ><strong>Bounded</strong> means we take conversions only for
                     days when users were included in the treatment group. <br />
                     <strong>Unbounded</strong> means we take conversions for all
-                    time after users got into the treatment group</q-tooltip
-                  ></q-icon
+                    time after users got into the treatment group.
+                    <br />Changing the calculation strategy requires reloading.
+                  </q-tooltip></q-icon
                 >
-                &nbsp;
-                <q-toggle
-                  v-model="data.loadAdsGraph"
-                  label="Load Ads metrics"
-                  :disable="
-                    !(
-                      data.selectedAudience[0].ads &&
-                      data.selectedAudience[0].ads.adgroups.length > 0
-                    )
-                  "
+              </div>
+              <div class="col col-6 col-lg-2">
+                <q-input
+                  v-model="data.conversionsFilterConvWindow"
+                  label="Conv. window"
+                  hint="Conv. window in days for unbounded strategy, by default 14"
+                  type="number"
+                  min="1"
+                  clearable
+                  :disable="data.conversionsCalcStrategy !== 'unbounded'"
                 />
               </div>
             </div>
@@ -956,6 +958,7 @@ export default defineComponent({
       conversions_events: '',
       conversions_mode: GraphMode.CONV_RATE,
       conversionsCalcStrategy: ConversionStrategy.BOUNDED,
+      conversionsFilterConvWindow: <number | undefined>undefined,
       pval: <number | undefined>undefined,
     });
 
@@ -1263,6 +1266,7 @@ export default defineComponent({
           date_end,
           country_str,
           events,
+          data.value.conversionsFilterConvWindow,
           data.value.loadAdsGraph && audience.ads
             ? audience.ads.campaigns
             : undefined,
@@ -1293,6 +1297,7 @@ export default defineComponent({
             date_start,
             date_end,
             country: country_str,
+            conv_window: data.value.conversionsFilterConvWindow,
           },
           'Fetching the audience conversion uquery...',
         );
@@ -1318,6 +1323,7 @@ export default defineComponent({
       dateEnd: string | undefined,
       country: string | undefined,
       events: string | undefined,
+      convWindow: number | undefined,
       campaigns?: CampaignInfo[],
     ): Promise<Conversions | undefined> => {
       data.value.chart.series = [];
@@ -1332,6 +1338,7 @@ export default defineComponent({
           date_end: dateEnd,
           country: country,
           events: events,
+          conv_window: convWindow,
           campaigns: campaigns,
         },
         'Fetching the audience conversion history...',

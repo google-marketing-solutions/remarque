@@ -863,9 +863,11 @@ def get_conversions_query():
   strategy = request.args.get('strategy') or 'bounded'
   if strategy != 'bounded' and strategy != 'unbounded':
     raise ValueError(f'Unknown conversion calculation strategy ({strategy})')
+  conv_window = request.args.get('conv_window')
 
   query, date_start, date_end = context.data_gateway.get_user_conversions_query(
-      context.target, audience, strategy, date_start, date_end, country, events)
+      context.target, audience, strategy, date_start, date_end, country, events,
+      conv_window)
   return jsonify({
       'query': query,
       'date_start': date_start.strftime('%Y-%m-%d'),
@@ -893,9 +895,10 @@ def get_user_conversions():
   strategy = params.get('strategy') or 'bounded'
   if strategy != 'bounded' and strategy != 'unbounded':
     raise ValueError(f'Unknown conversion calculation strategy ({strategy})')
+  conv_window = params.get('conv_window')
   logger.info(
-      "Calculating conversions graph for '%s' audience and %s-%s timeframe (strategy: %s)",
-      audience_name, date_start, date_end, strategy)
+      "Calculating conversions graph for '%s' audience and %s-%s timeframe (strategy: %s, conv_window: %s)",
+      audience_name, date_start, date_end, strategy, conv_window)
   campaigns = params.get('campaigns')
 
   results = {}
@@ -906,12 +909,12 @@ def get_user_conversions():
       continue
     result, date_start, date_end = context.data_gateway.get_user_conversions(
         context.target, audience, strategy, date_start, date_end, country,
-        events)
-    # the result is a list of columns:
-    #   date, cum_test_regs, cum_control_regs,
-    #   total_user_count, total_control_user_count
+        events, conv_window)
 
     if result:
+      logger.info(
+          'Calculated conversions for audience "%s": %s days, from %s to %s ',
+          audience_name, len(result), date_start, date_end)
       last_day_result = result[-1]
       logger.debug('Calculating pval for %s', last_day_result)
       chi, pval, res = proportion.proportions_chisquare(
