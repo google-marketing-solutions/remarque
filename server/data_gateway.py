@@ -1007,7 +1007,7 @@ WHEN NOT MATCHED THEN
   def sample_audience_users(self,
                             target: ConfigTarget,
                             audience: Audience,
-                            suffix: str = None,
+                            suffix: str | None  = None,
                             return_only_new_users=False):
     """Segment an audience - takes an audience description and fetches the users
        from GA4 events according to the conditions.
@@ -1045,7 +1045,7 @@ WHEN NOT MATCHED THEN
   def load_sampled_users(self,
                          target: ConfigTarget,
                          audience: Audience,
-                         suffix: str = None,
+                         suffix: str | None = None,
                          only_new_users=False):
     """Load users of a segment (sampled users of one day).
        Can be either all users, or only new users.
@@ -1081,7 +1081,7 @@ FROM `{audience_table_name}` a
                                audience_table_name,
                                group_name: Literal['test']
                                | Literal['control'] = 'test',
-                               suffix: str = None,
+                               suffix: str | None = None,
                                include_dataset=False):
     bq_dataset_id = target.bq_dataset_id
     query = f"SELECT table_name FROM {bq_dataset_id}.INFORMATION_SCHEMA.TABLES WHERE table_name LIKE '{audience_table_name}_{group_name}_%' ORDER BY 1 DESC"
@@ -1094,9 +1094,8 @@ FROM `{audience_table_name}` a
   def _get_user_segment_table_full_name(self,
                                         target: ConfigTarget,
                                         audience_table_name,
-                                        group_name: Literal['test']
-                                        | Literal['control'],
-                                        suffix: str = None):
+                                        group_name: Literal['test', 'control'],
+                                        suffix: str | None = None):
     bq_dataset_id = target.bq_dataset_id
     suffix = datetime.now().strftime('%Y%m%d') if suffix is None else suffix
     test_table_name = f'{bq_dataset_id}.{audience_table_name}_{group_name}_{suffix}'
@@ -1107,7 +1106,7 @@ FROM `{audience_table_name}` a
                          audience: Audience,
                          users_test: pd.DataFrame,
                          users_control: pd.DataFrame,
-                         suffix: str = None):
+                         suffix: str | None = None):
     """Save sampled users from two DataFrames into two new tables (_test and _control)"""
     project_id = self.config.project_id
     test_table_name = self._get_user_segment_table_full_name(
@@ -1147,7 +1146,7 @@ FROM `{audience_table_name}` a
   def add_previous_sampled_users(self,
                                  target: ConfigTarget,
                                  audience: Audience,
-                                 suffix: str = None):
+                                 suffix: str | None = None):
     """Add users from previous days into today's segment.
 
       It implements 'user affinity'. We take only users sampled today but
@@ -1197,7 +1196,7 @@ FROM `{audience_table_name}` a
   def add_yesterdays_users(self,
                            target: ConfigTarget,
                            audience: Audience,
-                           suffix: str = None):
+                           suffix: str | None = None):
     """Add test users from yesterday with TTL>1 into today's test users."""
     if audience.ttl > 1:
       test_table_name = self._get_user_segment_table_full_name(
@@ -1228,7 +1227,7 @@ FROM `{audience_table_name}` a
                             audience: Audience,
                             group_name: Literal['test']
                             | Literal['control'] = 'test',
-                            suffix: str = None) -> list[str]:
+                            suffix: str | None = None) -> list[str]:
     """Loads test users of a given audience for a particular segment (by default - today)"""
     table_name = self._get_user_segment_table_full_name(target,
                                                         audience.table_name,

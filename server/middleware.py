@@ -24,12 +24,21 @@ from logger import logger
 
 
 def run_sampling_for_audience(
-    context: Context, audience: Audience) -> tuple[list[str], list[str]] | None:
-  """
-  Samples an audience (assuming it's in test or prod mode):
+    context: Context,
+    audience: Audience,
+    suffix: str | None = None) -> tuple[list[str], list[str]] | None:
+  """Sample an audience (assuming it's in test or prod mode).
+
+  Sampling includes:
     - fetch users according to the audience definition
     - do sampling, i.e. split users onto test and control groups
       (for prod mode the control group will be empty)
+
+  Args:
+    context: A server call context.
+    audience: An audience to process.
+    suffix: optional suffix to choose a day, by default yesterday
+
   Returns:
     - a tuple of two DataFrames with test and control users
   """
@@ -39,50 +48,58 @@ def run_sampling_for_audience(
                audience.mode)
   if audience.mode == 'test':
     df = context.data_gateway.sample_audience_users(
-        context.target, audience, None, return_only_new_users=True)
+        context.target, audience, suffix, return_only_new_users=True)
     # df contains new users with all features used by splitting algorithm
     # (brand, osv, days_since_install, src, n_sessions).
     # i.e. it doesn't contain users from today's segment that got into audience
     # on any previous day (we'll load them later)
     if len(df) > 0:
-      logger.debug("Starting splitting users of audience '%s' with %s ratio",
-                   audience.name,
-                   audience.split_ratio if audience.split_ratio else 'default')
+      logger.debug(
+          "Starting splitting users (%s) of audience '%s' "
+          'via stratification with %s ratio', len(df), audience.name,
+          audience.split_ratio if audience.split_ratio else 'default')
       # now split users in df into two groups, treatment and control
       # using stratification by the audience's ration (default 0.5)
       users_test, users_control = split_via_stratification(
           df, audience.split_ratio)
+      logger.debug("Splitting users of audience '%s' completed in %s ratio",
+                   audience.name,
+                   len(users_test) / len(users_control))
     else:
       logger.warning("User segment of audience '%s' contains no users",
                      audience.name)
-      # create empty tables for test and control users so other queries won't fail
+      # create empty tables for test/control users so other queries won't fail
       users_test = pd.DataFrame(columns=['user'])
       users_control = pd.DataFrame(columns=['user'])
     # users_test and users_control are DataFrames with test and control users
     # accordingly from the `df` DataFrame but contain only 'user' column
   elif audience.mode == 'prod':
     # in prod mode all users are like test users (to be uploaded to Ads)
-    # we don't need control users actually but for simplicity we'll keep them as empty DF
+    # we don't need control users actually
+    # but for simplicity we'll keep them as empty DF
     df = context.data_gateway.sample_audience_users(
-        context.target, audience, None, return_only_new_users=False)
+        context.target, audience, suffix, return_only_new_users=False)
     users_test = df
     users_control = pd.DataFrame(columns=['user'])
 
   context.data_gateway.save_sampled_users(context.target, audience, users_test,
-                                          users_control)
+                                          users_control, suffix)
   if audience.mode == 'test':
     # now add users captured by the audience (i.e. are contained in
     # the todays's segment) but that existed on previous days ("old" users)
-    context.data_gateway.add_previous_sampled_users(context.target, audience)
+    context.data_gateway.add_previous_sampled_users(context.target, audience,
+                                                    suffix)
 
   # now add users from yesterday with ttl>1
   context.data_gateway.add_yesterdays_users(context.target, audience)
 
-  # finally load resulting sets of test and control users for today (actually for suffix)
+  # finally load resulting sets of test and control users for today
   test_users = context.data_gateway.load_audience_segment(
-      context.target, audience, 'test')
+      context.target, audience, 'test', suffix)
+  control_users = context.data_gateway.load_audience_segment(
+      context.target, audience, 'control', suffix)
 
-  return test_users, users_control['user'].tolist()
+  return test_users, control_users
 
 
 def update_customer_match_mappings(context: Context, audiences: list[Audience]):
