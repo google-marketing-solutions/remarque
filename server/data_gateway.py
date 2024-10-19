@@ -348,9 +348,10 @@ class DataGateway:
         except Exception as e:
           logger.error(e)
           if getattr(e, 'errors', None) and e.errors[0]:
-            if e.errors[0].get('debugInfo',
-                               None) and e.errors[0]['debugInfo'].startswith(
-                                   '[SCHEMA_INCOMPATIBLE]'):
+            if e.errors[0].get(
+                'debugInfo', None) and e.errors[0]['debugInfo'].startswith(
+                    '[SCHEMA_INCOMPATIBLE]') or e.errors[0][
+                        'message'].startswith('Provided Schema does not match'):
               logger.warning(
                   'Table %s schema is incompatible and'
                   ' the table has to be recreated', table_name)
