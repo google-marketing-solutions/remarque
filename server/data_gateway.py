@@ -1728,7 +1728,9 @@ ORDER BY name, date
     else:
       # we're asked to rebuild logs only for one audience.
       # so basically we're recreating the table without rows for that audience
-      query = f"""CREATE TABLE `{table_fq_name}_new` AS
+      query = f"""CREATE TABLE `{table_fq_name}_new` LIKE `{table_fq_name}`;
+
+INSERT INTO `{table_fq_name}_new`
 SELECT * FROM {table_fq_name}
 WHERE name != '{audience_name}';
 
