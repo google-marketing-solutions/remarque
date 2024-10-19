@@ -62,9 +62,10 @@ def run_sampling_for_audience(
       # using stratification by the audience's ration (default 0.5)
       users_test, users_control = split_via_stratification(
           df, audience.split_ratio)
-      logger.debug("Splitting users of audience '%s' completed in %s ratio",
-                   audience.name,
-                   len(users_test) / len(users_control))
+      logger.debug(
+          "Splitting users of audience '%s' has completed: "
+          'test count - %s, control count - %s', audience.name, len(users_test),
+          len(users_control))
     else:
       logger.warning("User segment of audience '%s' contains no users",
                      audience.name)
