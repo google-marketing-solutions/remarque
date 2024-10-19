@@ -899,8 +899,8 @@ def get_user_conversions():
   conv_window = params.get('conv_window')
   logger.info(
       "Calculating conversions for '%s' audience and %s-%s timeframe "
-      '(strategy: %s, conv_window: %s)',
-      audience_name, date_start, date_end, strategy, conv_window)
+      '(strategy: %s, conv_window: %s)', audience_name, date_start, date_end,
+      strategy, conv_window)
   campaigns = params.get('campaigns')
 
   results = {}

@@ -30,10 +30,12 @@ class AppNotInitializedError(Exception):
   """Application is not initialized."""
 
   def __init__(self, msg=None) -> None:
-    super().__init__(
-        msg or
-        'Application is not initialized, please go to Configuration page and run setup'
-    )
+    super().__init__(msg or 'Application is not initialized, '
+                     'please go to Configuration page and run setup')
+
+
+class InvalidConfigurationError(Exception):
+  """Invalid configuration."""
 
 
 class ConfigItemBase:
@@ -168,8 +170,7 @@ def get_config_url(args: argparse.Namespace):
     if project_id is None:
       raise Exception(
           'Config file url contains macro $PROJECT_ID but '
-          "project id isn't specified and can't be detected from environment"
-      )
+          "project id isn't specified and can't be detected from environment")
     config_file_name = config_file_name.replace('$PROJECT_ID', project_id)
   return config_file_name
 
