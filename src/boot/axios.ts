@@ -83,16 +83,14 @@ function getUrl(url: string) {
 function handleServerError(e: unknown) {
   if (e instanceof AxiosError) {
     if (e.response?.data) {
-      const debugInfo = e.response.data.error?.debugInfo;
-      if (debugInfo) {
-        const type = e.response.data.error?.type;
-        const ex = new ServerError(
-          e.response.data.error?.message || e.response.data.error,
-        );
-        console.error(debugInfo);
-        ex.debugInfo = debugInfo;
+      const error = e.response.data.error;
+      if (error) {
+        const type = error.type;
+        const ex = new ServerError(error?.message || e.response.data.error);
+        console.error(error);
+        ex.debugInfo = error.debugInfo;
         ex.type = type;
-        ex.error = e.response.data.error;
+        ex.error = error;
         e = ex;
       }
     }

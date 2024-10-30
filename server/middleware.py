@@ -115,8 +115,9 @@ def update_customer_match_mappings(context: Context, audiences: list[Audience]):
           need_updating = True
         elif audience.user_list != res_name:
           logger.error(
-              f'An audience {list_name} already has user_list ({audience.user_list}) but not the expected one - {res_name}'
-          )
+              'An audience %s already has user_list (%s) '
+              'but not the expected one - %s', list_name, audience.user_list,
+              res_name)
           need_updating = True
         audience.user_list = res_name
   if need_updating:
@@ -139,19 +140,23 @@ def upload_customer_match_audience(context: Context,
 
   # upload users to Google Ads
   if len(users) > 0:
-    job_resource_name, failed_users, uploaded_users = \
-        context.ads_gateway.upload_customer_match_audience(user_list_res_name, users, True)
+    job_resource_name, failed_users, uploaded_users = (
+        context.ads_gateway.upload_customer_match_audience(
+            user_list_res_name, users, True))
     # update audience status in our tables, plus calculate some statistics
     context.data_gateway.update_audience_segment_status(context.target,
                                                         audience, None,
                                                         failed_users)
-    test_user_count, control_user_count, new_test_user_count, new_control_user_count = \
-      context.data_gateway.load_user_segment_stat(context.target, audience, None)
+    (test_user_count, control_user_count, new_test_user_count,
+     new_control_user_count) = (
+         context.data_gateway.load_user_segment_stat(context.target, audience,
+                                                     None))
     logger.info(
-        f"Newly uploaded segment contains new {new_test_user_count} test users (of {test_user_count}) and new {new_control_user_count} control users (of {control_user_count})"
-    )
+        'Newly uploaded segment contains new %s test users (of %s) '
+        'and new %s control users (of %s)', new_test_user_count,
+        test_user_count, new_control_user_count, control_user_count)
   else:
-    logger.warn(f"Audience '{audience.name}' segment has no users")
+    logger.warning("Audience '%s' segment has no users", audience.name)
     job_resource_name = None
     failed_users = []
     uploaded_users = []
@@ -176,7 +181,8 @@ def upload_customer_match_audience(context: Context,
   # now calculate total numbers of users in the audience
   total_test_user_count = 0
   total_control_user_count = 0
-  # get total_user_count from the previous log entry if it exists and add new_user_count
+  # get total_user_count from the previous log entry if it exists
+  # and add new_user_count
   if not audience_log:
     total_test_user_count = new_test_user_count
     total_control_user_count = new_control_user_count
@@ -188,8 +194,10 @@ def upload_customer_match_audience(context: Context,
         (obj for obj in audience_log if obj.date.strftime('%Y-%m-%d') != today),
         None)
     if previous_day_log:
-      total_test_user_count = previous_day_log.total_test_user_count + new_test_user_count
-      total_control_user_count = previous_day_log.total_control_user_count + new_control_user_count
+      total_test_user_count = (
+          previous_day_log.total_test_user_count + new_test_user_count)
+      total_control_user_count = (
+          previous_day_log.total_control_user_count + new_control_user_count)
     else:
       total_test_user_count = new_test_user_count
       total_control_user_count = new_control_user_count

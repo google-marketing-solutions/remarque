@@ -1091,8 +1091,7 @@ HAVING COUNT(U.user) = 0
           # it's hardly possible
           logger.warning(
               'ensure_users_normalized: skipping creating an incremental '
-              'users_normalized table as could not get last GA4 events table'
-          )
+              'users_normalized table as could not get last GA4 events table')
           return
         events_last_day = events_last_table[-8:]
         events_last_day = datetime.strptime(events_last_day, '%Y%m%d').date()
@@ -1222,10 +1221,18 @@ WHERE table_name LIKE '{audience_table_name}_{group_name}_%' ORDER BY 1 DESC"""
 
   def _get_user_segment_table_full_name(self,
                                         target: ConfigTarget,
-                                        audience_table_name,
+                                        audience_table_name: str,
                                         group_name: Literal['test', 'control',
                                                             'testfailed'],
                                         suffix: str | None = None):
+    """Return a fully-qualified name for an audience group table.
+
+    Args:
+      target: A target.
+      audience_table_name: An audience table base name.
+      group_name: A group name.
+      suffix: A day suffix as yyyymmdd, by default - today.
+    """
     bq_dataset_id = target.bq_dataset_id
     suffix = datetime.now().strftime('%Y%m%d') if suffix is None else suffix
     test_table_name = (

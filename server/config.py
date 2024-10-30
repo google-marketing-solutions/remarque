@@ -52,7 +52,9 @@ class ConfigItemBase:
 
   def update(self, kw):
     """Update current object with values from json/dict.
-       Only know properties (i.e. those that exist in object's class as class attributes) are set
+
+    Only know properties (i.e. those that exist in object's class
+    as class attributes) are set.
     """
     cls = type(self)
     for k in kw:

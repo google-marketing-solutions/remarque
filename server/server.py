@@ -200,6 +200,7 @@ def setup():
                                                  name_org == 'default'):
           target: ConfigTarget = context.config.targets[0]
         else:
+          # pylint: disable=broad-exception-raised
           raise Exception(f'Configuration "{name_org}" does not exist')
 
   target.name = name
@@ -218,6 +219,7 @@ def setup():
     bq_dataset_location = ds.location
   except BaseException as e:
     logger.warning(e)
+    # pylint: disable=broad-exception-raised
     raise Exception(
         f'An error occurred while accessing GA4 dataset: {e}') from e
 
@@ -228,9 +230,11 @@ def setup():
   for other in context.config.targets:
     if other != target:
       if other.bq_dataset_id == target.bq_dataset_id:
+        # pylint: disable=broad-exception-raised
         raise Exception(
-            f'Configuration "{name}" uses the same dataset "{target.bq_dataset_id}" as configuration "{other.name}", please choose a different one'
-        )
+            f'Configuration "{name}" uses the same dataset '
+            '"{target.bq_dataset_id}" as configuration "{other.name}", '
+            'please choose a different one')
 
   context.data_gateway.initialize(target)
 
@@ -262,6 +266,7 @@ def setup():
 def setup_delete_target():
   context = create_context()
   if not context.target:
+    # pylint: disable=broad-exception-raised
     raise Exception(f'Configuration "{context.target}" was not found')
 
   credentials = _get_credentials()
@@ -513,10 +518,11 @@ def process():
   mode = request.args.get('mode') or params.get('mode')
 
   if not context.target:
-    raise Exception(
-        f"Target was not set, target uri argument: {_get_req_arg_str('target')},"
-        f"available targets in the configuration: {context.config.get_targets_names()}"
-    )
+    # pylint: disable=broad-exception-raised
+    raise Exception('Target was not set, target uri argument: ' +
+                    _get_req_arg_str('target') +
+                    'available targets in the configuration: ' +
+                    context.config.get_targets_names())
 
   ts_start = datetime.now()
   if audience_name:
@@ -657,6 +663,7 @@ def _validate_googleads_config(ads_config, *, throw=False):
     return True
   except Exception as e:
     if throw:
+      # pylint: disable=broad-exception-raised
       raise Exception(f'Validation of Ads credentials failed: {e}') from None
     return False
 
@@ -941,16 +948,19 @@ def get_user_conversions():
         # there no sessions counts, we'll take user-days
         # (multiplication of the number of users by the number of days)
         days_delta = (date_end - date_start).days
-        exposure_test = days_delta * int(last_day_result['total_user_count']),
+        exposure_test = days_delta * int(
+            last_day_result['total_test_user_count'])
         exposure_control = days_delta * int(
-            last_day_result['total_control_user_count']),
+            last_day_result['total_control_user_count'])
 
-      z_statistic, pval_events = poisson_rate_test(
-          int(last_day_result['cum_test_events']),
-          int(last_day_result['cum_control_events']),
-          exposure_test,
-          exposure_control,
-      )
+      if exposure_test == 0 or exposure_control == 0:
+        z_statistic = None
+        pval_events = None
+      else:
+        z_statistic, pval_events = poisson_rate_test(
+            int(last_day_result['cum_test_events']),
+            int(last_day_result['cum_control_events']), exposure_test,
+            exposure_control)
       logger.debug(
           'Calculated pval: %s, chi: %s, pval_events: %s, z_statistic: %s',
           pval, chi, pval_events, z_statistic)
@@ -1020,13 +1030,15 @@ def get_user_conversions():
 def catch_all(path):
   # NOTE: we don't use Flask standard support for static files
   # (static_folder option and send_static_file method)
-  # because they can't distinguish requests for static files (js/css) and client routes (like /products)
+  # because they can't distinguish requests for static files (js/css)
+  # and client routes (like /products)
   file_requested = os.path.join(app.root_path, STATIC_DIR, path)
   if not os.path.isfile(file_requested):
     path = 'index.html'
   max_age = 0 if path == 'index.html' else None
   response = send_from_directory(STATIC_DIR, path, max_age=max_age)
-  # There is a "feature" in GAE - all files have zeroed timestamp ("Tue, 01 Jan 1980 00:00:01 GMT")
+  # There is a "feature" in GAE - all files have zeroed timestamp
+  # ("Tue, 01 Jan 1980 00:00:01 GMT")
   if IS_GAE:
     response.headers.remove('Last-Modified')
   if path == 'index.html':
