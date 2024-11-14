@@ -780,7 +780,7 @@ WHEN NOT MATCHED THEN
 
     if audience.query:
       query = audience.query
-      logger.debug('Using customer audience query:\n%s', query)
+      logger.debug('Using audience custom query:\n%s', query)
     else:
       query = self._read_file('prepare.sql')
 

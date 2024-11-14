@@ -140,6 +140,8 @@ def upload_customer_match_audience(context: Context,
 
   # upload users to Google Ads
   if len(users) > 0:
+    logger.info('Starting uploading user ids (%s) to audience %s user list',
+                len(users), audience.name)
     job_resource_name, failed_users, uploaded_users = (
         context.ads_gateway.upload_customer_match_audience(
             user_list_res_name, users, True))

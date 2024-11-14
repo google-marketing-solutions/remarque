@@ -142,26 +142,34 @@ class AdsGateway:
                                      user_list_resource_name: str,
                                      users: list[str],
                                      overwrite=True):
-    """ Creates a job with offline user data job operations for an audience list and runs it.
+    """Creates a job with offline user data job operations.
 
-            Args:
-                user_list_resource_name: user list resource name to add/remove user from
-                user_emails: List of user emails to be added/removed
-                overwrite: to remove previous users from the audiences
+    A job is created for each audience list.
 
-            Returns:
-                The resource name of the newly created offline job which will be later
-                used for getting operation success/failure
-        """
+    Args:
+      user_list_resource_name: User list resource name to add/remove user from.
+      users: List of user ids  to be added.
+      overwrite: To remove previous users from the user list.
+
+    Returns:
+      A tuple with a resource name of the newly created offline job
+      (which will be later used for getting operation success/failure),
+      a list of failed user ids, a list of provided user ids.
+    """
     offline_user_data_job_service = self.googleads_client.get_service(
         'OfflineUserDataJobService')
     # Creates a new offline user data job.
     offline_user_data_job = self.googleads_client.get_type('OfflineUserDataJob')
-    offline_user_data_job.type_ = self.googleads_client.enums.OfflineUserDataJobTypeEnum.CUSTOMER_MATCH_USER_LIST
+    offline_user_data_job.type_ = (
+        self.googleads_client.enums.OfflineUserDataJobTypeEnum
+        .CUSTOMER_MATCH_USER_LIST)
     offline_user_data_job.customer_match_user_list_metadata.user_list = user_list_resource_name
     # user consents (mandatory since March 6, 2024)
-    offline_user_data_job.customer_match_user_list_metadata.consent.ad_user_data = self.googleads_client.enums.ConsentStatusEnum.GRANTED
-    offline_user_data_job.customer_match_user_list_metadata.consent.ad_personalization = self.googleads_client.enums.ConsentStatusEnum.GRANTED
+    # TODO: we can't check real user consents at the moment
+    offline_user_data_job.customer_match_user_list_metadata.consent.ad_user_data = (
+        self.googleads_client.enums.ConsentStatusEnum.GRANTED)
+    offline_user_data_job.customer_match_user_list_metadata.consent.ad_personalization = (
+        self.googleads_client.enums.ConsentStatusEnum.GRANTED)
 
     logger.debug("Creating create_offline_user_data_job for user list '%s'",
                  user_list_resource_name)
@@ -188,10 +196,11 @@ class AdsGateway:
           operations[i:i + _MAX_OPERATIONS_PER_JOB]
           for i in range(0, len(operations), _MAX_OPERATIONS_PER_JOB)
       ]
-      logger.info('Sending OflineUserDataJobOperations in %s chunks',
-                  len(chunks))
+      logger.debug('Sending OflineUserDataJobOperations in %s chunks',
+                   len(chunks))
       failed_user_ids = None
-      for chunk in chunks:
+      for i, chunk in enumerate(chunks):
+        logger.debug('Sending %s operations chunk %s', len(chunk), i)
         failed_user_ids_chunk = self._execute_upload_job(
             offline_user_data_job_service, chunk,
             offline_user_data_job_resource_name, users)
@@ -200,7 +209,7 @@ class AdsGateway:
             failed_user_ids = []
           failed_user_ids.append(failed_user_ids_chunk)
 
-    # Issues a request to run the offline user data job for executing all added operations.
+    # run the offline user data job for executing all added operations.
     if users:
       logger.debug(
           'Sending run_offline_user_data_job request to start uploading users')
@@ -216,7 +225,6 @@ class AdsGateway:
     request = self.googleads_client.get_type(
         'AddOfflineUserDataJobOperationsRequest')
     request.resource_name = job_resource_name
-    # NOTE: AddOfflineUserDataJobOperationsRequest.operations is limited to 100,000 elements per request
     request.operations = operations
     request.enable_partial_failure = True
     #request.enable_warnings = True?
@@ -251,10 +259,8 @@ class AdsGateway:
       for idx in sorted(failure_idx, reverse=True):
         failed_user_ids.append(users[idx])
         del users[idx]
-      logger.info(
-          'Partial failures occurred during '
-          'adding the following user ids to OfflineUserDataJob:'
-      )
+      logger.info('Partial failures occurred during '
+                  'adding the following user ids to OfflineUserDataJob:')
       logger.info(failed_user_ids)
     return failed_user_ids
 
@@ -262,15 +268,16 @@ class AdsGateway:
                                               users: list[str],
                                               overwrite=True) -> list:
     """Creates a UserData object for each user id.
-       The first operation will always be remove_all.
 
-        Args:
-          overwrite: True to remove all previous user in the audiences
-            (using OfflineUserDataJobOperation.remove_all flag)
-          users: List of user mobile device ids
+    The first operation will always be remove_all.
 
-        Returns:
-          A list containing the operations to be performed.
+    Args:
+      users: List of user mobile device ids.
+      overwrite: True to remove all previous user in the audiences
+      (using OfflineUserDataJobOperation.remove_all flag)
+
+    Returns:
+      A list containing the operations to be performed.
         """
     offline_operation = self.googleads_client.get_type(
         'OfflineUserDataJobOperation')
@@ -297,20 +304,24 @@ class AdsGateway:
 
   def get_userlist_jobs_status(self,
                                userlist: Union[str, list] = None) -> list[dict]:
-    """Returns a list of jobs statuses with the columns:
-          * resource_name
-          * status
-          * failure_reason
-          * user_list
-        Args:
-          userlist - a list of user lists resource names or a resource name of a user list,
-                     or None to load all user lists
-      """
+    """Returns a list of jobs statuses.
+
+    Args:
+      userlist: a list of user list resource names or
+        a resource name of a user list, or None to load all user lists
+
+    Returns:
+      a list of dictionaries with fields:
+        * resource_name
+        * status
+        * failure_reason
+        * user_list
+    """
 
     report = self._execute_query(
         OfflineJobQuery(userlist), [self.customer_id],
-        f'Could not load offline jobs from account {self.customer_id} for uploading user lists {userlist}'
-    )
+        f'Could not load offline jobs from account {self.customer_id} for '
+        f'uploading user lists {userlist}')
     jobs = []
     for item in report:
       job_dict = {
@@ -325,7 +336,7 @@ class AdsGateway:
 
   def get_userlist_campaigns(self, userlist: Union[str, list] = None):
     logger.info(
-        "Getting campaigns and adgroups targeted user lists for Remarque's audiences: %s",
+        'Getting campaigns and adgroups targeted user lists for audiences: %s',
         userlist)
     cids = self.query_executor.expand_mcc(self.customer_id)
     logger.debug('CID %s expanded to list of customers: %s', self.customer_id,

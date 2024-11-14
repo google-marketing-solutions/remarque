@@ -19,7 +19,7 @@ import json
 import os
 import math
 import yaml
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from pprint import pprint
 import traceback
 from flask import Flask, request, jsonify, abort, send_from_directory, send_file, Response
@@ -37,7 +37,7 @@ from env import IS_GAE
 from auth import get_credentials
 from logger import logger
 from context import Context, ContextOptions
-from models import Audience
+import models
 from config import Config, ConfigTarget, parse_arguments, get_config, save_config, AppNotInitializedError
 from middleware import run_sampling_for_audience, upload_customer_match_audience, update_customer_match_mappings
 from cloud_scheduler_gateway import Job
@@ -45,15 +45,13 @@ from mailer import send_email
 from sampling import poisson_rate_test
 from utils import format_duration
 
-# NOTE: this module's code is executed each time when a new worker started, so keep it small
-
 
 class JsonEncoder(json.JSONEncoder):
   """A custom JSON encoder to support serialization of Audience objects"""
   flask_default: Callable[[Any], Any]
 
   def default(self, o):
-    if isinstance(o, Audience):
+    if isinstance(o, models.Audience):
       return o.to_dict()
     return JsonEncoder.flask_default(o)
 
@@ -398,7 +396,7 @@ def update_audiences():
   logger.debug(audiences_raw)
   audiences = []
   for item in audiences_raw:
-    audiences.append(Audience.from_dict(item))
+    audiences.append(models.Audience.from_dict(item))
   results = context.data_gateway.update_audiences(context.target, audiences)
   return jsonify({'results': results})
 
@@ -412,7 +410,7 @@ def calculate_users_for_audience():
   logger.info('Previewing audience:')
   logger.info(audience_raw)
   context.data_gateway.ensure_users_normalized(context.target)
-  audience = Audience.from_dict(audience_raw)
+  audience = models.Audience.from_dict(audience_raw)
   audience.ensure_table_name()
   query = context.data_gateway.get_audience_sampling_query(
       context.target, audience)
@@ -433,7 +431,7 @@ def get_query_for_audience() -> Response:
   audience_raw = params['audience']
   logger.info('Previewing audience')
   logger.debug(audience_raw)
-  audience = Audience.from_dict(audience_raw)
+  audience = models.Audience.from_dict(audience_raw)
   query = context.data_gateway.get_audience_sampling_query(
       context.target, audience)
   return jsonify({'query': query})
@@ -444,7 +442,7 @@ def get_base_conversion():
   context = create_context()
   params: dict = request.get_json(force=True)
   audience_raw = params['audience']
-  audience = Audience.from_dict(audience_raw)
+  audience = models.Audience.from_dict(audience_raw)
   date_start = params.get('date_start') or request.args.get('date_start')
   date_start = date.fromisoformat(date_start) if date_start else None
   date_end = params.get('date_end') or request.args.get('date_end')
@@ -541,7 +539,8 @@ def process():
   result = {}
   log = []
   logger.debug('Loaded %s audiences with logs', len(audiences))
-  if audience_name:
+  # if an audience provided we override its mode with client value
+  if audience_name and mode:
     for audience in audiences:
       if audience.name == audience_name:
         audience.mode = mode
@@ -561,12 +560,25 @@ def process():
   if log:
     context.data_gateway.update_audiences_log(context.target, log)
 
-  elapsed = datetime.now() - ts_start
+  elapsed: timedelta = datetime.now() - ts_start
+  send_success_notification(context, log, elapsed)
+  return jsonify({'result': result})
+
+
+def send_success_notification(context: Context, log: list[models.AudienceLog],
+                              elapsed: timedelta):
+  """Send a email notification about successful audience processing result.
+
+  Args:
+    context: Execution context.
+    log: Audience logs with results.
+    elapsed: Execution duration.
+  """
   if IS_GAE and context.target.notification_email:
-    subject = 'Remarque ' + \
-    '[' + context.target.name + ']' if context.target.name != 'default' else '' + \
-    ' - sampling completed'
-    body = f"Processing of {len(result)} audiences has been completed.\n"
+    subject = ('Remarque ' + ('[' + context.target.name +
+                              ']' if context.target.name != 'default' else '') +
+               ' - sampling completed')
+    body = f'Processing of {len(log)} audiences has been completed.\n'
     for val in log:
       body += f"""\nAudience '{val.name}':
       Users sampled: {val.test_user_count}, {val.uploaded_user_count} of which uploaded to Ads ({val.failed_user_count} failed)
@@ -576,12 +588,10 @@ def process():
       In total:
       test users for all days: {val.total_test_user_count}
       control users for all days: {val.total_control_user_count}
-
       Ads upload job resource name: {val.job_resource_name}
       """
     body += f"""\n Processing took {format_duration(elapsed)}"""
     send_email(context.config, context.target.notification_email, subject, body)
-  return jsonify({'result': result})
 
 
 @app.route('/api/schedule', methods=['GET'])

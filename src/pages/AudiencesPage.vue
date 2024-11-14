@@ -582,7 +582,7 @@
                 <code>day_start</code> - start date of time window as yyyymmdd
               </li>
               <li>
-                <code>day_end</code> - end date of time windiw as yyyymmdd
+                <code>day_end</code> - end date of time window as yyyymmdd
               </li>
               <li><code>app_id</code> - app id from the audience definition</li>
               <li>
