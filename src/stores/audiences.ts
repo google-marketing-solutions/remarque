@@ -17,12 +17,18 @@ import { ref } from 'vue';
 import { defineStore } from 'pinia';
 import { getApi } from 'boot/axios';
 
+/**
+ * An audience mode.
+ */
 export enum AudienceMode {
   OFF = 'off',
   TEST = 'test',
   PROD = 'prod',
 }
 
+/**
+ * An audience description.
+ */
 export interface AudienceInfo {
   name: string;
   app_id: string;
@@ -40,12 +46,20 @@ export interface AudienceInfo {
   isNew?: boolean;
   isChanged?: boolean;
 }
+
+/**
+ * A Ads campaign description.
+ */
 export interface CampaignInfo {
   campaign_id: string;
   customer_id: string;
   campaign_name: string;
 }
-export interface UserlistAssignementData {
+
+/**
+ * A description of an audience assignment to ads entities (adgroup/campaign).
+ */
+export interface UserlistAssignmentData {
   customer_id: string;
   customer_name: string;
   campaign_id: string;
@@ -68,6 +82,10 @@ export interface UserlistAssignementData {
   ad_group_link: string;
   user_list_link: string;
 }
+
+/**
+ * Association level for a user list.
+ */
 export type AdsTreeNodeType =
   | 'customer'
   | 'campaign'
@@ -84,15 +102,22 @@ export interface AdsTreeData {
   info?: Record<string, any>;
   children?: AdsTreeData[];
 }
+/**
+ * Extended description of an audience with logs, conversions and ads metrics.
+ */
 export interface AudienceWithLog extends AudienceInfo {
   log?: AudienceLog[];
   conversions?: Conversions;
   ads?: {
     campaigns: CampaignInfo[];
-    adgroups: UserlistAssignementData[];
+    adgroups: UserlistAssignmentData[];
     tree: AdsTreeData[];
   };
 }
+
+/**
+ * An item of an audience log.
+ */
 export interface AudienceLog {
   date: Date | string;
   test_user_count: number;
@@ -107,6 +132,10 @@ export interface AudienceLog {
   job_status: string;
   job_failure: string;
 }
+
+/**
+ * An audience conversions and ads metrics.
+ */
 export interface Conversions {
   data: ConversionsData[];
   start_date: string;
@@ -115,6 +144,9 @@ export interface Conversions {
   pval_events: number | undefined;
   ads_metrics?: Record<string, AdsMetric[]>;
 }
+/**
+ * Item of conversion history for an audience (of a day).
+ */
 export interface ConversionsData {
   date: string;
   /**
@@ -201,6 +233,9 @@ export interface ConversionsData {
   value_per_user_control: number;
 }
 
+/**
+ * An item of Ads metrics of an audience (for a day).
+ */
 export interface AdsMetric {
   campaign: string;
   date: string;

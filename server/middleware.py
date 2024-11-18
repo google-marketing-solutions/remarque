@@ -158,7 +158,8 @@ def upload_customer_match_audience(context: Context,
         'and new %s control users (of %s)', new_test_user_count,
         test_user_count, new_control_user_count, control_user_count)
   else:
-    logger.warning("Audience '%s' segment has no users", audience.name)
+    logger.warning("Audience '%s' segment has no users for today",
+                   audience.name)
     job_resource_name = None
     failed_users = []
     uploaded_users = []
@@ -172,7 +173,7 @@ def upload_customer_match_audience(context: Context,
   if len(uploaded_users):
     uploaded_users_mapped = [[id] for id in uploaded_users]
     df = pd.DataFrame(uploaded_users_mapped, columns=['user'])
-    uploaded_table_name = context.data_gateway._get_user_segment_table_full_name(
+    uploaded_table_name = context.data_gateway.get_user_segment_table_full_name(
         context.target, audience.table_name, 'uploaded')
     pandas_gbq.to_gbq(
         df[['user']],

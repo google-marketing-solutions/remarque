@@ -95,6 +95,9 @@ class ConfigTarget(ConfigItemBase):
   ads_refresh_token = ''
   ads_login_customer_id = ''
 
+  def __str__(self) -> str:
+    return 'ConfigTarget ' + self.name
+
 
 class Config(ConfigItemBase):
   """Application configuration."""

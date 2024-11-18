@@ -19,16 +19,14 @@ import json
 import os
 import math
 import yaml
-from datetime import datetime, date, timedelta
+import datetime
 from pprint import pprint
 import traceback
 from flask import Flask, request, jsonify, abort, send_from_directory, send_file, Response
 from flask.json.provider import DefaultJSONProvider
 from google.appengine.api import wrap_wsgi_app
 from flask_cors import CORS
-
-from gaarf.api_clients import GoogleAdsApiClient
-from gaarf.query_executor import AdsReportFetcher
+import gaarf
 import numpy as np
 import statsmodels.stats.proportion as proportion
 from statsmodels.stats.power import TTestIndPower
@@ -44,6 +42,11 @@ from cloud_scheduler_gateway import Job
 from mailer import send_email
 from sampling import poisson_rate_test
 from utils import format_duration
+
+# make linter happy (avoid import-member)
+datetime = datetime.datetime
+date = datetime.date
+timedelta = datetime.timedelta
 
 
 class JsonEncoder(json.JSONEncoder):
@@ -514,6 +517,7 @@ def process():
   params: dict = request.get_json(force=True)
   audience_name = request.args.get('audience') or params.get('audience')
   mode = request.args.get('mode') or params.get('mode')
+  skip_upload = request.args.get('skip_upload') or params.get('skip_upload')
 
   if not context.target:
     # pylint: disable=broad-exception-raised
@@ -551,9 +555,15 @@ def process():
     if audience_name and audience.name != audience_name:
       continue
     users_test, users_control = run_sampling_for_audience(context, audience)
-    audience_log = audiences_log.get(audience.name, None)
-    log_item = upload_customer_match_audience(context, audience, audience_log,
-                                              users_test)
+    if skip_upload:
+      result[audience.name] = {
+          'test_user_count': len(users_test),
+          'control_user_count': len(users_control),
+      }
+    else:
+      audience_log = audiences_log.get(audience.name, None)
+      log_item = upload_customer_match_audience(context, audience, audience_log,
+                                                users_test)
     log.append(log_item)
     result[audience.name] = log_item.to_dict()
 
@@ -561,7 +571,8 @@ def process():
     context.data_gateway.update_audiences_log(context.target, log)
 
   elapsed: timedelta = datetime.now() - ts_start
-  send_success_notification(context, log, elapsed)
+  if not skip_upload and not audience_name:
+    send_success_notification(context, log, elapsed)
   return jsonify({'result': result})
 
 
@@ -632,39 +643,9 @@ def update_schedule():
   return jsonify({})
 
 
-@app.route('/api/sampling/run', methods=['GET', 'POST'])
-def run_sampling() -> Response:
-  """
-  Samples audiences. For each audience it does the following:
-    - fetch users according to the audience definition
-    - do sampling, i.e. split users onto test and control groups
-  """
-  logger.info('Run sampling for all audiences')
-  context = create_context()
-  params: dict = request.get_json(force=True)
-  audience_name = request.args.get('audience') or params.get('audience')
-  context.data_gateway.ensure_users_normalized(context.target)
-  audiences = context.data_gateway.get_audiences(context.target)
-  result = {}
-  logger.debug('Loaded %s audiences', len(audiences))
-  for audience in audiences:
-    if audience_name and audience.name != audience_name:
-      continue
-    if audience.mode == 'off':
-      continue
-    users_test, users_control = run_sampling_for_audience(context, audience)
-    result[audience.name] = {
-        'test_count': len(users_test),
-        'control_count': len(users_control),
-    }
-  logger.info('Sampling completed with result: %s', result)
-
-  return jsonify({'result': result})
-
-
 def _validate_googleads_config(ads_config, *, throw=False):
-  client = GoogleAdsApiClient(config_dict=ads_config)
-  report_fetcher = AdsReportFetcher(client)
+  client = gaarf.api_clients.GoogleAdsApiClient(config_dict=ads_config)
+  report_fetcher = gaarf.query_executor.AdsReportFetcher(client)
   try:
     report_fetcher.fetch(
         'SELECT customer.id FROM customer',
@@ -710,6 +691,7 @@ def update_customer_match_audiences():
   context = create_context(create_ads=True)
   params: dict = request.get_json(force=True)
   audience_name = request.args.get('audience') or params.get('audience')
+  mode = request.args.get('mode') or params.get('mode')
   audiences = context.data_gateway.get_audiences(context.target)
   audiences_log = context.data_gateway.get_audiences_log(context.target)
   update_customer_match_mappings(context, audiences)
@@ -718,10 +700,16 @@ def update_customer_match_audiences():
       'Uploading audiences users to Google Ads as customer match userlists')
   result = {}
   log = []
+  # if an audience provided we override its mode with client value
+  if audience_name and mode:
+    for audience in audiences:
+      if audience.name == audience_name:
+        audience.mode = mode
+        break
   for audience in audiences:
-    if audience_name and audience.name != audience_name:
-      continue
     if audience.mode == 'off':
+      continue
+    if audience_name and audience.name != audience_name:
       continue
 
     audience_log = audiences_log.get(audience.name)

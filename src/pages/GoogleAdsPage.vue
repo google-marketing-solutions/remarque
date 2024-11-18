@@ -21,22 +21,10 @@
     </div>
     <div class="row" style="margin-top: 20px">
       <q-btn
-        label="Run All"
+        label="Process..."
         @click="onExecute"
         :fab="true"
         color="primary"
-        class="q-mx-md"
-      ></q-btn>
-      <q-btn
-        label="Run sampling"
-        @click="onSampling(undefined)"
-        :fab="true"
-        class="q-mx-md"
-      ></q-btn>
-      <q-btn
-        label="Upload audiences"
-        @click="onAudiencesUpload(undefined)"
-        :fab="true"
         class="q-mx-md"
       ></q-btn>
     </div>
@@ -805,13 +793,22 @@
       </q-card-actions>
     </q-card>
   </q-dialog>
+  <ProcessingDialog
+    v-model="data.showProcessingDialog"
+    :audiences="audiences"
+  />
 </template>
 
-<style></style>
+<style>
+/* .col {
+  border: 1px solid #000;
+} */
+</style>
 
 <script lang="ts">
 import { defineComponent, ref, watch, nextTick, computed } from 'vue';
 import { useQuasar } from 'quasar';
+import ProcessingDialog from 'components/ProcessingDialog.vue';
 import { useConfigurationStore } from 'stores/configuration';
 import {
   AudienceWithLog,
@@ -819,21 +816,23 @@ import {
   ConversionsData,
   AdsMetric,
   useAudiencesStore,
-  AudienceInfo,
   AudienceLog,
   CampaignInfo,
-  UserlistAssignementData,
+  UserlistAssignmentData,
   AdsTreeData,
   AdsTreeNodeType,
 } from 'stores/audiences';
-import { postApi, postApiUi, getApiUi } from 'boot/axios';
-import {
-  assertIsError,
-  formatArray,
-  formatDate,
-  formatFloat,
-} from '../helpers/utils';
+import { postApiUi, getApiUi } from 'boot/axios';
+import { formatArray, formatDate, formatFloat } from '../helpers/utils';
 import { ApexOptions } from 'apexcharts';
+import {
+  AudienceConversionsQueryResponse,
+  AudienceConversionsResponse,
+  AudiencesLogRebuidResponse,
+  AudiencesProcessResponse,
+  AudiencesProcessResult,
+  AudiencesStatusResponse,
+} from 'src/boot/api';
 
 enum ConversionType {
   USERS = 'users',
@@ -858,79 +857,12 @@ enum ConversionCalcStrategy {
   BOUNDED = 'bounded',
   UNBOUNDED = 'unbounded',
 }
-interface AudienceProcessResult {
-  job_resource_name: string;
-  test_user_count: number;
-  control_user_count: number;
-  failed_user_count: number;
-  uploaded_user_count: number;
-  new_test_user_count: number;
-  new_control_user_count: number;
-  total_test_user_count: number;
-  total_control_user_count: number;
-}
-type AudiencesProcessResult = Record<string, AudienceProcessResult>;
-/**
- * Response type for 'process' and 'ads/upload' endpoints.
- */
-interface AudiencesProcessResponse {
-  result: AudiencesProcessResult;
-}
-interface AudienceSamplingResult {
-  test_count: number;
-  control_count: number;
-}
-/**
- * Response type for 'sampling/run' endpoint.
- */
-interface AudiencesSamplingResponse {
-  result: Record<string, AudienceSamplingResult>;
-}
-interface AudienceConversionsResult {
-  conversions: ConversionsData[];
-  ads_metrics: AdsMetric[];
-  date_start: string;
-  date_end: string;
-  pval: number | undefined;
-  pval_events: number | undefined;
-  chi: number | undefined;
-}
-/**
- * Response type for 'conversions/' endpoint.
- */
-interface AudienceConversionsResponse {
-  results: Record<string, AudienceConversionsResult>;
-}
-/**
- * Response type for 'conversions/query' endpoint.
- */
-interface AudienceConversionsQueryResponse {
-  query: string;
-  date_start: string;
-  date_end: string;
-}
-
-interface AudienceStatusResult extends AudienceInfo {
-  log?: AudienceLog[];
-  conversions?: Conversions;
-  campaigns: UserlistAssignementData[];
-}
-/**
- * Response type for 'audiences/status' endpoint.
- */
-interface AudiencesStatusResponse {
-  result: Record<string, AudienceStatusResult>;
-}
-/**
- * Response type for 'audiences/recalculate_log' endpoint.
- */
-interface AudiencesLogRebuidResponse {
-  result: Record<string, AudienceLog[]>;
-}
 
 export default defineComponent({
   name: 'GoogleAdsPage',
-  components: {},
+  components: {
+    ProcessingDialog,
+  },
   setup: () => {
     const store = useConfigurationStore();
     const storeAudiences = useAudiencesStore();
@@ -1169,6 +1101,7 @@ export default defineComponent({
       conversionsFilterConvWindow: <number | undefined>undefined,
       conversionsSummary: <ConversionsData | undefined>undefined,
       pval: <number | undefined>undefined,
+      showProcessingDialog: false,
     });
 
     function showExecutionResultDialog(results: AudiencesProcessResult) {
@@ -1192,15 +1125,9 @@ export default defineComponent({
       data.value.resultDialog.show = true;
     }
     const onExecute = async () => {
-      const res = await postApiUi<AudiencesProcessResponse>(
-        'process',
-        {},
-        'Running sampling and uploading...',
-      );
-      if (res?.data.result) {
-        showExecutionResultDialog(res.data.result);
-      }
+      data.value.showProcessingDialog = true;
     };
+
     const onProcessAudience = async (
       audience: AudienceWithLog,
       mode: string,
@@ -1212,54 +1139,6 @@ export default defineComponent({
       );
       if (res?.data.result) {
         showExecutionResultDialog(res.data.result);
-      }
-    };
-    const onSampling = async (audience?: AudienceWithLog) => {
-      const res = await postApiUi<AudiencesSamplingResponse>(
-        'sampling/run',
-        { audience: audience ? audience.name : null },
-        audience
-          ? 'Running sampling for the audience...'
-          : 'Running sampling for audiences...',
-      );
-      if (res?.data.result) {
-        const results = Object.entries(res.data.result);
-        let html = '';
-        for (const item of results) {
-          html += `<div class="text-subtitle1">Audience '${item[0]}' results:</div>`;
-          const result = item[1];
-          html += `<div class="text-caption">Control user count: ${result.control_count}<br>Test count: ${result.test_count}<br></div>`;
-        }
-        data.value.resultDialog.header = 'Sampling completed';
-        data.value.resultDialog.message = html;
-        data.value.resultDialog.show = true;
-      }
-    };
-    const onAudiencesUpload = async (audience?: AudienceWithLog) => {
-      const progressDlg = $q.dialog({
-        message: audience
-          ? 'Uploading the audience to Google Ads...'
-          : 'Uploading audiences to Google Ads...',
-        progress: true, // we enable default settings
-        persistent: true, // we want the user to not be able to close it
-        ok: false, // we want the user to not be able to close it
-      });
-      const loading = () => progressDlg.hide();
-      try {
-        const res = await postApi<AudiencesProcessResponse>(
-          'ads/upload',
-          { audience: audience ? audience.name : null },
-          loading,
-        );
-        if (res.data && res.data.result) {
-          showExecutionResultDialog(res.data.result);
-        }
-      } catch (e: unknown) {
-        assertIsError(e);
-        $q.dialog({
-          title: 'Error',
-          message: e.message,
-        });
       }
     };
 
@@ -1329,7 +1208,7 @@ export default defineComponent({
     );
 
     function getNodeInfo(
-      obj: UserlistAssignementData,
+      obj: UserlistAssignmentData,
       prefix: string,
     ): Record<string, string | number> | undefined {
       const keys = Object.keys(obj).filter(
@@ -1340,7 +1219,7 @@ export default defineComponent({
       );
       const info: Record<string, string | number> = {};
       for (const key of keys) {
-        info[key] = obj[key as keyof UserlistAssignementData];
+        info[key] = obj[key as keyof UserlistAssignmentData];
       }
       return keys.length ? info : undefined;
     }
@@ -1369,7 +1248,7 @@ export default defineComponent({
         }
         let ads = {
           campaigns: <CampaignInfo[]>[],
-          adgroups: <UserlistAssignementData[]>[],
+          adgroups: <UserlistAssignmentData[]>[],
           tree: <AdsTreeData[]>[],
         };
         if (audience.campaigns) {
@@ -1386,7 +1265,7 @@ export default defineComponent({
           ads = {
             campaigns: Object.values(campaigns),
             adgroups: audience.campaigns,
-            tree: audience.campaigns.map((i: UserlistAssignementData) => {
+            tree: audience.campaigns.map((i: UserlistAssignmentData) => {
               return {
                 label: `CID ${i.customer_id} - ${i.customer_name}`,
                 type: <AdsTreeNodeType>'customer',
@@ -1949,6 +1828,7 @@ export default defineComponent({
             { label: 'Avg per conv', value: ConversionValueMode.AVG_BY_EVENT },
           ];
         default:
+          throw new Error('Unsupported value: ' + data.value.conversionsType);
       }
     };
 
@@ -1958,8 +1838,6 @@ export default defineComponent({
       audiences,
       onExecute,
       onProcessAudience,
-      onSampling,
-      onAudiencesUpload,
       onFetchAudiencesStatus,
       onReclculateAudiencesLog: onRecalculateAudiencesLog,
       onLoadConversions,

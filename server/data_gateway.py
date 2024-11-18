@@ -1122,7 +1122,7 @@ HAVING COUNT(U.user) = 0
     """
     suffix = datetime.now().strftime('%Y%m%d') if suffix is None else suffix
     audience.ensure_table_name()
-    destination_table = self._get_user_segment_table_full_name(
+    destination_table = self.get_user_segment_table_full_name(
         target, audience.table_name, 'all', suffix)
     query = self.get_audience_sampling_query(target, audience)
     query = f'CREATE OR REPLACE TABLE `{destination_table}` AS\n' + query
@@ -1173,7 +1173,7 @@ HAVING COUNT(U.user) = 0
         user, brand, osv, days_since_install, src, n_sessions.
     """
     suffix = datetime.now().strftime('%Y%m%d') if suffix is None else suffix
-    audience_table_name = self._get_user_segment_table_full_name(
+    audience_table_name = self.get_user_segment_table_full_name(
         target, audience.table_name, 'all', suffix)
     query = f"""
 SELECT
@@ -1189,11 +1189,11 @@ FROM `{audience_table_name}` a
       query += f"""WHERE
   NOT EXISTS (
     SELECT user
-    FROM `{self._get_user_segment_table_full_name(target, audience.table_name, 'control', '*')}` t
+    FROM `{self.get_user_segment_table_full_name(target, audience.table_name, 'control', '*')}` t
     WHERE t.user=a.user AND _TABLE_SUFFIX < '{suffix}'
   ) AND NOT EXISTS (
     SELECT user
-    FROM `{self._get_user_segment_table_full_name(target, audience.table_name, 'test', '*')}` t
+    FROM `{self.get_user_segment_table_full_name(target, audience.table_name, 'test', '*')}` t
     WHERE t.user=a.user AND _TABLE_SUFFIX < '{suffix}'
   )"""
 
@@ -1219,12 +1219,13 @@ WHERE table_name LIKE '{audience_table_name}_{group_name}_%' ORDER BY 1 DESC"""
       return [f'{bq_dataset_id}.{t}' for t in tables]
     return tables
 
-  def _get_user_segment_table_full_name(self,
-                                        target: ConfigTarget,
-                                        audience_table_name: str,
-                                        group_name: Literal['test', 'control',
-                                                            'testfailed'],
-                                        suffix: str | None = None):
+  def get_user_segment_table_full_name(self,
+                                       target: ConfigTarget,
+                                       audience_table_name: str,
+                                       group_name: Literal['test', 'control',
+                                                           'testfailed',
+                                                           'uploaded'],
+                                       suffix: str | None = None):
     """Return a fully-qualified name for an audience group table.
 
     Args:
@@ -1259,7 +1260,7 @@ WHERE table_name LIKE '{audience_table_name}_{group_name}_%' ORDER BY 1 DESC"""
     """
     project_id = self.config.project_id
     # test group:
-    test_table_name = self._get_user_segment_table_full_name(
+    test_table_name = self.get_user_segment_table_full_name(
         target, audience.table_name, 'test', suffix)
     if len(users_test) == 0:
       self._ensure_table(test_table_name, TableSchemas.daily_test_users)
@@ -1275,7 +1276,7 @@ WHERE table_name LIKE '{audience_table_name}_{group_name}_%' ORDER BY 1 DESC"""
           if_exists='replace')
 
     # control group:
-    control_table_name = self._get_user_segment_table_full_name(
+    control_table_name = self.get_user_segment_table_full_name(
         target, audience.table_name, 'control', suffix)
     if len(users_control) == 0:
       self._ensure_table(control_table_name, TableSchemas.daily_control_users)
@@ -1309,12 +1310,12 @@ WHERE table_name LIKE '{audience_table_name}_{group_name}_%' ORDER BY 1 DESC"""
       suffix: A day suffix as yyyymmdd, by default - today.
     """
     suffix = datetime.now().strftime('%Y%m%d') if suffix is None else suffix
-    segment_table_name = self._get_user_segment_table_full_name(
+    segment_table_name = self.get_user_segment_table_full_name(
         target, audience.table_name, 'all', suffix)
     # test:
-    group_table_name = self._get_user_segment_table_full_name(
+    group_table_name = self.get_user_segment_table_full_name(
         target, audience.table_name, 'test', suffix)
-    group_prev_table_name = self._get_user_segment_table_full_name(
+    group_prev_table_name = self.get_user_segment_table_full_name(
         target, audience.table_name, 'test', '*')
     ttl = audience.ttl
     query = f"""
@@ -1325,9 +1326,9 @@ WHERE table_name LIKE '{audience_table_name}_{group_name}_%' ORDER BY 1 DESC"""
   """
     self.execute_query(query)
     # control:
-    group_table_name = self._get_user_segment_table_full_name(
+    group_table_name = self.get_user_segment_table_full_name(
         target, audience.table_name, 'control', suffix)
-    group_prev_table_name = self._get_user_segment_table_full_name(
+    group_prev_table_name = self.get_user_segment_table_full_name(
         target, audience.table_name, 'control', '*')
     query = f"""
   INSERT INTO `{group_table_name}` (user, ttl)
@@ -1362,9 +1363,9 @@ WHERE table_name LIKE '{audience_table_name}_{group_name}_%' ORDER BY 1 DESC"""
       suffix: A day suffix as yyyymmdd, by default - today.
     """
     if audience.ttl > 1:
-      test_table_name = self._get_user_segment_table_full_name(
+      test_table_name = self.get_user_segment_table_full_name(
           target, audience.table_name, 'test', suffix)
-      control_table_name = self._get_user_segment_table_full_name(
+      control_table_name = self.get_user_segment_table_full_name(
           target, audience.table_name, 'control', suffix)
       test_tables = self._get_user_segment_tables(
           target, audience.table_name, 'test', include_dataset=True)
@@ -1401,9 +1402,9 @@ WHERE table_name LIKE '{audience_table_name}_{group_name}_%' ORDER BY 1 DESC"""
     Returns:
       A list of users ids.
     """
-    table_name = self._get_user_segment_table_full_name(target,
-                                                        audience.table_name,
-                                                        group_name, suffix)
+    table_name = self.get_user_segment_table_full_name(target,
+                                                       audience.table_name,
+                                                       group_name, suffix)
     query = f"""SELECT user FROM `{table_name}`"""
     try:
       rows = self.execute_query(query)
@@ -1428,15 +1429,15 @@ WHERE table_name LIKE '{audience_table_name}_{group_name}_%' ORDER BY 1 DESC"""
     # Originally all users in the segment table
     # ({audience_table_name}_test_yyymmdd) have status=NULL
     # We'll update the column to 1 for all except ones in the failed_users list
-    table_name = self._get_user_segment_table_full_name(target,
-                                                        audience.table_name,
-                                                        'test', suffix)
+    table_name = self.get_user_segment_table_full_name(target,
+                                                       audience.table_name,
+                                                       'test', suffix)
     if not failed_users:
       query = f"""UPDATE `{table_name}` SET status = 1 WHERE true"""
       self.execute_query(query)
     else:
       # create a table for failed users
-      table_name_failed = self._get_user_segment_table_full_name(
+      table_name_failed = self.get_user_segment_table_full_name(
           target, audience.table_name, 'testfailed', suffix)
       schema = [bigquery.SchemaField('user', 'STRING', mode='REQUIRED')]
       table_ref = bigquery.TableReference.from_string(table_name_failed,
@@ -1483,7 +1484,7 @@ WHERE t1.user = t2.user
         new_test_user_count, new_control_user_count.
     """
     # load test and control user counts
-    test_table_name = self._get_user_segment_table_full_name(
+    test_table_name = self.get_user_segment_table_full_name(
         target, audience.table_name, 'test', suffix)
     query = (
         f'SELECT COUNT(1) as count FROM `{test_table_name}` WHERE status = 1')
@@ -1494,13 +1495,13 @@ WHERE t1.user = t2.user
           "Table '%s' does not exist, skipping loading a user segment for %s",
           test_table_name, suffix)
       return 0, 0, 0, 0
-    control_table_name = self._get_user_segment_table_full_name(
+    control_table_name = self.get_user_segment_table_full_name(
         target, audience.table_name, 'control', suffix)
     query = f'SELECT COUNT(1) as count FROM `{control_table_name}`'
     control_user_count = self.execute_query(query)[0]['count']
 
     # load new user count
-    table_name_prev = self._get_user_segment_table_full_name(
+    table_name_prev = self.get_user_segment_table_full_name(
         target, audience.table_name, 'test', '*')
     suffix = datetime.now().strftime('%Y%m%d') if suffix is None else suffix
     # we're fetching the number of unique users in all test tables
@@ -1515,7 +1516,7 @@ WHERE status = 1 AND NOT EXISTS (
     res = self.execute_query(query)
     new_test_user_count = res[0]['user_count']
 
-    control_table_name_prev = self._get_user_segment_table_full_name(
+    control_table_name_prev = self.get_user_segment_table_full_name(
         target, audience.table_name, 'control', '*')
     query = f"""SELECT count(DISTINCT t.user) as user_count
 FROM `{control_table_name}` t
@@ -1846,8 +1847,9 @@ ALTER TABLE `{table_fq_name}_new` RENAME TO audiences_log;
       audience_log_existing: list[AudienceLog] = None):
     logger.info("Starting recalculating log for audience '%s'", audience.name)
     audience_log_existing = audience_log_existing or []
-    table_users = self._get_user_segment_table_full_name(
-        target, audience.table_name, 'test', '*')
+    table_users = self.get_user_segment_table_full_name(target,
+                                                        audience.table_name,
+                                                        'test', '*')
     query = f"""SELECT
   MIN(_TABLE_SUFFIX) AS start_day,
   MAX(_TABLE_SUFFIX) AS end_day
