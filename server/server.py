@@ -44,9 +44,9 @@ from sampling import poisson_rate_test
 from utils import format_duration
 
 # make linter happy (avoid import-member)
-datetime = datetime.datetime
 date = datetime.date
 timedelta = datetime.timedelta
+datetime = datetime.datetime
 
 
 class JsonEncoder(json.JSONEncoder):
