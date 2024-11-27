@@ -115,8 +115,11 @@ class TableSchemas:
 
 
 class DataGateway:
-  """Object for loading and udpating data in Database
-  (which is BigQuery but it should be hidden from consumers)"""
+  """Object for loading and updating data.
+
+  At the moment only BigQuery is supported,
+  but it should be hidden from consumers.
+  """
 
   def __init__(
       self,
@@ -456,7 +459,7 @@ class DataGateway:
       tables = [r['table_name'] for r in response]
     except BaseException as e:
       logger.error(e)
-      sa = f"{self.config.project_id}@appspot.gserviceaccount.com"
+      sa = f'{self.config.project_id}@appspot.gserviceaccount.com'
       raise InvalidConfigurationError(
           "Incorrect GA4 table name or the application's service account "
           f"({sa}) doesn't have access permissions to the BigQuery dataset "
@@ -471,7 +474,7 @@ class DataGateway:
     found = next((t for t in tables if t == ga4_table + '_' + yesterday), None)
     if not found:
       raise InvalidConfigurationError(
-          f'The speficied GA4 dataset ({ga4_project}.{ga4_dataset}) does exist '
+          f'The specified GA4 dataset ({ga4_project}.{ga4_dataset}) does exist '
           "but does not seem to be updated as we couldn't find an events table"
           f" for the day before yesterday ('{ga4_table + '_' + yesterday}')")
 
@@ -1132,7 +1135,7 @@ HAVING COUNT(U.user) = 0
     if return_only_new_users:
       # test/control tables can not yet exist (on the first day of sampling),
       # so if it's the case we're switching off return_only_new_users flag to
-      # prevent feching from them in load_sampled_users
+      # prevent fetching from them in load_sampled_users
       query = f"""SELECT table_name
   FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES
   WHERE table_name like '{audience.table_name}_test_%'

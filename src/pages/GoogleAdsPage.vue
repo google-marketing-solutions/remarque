@@ -21,7 +21,7 @@
     </div>
     <div class="row" style="margin-top: 20px">
       <q-btn
-        label="Process..."
+        label="Process audiences"
         @click="onExecute"
         :fab="true"
         color="primary"
@@ -315,7 +315,7 @@
               <div class="col" align="right">
                 <q-btn
                   label="Recalculate"
-                  @click="onReclculateAudiencesLog"
+                  @click="onRecalculateAudiencesLog"
                   color="secondary"
                   icon="repeat"
                   class="q-my-md"
@@ -371,6 +371,7 @@
           v-if="data.selectedAudience && data.selectedAudience.length"
         >
           <q-banner class="bg-grey-2">
+            <div class="text-h6">Conversions</div>
             <div class="row">
               <div class="col q-pa-xs">
                 <q-banner class="bg-grey-3">
@@ -828,7 +829,7 @@ import { ApexOptions } from 'apexcharts';
 import {
   AudienceConversionsQueryResponse,
   AudienceConversionsResponse,
-  AudiencesLogRebuidResponse,
+  AudiencesLogRebuildResponse,
   AudiencesProcessResponse,
   AudiencesProcessResult,
   AudiencesStatusResponse,
@@ -1341,7 +1342,7 @@ export default defineComponent({
         cancel: true,
         persistent: true,
       }).onOk(async () => {
-        const res = await postApiUi<AudiencesLogRebuidResponse>(
+        const res = await postApiUi<AudiencesLogRebuildResponse>(
           'audiences/recalculate_log',
           { audience: audienceName },
           'Recalculating...',
@@ -1417,7 +1418,7 @@ export default defineComponent({
             country: country_str,
             conv_window: data.value.conversionsFilterConvWindow,
           },
-          'Fetching the audience conversion uquery...',
+          'Fetching the audience conversion query...',
         );
         if (!res?.data) {
           return;
@@ -1475,19 +1476,7 @@ export default defineComponent({
         });
         return;
       }
-      /* In result.conversions we expect:
-        date
-        cum_test_users
-        cum_control_users
-        cum_test_events
-        cum_control_events
-        cum_control_conv_value
-        cum_test_conv_value
-        total_test_user_count
-        total_control_user_count
-        test_session_count
-        control_session_count
-       */
+
       // calculate more metrics (rations based on returned ones)
       if (result.conversions) {
         for (const i of result.conversions) {
@@ -1635,30 +1624,30 @@ export default defineComponent({
       let title = '';
       switch (data.value.conversionsMode) {
         case ConversionUsersMode.ABSOLUTE:
-          title = 'Conversions: absolute number of converted users';
+          title = 'Absolute number of converted users';
           break;
         case ConversionUsersMode.CONV_RATE:
           title =
             'Conversion rate: number of converted users / number of users in a group (treatment/control)';
           break;
         case ConversionEventsMode.ABSOLUTE:
-          title = 'Conversions: absolute numebr of conversion events';
+          title = 'Absolute number of conversion events';
           break;
         case ConversionEventsMode.AVG_BY_SESSION:
           title =
-            'Averange number of conversion events per session (by users in a group)';
+            'Average number of conversion events per session (by users in a group)';
           break;
         case ConversionEventsMode.AVG_BY_USER:
-          title = 'Averange number of conversion events per user (in a group)';
+          title = 'Average number of conversion events per user (in a group)';
           break;
         case ConversionValueMode.ABSOLUTE:
           title = 'Total conversion value (by users in a group)';
           break;
         case ConversionValueMode.AVG_BY_EVENT:
-          title = 'Averange conversion value per conversion event';
+          title = 'Average conversion value per conversion event';
           break;
         case ConversionValueMode.AVG_BY_USER:
-          title = 'Averange conversion value per converted user';
+          title = 'Average conversion value per converted user';
           break;
         default:
       }
@@ -1839,7 +1828,7 @@ export default defineComponent({
       onExecute,
       onProcessAudience,
       onFetchAudiencesStatus,
-      onReclculateAudiencesLog: onRecalculateAudiencesLog,
+      onRecalculateAudiencesLog,
       onLoadConversions,
       onGetConversionsQuery,
       onOpenChart,

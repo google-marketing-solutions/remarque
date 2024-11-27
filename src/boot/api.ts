@@ -37,7 +37,7 @@ export interface AudienceProcessResult {
   total_control_user_count: number;
 }
 /**
- * Result of audince(s) processing.
+ * Result of audience(s) processing.
  */
 export type AudiencesProcessResult = Record<string, AudienceProcessResult>;
 /**
@@ -91,6 +91,6 @@ export interface AudiencesStatusResponse {
 /**
  * Response type for 'audiences/recalculate_log' endpoint.
  */
-export interface AudiencesLogRebuidResponse {
+export interface AudiencesLogRebuildResponse {
   result: Record<string, AudienceLog[]>;
 }
