@@ -256,23 +256,34 @@ class DataGateway:
       # when users_normalized was a single table
       creation_time = self.bq_utils.get_table_creation_time(
           target.bq_dataset_id, TABLE_USERS_NORMALIZED, table_only=True)
+      table_name = f'{target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}'
       if creation_time:
         # the table exists (not view), so we're migrating from the old schema
         # first we need to rename existing users_normalized to suffixed table
         # with date of its creation date
-        table_name = f'{target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}'
         last_day = creation_time - timedelta(days=1)
         suffixed_table_name = (
             f"{TABLE_USERS_NORMALIZED}_{last_day.strftime('%Y%m%d')}")
         query = (
             f'ALTER TABLE `{table_name}` RENAME TO `{suffixed_table_name}`')
         self.execute_query(query)
-        query = (f'CREATE OR REPLACE VIEW `{table_name}` AS '
-                 f'SELECT * FROM `{table_name}_*`')
+        query = (
+            f'CREATE OR REPLACE VIEW `{table_name}`'
+            f'AS SELECT * FROM `{table_name}_*`'
+            'QUALIFY ROW_NUMBER() OVER '
+            '(PARTITION BY user, app_id ORDER BY event_timestamp DESC) = 1')
         self.execute_query(query)
         logger.warning(
             'users_normalized renamed to %s, view users_normalized created',
             suffixed_table_name)
+      else:
+        # we changed the view schema on 06.12.2024 (added QUALIFY), recreate it
+        query = (
+            f'CREATE OR REPLACE VIEW `{table_name}`'
+            f'AS SELECT * FROM `{table_name}_*`'
+            'QUALIFY ROW_NUMBER() OVER '
+            '(PARTITION BY user, app_id ORDER BY event_timestamp DESC) = 1')
+        self.execute_query(query)
       # TODO: there's a problem: if the user has changed loopback_window,
       # it won't go into effect as we're not recreating the table and
       # don't know for what period it was created originally.
@@ -813,6 +824,7 @@ WHEN NOT MATCHED THEN
                   target.bq_dataset_id,
           })
     except KeyError as e:
+      # pylint: disable=broad-exception-raised
       raise Exception(
           'An error occurred during substituting macros into audience query, '
           f'unknown macro {e} was used') from e
@@ -901,6 +913,7 @@ WHEN NOT MATCHED THEN
                   date_conversion_end.strftime('%Y%m%d')
           })
     except KeyError as e:
+      # pylint: disable=broad-exception-raised
       raise Exception(
           'An error occurred during substituting macros into audience query, '
           f'unknown macro {e} was used') from e
@@ -1006,8 +1019,10 @@ WHEN NOT MATCHED THEN
                        destination_table)
         query = f'DROP TABLE `{destination_table}`'
         self.execute_query(query)
-      query = (f'CREATE OR REPLACE VIEW `{destination_table_base}` '
-               f'AS SELECT * FROM `{destination_table_base}_*`')
+      query = (f'CREATE OR REPLACE VIEW `{destination_table_base}`'
+               f'AS SELECT * FROM `{destination_table_base}_*`'
+               'QUALIFY ROW_NUMBER() OVER '
+               '(PARTITION BY user, app_id ORDER BY event_timestamp DESC) = 1')
       self.execute_query(query)
     else:
       # we drop the view if it exists

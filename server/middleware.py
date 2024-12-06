@@ -58,8 +58,8 @@ def run_sampling_for_audience(
           "Starting splitting users (%s) of audience '%s' "
           'via stratification with %s ratio', len(df), audience.name,
           audience.split_ratio if audience.split_ratio else 'default')
-      # now split users in df into two groups, treatment and control
-      # using stratification by the audience's ration (default 0.5)
+      # now split users in df into two groups (treatment and control)
+      # using stratification in the audience's ratio (default 0.5)
       users_test, users_control = split_via_stratification(
           df, audience.split_ratio)
       logger.debug(
