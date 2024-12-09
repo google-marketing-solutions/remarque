@@ -1,24 +1,26 @@
-"""
- Copyright 2023 Google LLC
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Domain model classes."""
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
-
-      https://www.apache.org/licenses/LICENSE-2.0
-
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
- """
-from typing import Literal
-from datetime import date
 from dataclasses import dataclass
+from datetime import date
+from typing import Literal
+import pandas as pd
 
 
 class Audience:
+  """An audience definition."""
   name = ''
   id = ''
   app_id = ''
@@ -93,6 +95,7 @@ class Audience:
 
 @dataclass
 class AudienceLog:
+  """An audience's log entry."""
   name: str
   date: date
   job_resource_name: str
@@ -118,3 +121,37 @@ class AudienceLog:
         'total_test_user_count': self.total_test_user_count,
         'total_control_user_count': self.total_control_user_count,
     }
+
+
+@dataclass
+class FeatureMetrics:
+  """Stat metrics of a split."""
+  mean_ratio: float | None = None  # for numeric features
+  std_ratio: float | None = None  # for numeric features
+  ks_statistic: float | None = None
+  ks_pvalue_neq: float | None = None
+  ks_pvalue_gt: float | None = None
+  ks_pvalue_lt: float | None = None
+  p_value: float | None = None  # for categorical features
+  js_divergence: float | None = None
+  warnings: dict[str, str] = None
+
+
+@dataclass
+class DistributionData:
+  """A feature distribution after split in test/control groups."""
+  feature_name: str
+  is_numeric: bool
+  categories: list[str | float]
+  bin_edges: list[float] | None
+  test_distribution: list[float]
+  control_distribution: list[float]
+
+
+@dataclass
+class SplittingResult:
+  """Result of splitting."""
+  users_test: pd.DataFrame
+  users_control: pd.DataFrame
+  metrics: dict[str, FeatureMetrics]
+  distributions: list[DistributionData]

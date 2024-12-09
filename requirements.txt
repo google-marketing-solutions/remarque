@@ -11,8 +11,6 @@ pandas
 pandas_gbq
 scipy
 scikit-learn
-matplotlib
-seaborn
 # for server:
 flask
 flask-cors

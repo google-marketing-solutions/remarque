@@ -1,18 +1,18 @@
-"""
- Copyright 2023 Google LLC
+#  Copyright 2024 Google LLC
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#       https://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+"""Middleware methods."""
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
-
-      https://www.apache.org/licenses/LICENSE-2.0
-
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
- """
 from datetime import datetime
 import pandas as pd
 import pandas_gbq
@@ -60,12 +60,15 @@ def run_sampling_for_audience(
           audience.split_ratio if audience.split_ratio else 'default')
       # now split users in df into two groups (treatment and control)
       # using stratification in the audience's ratio (default 0.5)
-      users_test, users_control = split_via_stratification(
-          df, audience.split_ratio)
+      result = split_via_stratification(df, audience.split_ratio)
+      users_test = result.users_test
+      users_control = result.users_control
       logger.debug(
           "Splitting users of audience '%s' has completed: "
           'test count - %s, control count - %s', audience.name, len(users_test),
           len(users_control))
+      context.data_gateway.save_split_statistics(context.target, audience,
+                                                 result, suffix)
     else:
       logger.warning("User segment of audience '%s' contains no users",
                      audience.name)

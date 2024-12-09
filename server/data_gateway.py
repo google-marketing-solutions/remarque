@@ -1,18 +1,17 @@
-"""
- Copyright 2023 Google LLC
-
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
-
-      https://www.apache.org/licenses/LICENSE-2.0
-
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
- """
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""DataGateway to work with data."""
 
 import os
 import re
@@ -31,7 +30,7 @@ from itertools import groupby
 
 from logger import logger
 from config import Config, ConfigTarget, AppNotInitializedError, InvalidConfigurationError
-from models import Audience, AudienceLog
+from models import Audience, AudienceLog, SplittingResult
 from bigquery_utils import CloudBigQueryUtils
 from utils import format_duration
 
@@ -111,6 +110,25 @@ class TableSchemas:
   daily_control_users = [
       bigquery.SchemaField(name='user', field_type='STRING'),
       bigquery.SchemaField(name='ttl', field_type='INT64'),
+  ]
+  splitstat_schema = [
+      bigquery.SchemaField(
+          name='feature_name',
+          field_type='STRING',
+          mode='REQUIRED',
+          description='Name of the feature (e.g., days_since_install, brand)'),
+      bigquery.SchemaField(
+          name='is_numeric', field_type='BOOLEAN', mode='REQUIRED'),
+      bigquery.SchemaField(
+          name='categories', field_type='STRING', mode='REPEATED'),
+      bigquery.SchemaField(
+          name='bin_edges', field_type='FLOAT64', mode='REPEATED'),
+      bigquery.SchemaField(
+          name='test_distribution', field_type='FLOAT64', mode='REPEATED'),
+      bigquery.SchemaField(
+          name='control_distribution', field_type='FLOAT64', mode='REPEATED'),
+      bigquery.SchemaField(
+          name='warnings', field_type='STRING', mode='NULLABLE')
   ]
 
 
@@ -766,7 +784,7 @@ WHEN NOT MATCHED THEN
     day_start = (datetime.now() -
                  timedelta(days=days_ago_start)).strftime('%Y%m%d')
     day_end = (datetime.now() - timedelta(days=days_ago_end)).strftime('%Y%m%d')
-    logger.debug('Creating user segment for time window: %s - %s', day_start,
+    logger.debug('Creating sampling query for time window: %s - %s', day_start,
                  day_end)
 
     countries = ','.join([f"'{c}'" for c in audience.countries])
@@ -1006,6 +1024,8 @@ WHEN NOT MATCHED THEN
     destination_table_base = (
         f'{target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}')
     if incremental:
+      logger.debug('Creating users_normalized segment for %s - %s', start_day,
+                   end_day)
       destination_table = f'{destination_table_base}_{end_day}'
       query = f'CREATE OR REPLACE TABLE `{destination_table}` AS\n' + query
       self.execute_query(query)
@@ -1068,6 +1088,7 @@ WHEN NOT MATCHED THEN
       # users_normalized is incremental:
       # we create an incremental table per day users_normalized_yyyymmdd
       # and then join them via a view users_normalized
+      logger.debug('Checking users_normalized table is up to date')
 
       # Fix: previously we were creating tables for 'today' and
       # often they were empty.
@@ -1148,6 +1169,8 @@ HAVING COUNT(U.user) = 0
     self.execute_query(query)
 
     if return_only_new_users:
+      logger.debug(
+          'Detecting existence of previous segments (test/control tables)')
       # test/control tables can not yet exist (on the first day of sampling),
       # so if it's the case we're switching off return_only_new_users flag to
       # prevent fetching from them in load_sampled_users
@@ -1167,6 +1190,8 @@ HAVING COUNT(U.user) = 0
         if not rows:
           return_only_new_users = False
 
+    logger.debug('Loading sampled users for segment, return_only_new_users=%s',
+                 return_only_new_users)
     df = self.load_sampled_users(
         target, audience, suffix, only_new_users=return_only_new_users)
     return df
@@ -1312,6 +1337,50 @@ WHERE table_name LIKE '{audience_table_name}_{group_name}_%' ORDER BY 1 DESC"""
         'Sampled users for audience %s saved to '
         '%s (%s rows)/%s (%s rows) tables', audience.name, test_table_name,
         len(users_test), control_table_name, len(users_control))
+
+  def save_split_statistics(self,
+                            target: ConfigTarget,
+                            audience: Audience,
+                            result: SplittingResult,
+                            suffix: str | None = None):
+    """Save split statistics into a daily audience table."""
+
+    table_id = self.get_user_segment_table_full_name(target,
+                                                     audience.table_name,
+                                                     'splitstat', suffix)
+    table_ref = bigquery.TableReference.from_string(table_id,
+                                                    self.config.project_id)
+    self.bq_client.delete_table(table_ref, not_found_ok=True)
+
+    # Create new table
+    table = bigquery.Table(table_ref, schema=TableSchemas.splitstat_schema)
+    custom_retry = retry.Retry(
+        timeout=60, predicate=retry.if_exception_type(exceptions.AlreadyExists))
+    table = self.bq_client.create_table(table, retry=custom_retry)
+
+    # Prepare and insert rows
+    rows = []
+    for dist in result.distributions:
+      warnings = None
+      if dist.feature_name in result.metrics:
+        feature_metrics = result.metrics[dist.feature_name]
+        if feature_metrics.warnings:
+          warnings = '; '.join(feature_metrics.warnings.values())
+
+      rows.append({
+          'feature_name': dist.feature_name,
+          'is_numeric': dist.is_numeric,
+          'categories': [str(c) for c in dist.categories],
+          'bin_edges': dist.bin_edges if dist.is_numeric else [],
+          'test_distribution': dist.test_distribution,
+          'control_distribution': dist.control_distribution,
+          'warnings': warnings
+      })
+    custom_retry = retry.Retry(
+        timeout=60, predicate=retry.if_exception_type(exceptions.NotFound))
+    errors = self.bq_client.insert_rows_json(table, rows, retry=custom_retry)
+    if errors:
+      raise Exception('"Error inserting rows: {errors}')
 
   def add_previous_sampled_users(self,
                                  target: ConfigTarget,

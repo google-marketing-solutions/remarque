@@ -1,18 +1,17 @@
-"""
- Copyright 2023 Google LLC
-
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
-
-      https://www.apache.org/licenses/LICENSE-2.0
-
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
- """
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Method for splitting users."""
 
 import numpy as np
 import pandas as pd
@@ -20,335 +19,553 @@ import warnings
 from scipy import stats
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OrdinalEncoder
-from copy import deepcopy
-import seaborn as sns; sns.set()
-import matplotlib.pyplot as plt
-from matplotlib.ticker import NullFormatter
 import math
 from logger import logger
+from models import FeatureMetrics, DistributionData, SplittingResult
+
 warnings.filterwarnings('ignore')
 
+logger = logger.getChild('sampling')
 
-def makeEncoding(df: pd.DataFrame, exclude_cols: list[str], all_cols, encoder=None):
-  """TODO:
-    """
-  _df = df.copy()
-  dtypes_dct = dict(df.dtypes.to_frame('dtypes').reset_index().values)
-  # dtypes_dct is a Python dictionary, where keys are column names of the DataFrame and values are these columns' corresponding data types.
-  # numerical_ix = _df.drop(exclude_cols, axis=1).select_dtypes(include=['int64', 'float64']).columns.values.tolist()
-  cat_ix = _df.drop(exclude_cols, axis=1).select_dtypes(include=['object']).columns.values.tolist()
-  # cat_ix is a list of categorical variables (e.g. 'brand', 'osv', 'src')
-  # t = [('num', MinMaxScaler(), numerical_ix), ('cat', OrdinalEncoder(), cat_ix)]
-  t = [('cat', OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-99), cat_ix)]
-  col_transform = ColumnTransformer(transformers=t, remainder='passthrough')
+
+def make_encoding(df: pd.DataFrame,
+                  exclude_cols: list[str],
+                  all_cols: list[str],
+                  encoder=None) -> tuple[pd.DataFrame, list[str]]:
+  """Encode all categorical columns in a DataFrame as integers.
+
+  Args:
+    df: data in DF to be split.
+    exclude_cols: A list of columns to exclude from encoding (e.g 'user').
+    all_cols: A list of all columns to return in the final result.
+    encoder: An optional pre-fitted encoder
+      (useful if you want to apply same encoding to test data).
+
+  Returns:
+    Tuple of (encoded DataFrame, list of categorical column names).
+  """
+  if not all(col in df.columns for col in all_cols):
+    raise ValueError('all_cols contains columns not in DataFrame')
+  if not all(col in df.columns for col in exclude_cols):
+    raise ValueError('exclude_cols contains columns not in DataFrame')
+
+  # get a list of categorical columns (with 'object' data type, e.g. 'brand')
+  cat_ix = df.drop(
+      exclude_cols,
+      axis=1).select_dtypes(include=['object']).columns.values.tolist()
+  if not cat_ix:
+    # No categorical columns to encode
+    return df[all_cols], []
+
+  transformers = [
+      ('cat',
+       OrdinalEncoder(handle_unknown='use_encoded_value',
+                      unknown_value=-99), cat_ix)
+  ]
+  # Apply the specified transformations (OrdinalEncoder to categorical columns)
+  # ('passthrough' means keep other columns unchanged)
+  col_transform = ColumnTransformer(
+      transformers=transformers, remainder='passthrough')
+
+  # Store original dtypes for later restoration
+  dtypes_dct = dict(df.dtypes)
+
   if encoder is None:
-    encoder = col_transform.fit(_df)
-  res = encoder.transform(_df)
-  part_cols = [col for col in all_cols if col not in cat_ix]
-  # part_cols is names of the columns that were not transformed ('user', 'days_since_install', 'n_sessions', 'num_sessions_bins')
-  reorder_df = pd.DataFrame(res, columns=cat_ix + part_cols).astype(dtypes_dct)
-  # not reorder_df has all the columns that the original _df had, but with the categorical ones transformed according to the rules defined via OrdinalEncoder
-  reorder_df[cat_ix] = reorder_df[cat_ix].astype(int)
+    encoder = col_transform.fit(df)
 
-  return reorder_df[all_cols], cat_ix
+  # Transform data
+  try:
+    transformed = encoder.transform(df)
+  except Exception as e:
+    raise RuntimeError(f'Error during transformation: {str(e)}') from e
+
+  # Gets names of columns that weren't transformed (numerical columns)
+  non_cat_cols = [col for col in all_cols if col not in cat_ix]
+  # Creates DataFrame from transformed data
+  result_df = pd.DataFrame(
+      transformed, columns=cat_ix + non_cat_cols, index=df.index)
+  # Restore original data types
+  result_df = result_df.astype({col: dtypes_dct[col] for col in non_cat_cols})
+  # Ensures categorical columns are integers
+  result_df[cat_ix] = result_df[cat_ix].astype(int)
+  # now result_df has all the columns that the original df had,
+  # but with the categorical ones transformed according to the rules defined
+  #  via OrdinalEncoder
+
+  return result_df[all_cols], cat_ix
 
 
-def stratify(data, classes, ratios, one_hot=False):
+def stratify(data: list[list[str]], classes: list[str],
+             ratio: float) -> list[list]:
   """Stratifying procedure.
-    Algorithm is from: https://vict0rs.ch/2018/05/24/sample-multilabel-dataset/
 
-    data is a list of lists: a list of labels, for each sample.
-        Each sample's labels should be ints, if they are one-hot encoded, use one_hot=True
+  Split data into test and control groups maintaining feature distributions.
+  Algorithm is from: https://vict0rs.ch/2018/05/24/sample-multilabel-dataset/
 
-    classes is the list of classes each label can take
+  Args:
+    data: List of lists - each sublist contains feature values for one user.
+    classes: List of all possible feature values.
+    ratio: Float between 0 and 1, portion of data for test group.
 
-    ratios is a list, summing to 1, of how the dataset should be split
-
-    """
-  # one-hot decoding
-  if one_hot:
-    temp = [[] for _ in range(len(data))]
-    indexes, values = np.where(np.array(data).astype(int) == 1)
-    for k, v in zip(indexes, values):
-      temp[k].append(v)
-    data = temp
-
-  # Organize data per label: for each label l, per_label_data[l] contains the list of samples
+  Returns:
+    list of lists with indices of test and control users.
+  """
+  # Organize data per label:
+  # for each label l, per_label_data[l] contains the list of samples
   # in data which have this label
   per_label_data = {c: set() for c in classes}
   for i, d in enumerate(data):
     for l in d:
       per_label_data[l].add(i)
+  # If data is:
+  # data = [
+  #     ['1', '100', '200'],  # row 0: days_install=1, brand=100, src=200
+  #     ['2', '100', '201'],  # row 1: days_install=2, brand=100, src=201
+  # ]
+  # classes = ['1', '2', '100', '200', '201']
+  # per_label_data would be:
+  # {
+  #     '1': {0},        # value '1' appears in row 0
+  #     '2': {1},        # value '2' appears in row 1
+  #     '100': {0, 1},   # value '100' appears in rows 0 and 1
+  #     '200': {0},      # value '200' appears in row 0
+  #     '201': {1}       # value '201' appears in row 1
+  # }
 
-  # number of samples
+  # number of samples (users)
   size = len(data)
+  logger.debug('Stratification target: %s/%s (%s)', int(size * ratio), size,
+               ratio)
 
-  # In order not to compute lengths each time, they are tracked here.
+  # Calculate ratios
+  ratios = [ratio, 1 - ratio]
+  # calculate size of each group (test/control)
   subset_sizes = [r * size for r in ratios]
-  target_subset_sizes = deepcopy(subset_sizes)
+  # calculate how many users with each particular feature value
+  # should go to each group for ideal balance
   per_label_subset_sizes = {
-      c: [r * len(per_label_data[c]) for r in ratios]
-      for c in classes
+      c: [r * len(per_label_data[c]) for r in ratios] for c in classes
   }
+  label_combinations = {}
+  for i, labels in enumerate(data):
+    key = tuple(sorted(labels))
+    label_combinations[key] = label_combinations.get(key, 0) + 1
 
   # For each subset we want, the set of sample-ids which should end up in it
-  stratified_data_ids = [set() for _ in range(len(ratios))]
+  stratified_data_ids = [set(), set()]
 
   # For each sample in the data set
   while size > 0:
-    # Compute |Di|
-    lengths = {
-        l: len(label_data)
-        for l, label_data in per_label_data.items()
-    }
-    try:
-      # Find label of smallest |Di|
-      label = min(
-          {k: v for k, v in lengths.items() if v > 0}, key=lengths.get
-      )
-    except ValueError:
-      # If the dictionary in `min` is empty we get a Value Error.
-      # This can happen if there are unlabeled samples.
-      # In this case, `size` would be > 0 but only samples without label would remain.
-      # "No label" could be a class in itself: it's up to you to format your data accordingly.
-      break
-    current_length = lengths[label]
+    # Find label with fewest remaining samples
+    label = min((l for l, data in per_label_data.items() if data),
+                key=lambda l: len(per_label_data[l]))
 
-    # For each sample with label `label`
+    # Process all samples with this label
     while per_label_data[label]:
-      # Select such a sample
+      # Take one sample
       current_id = per_label_data[label].pop()
-
-      subset_sizes_for_label = per_label_subset_sizes[label]
-      # Find argmax clj i.e. subset in greatest need of the current label
-      largest_subsets = np.argwhere(
-          subset_sizes_for_label == np.amax(subset_sizes_for_label)
-      ).flatten()
-
-      if len(largest_subsets) == 1:
-        subset = largest_subsets[0]
-      # If there is more than one such subset, find the one in greatest need
-      # of any label
+      # Find which subset (test/control) needs this label most -
+      # So it's a two-level decision:
+      #   1. First try to balance specific feature value
+      #   2. If tied, try to balance overall group sizes
+      #   3. If still tied, random choice
+      if per_label_subset_sizes[label][0] > per_label_subset_sizes[label][1]:
+        subset = 0  # test group needs this label more
+      elif per_label_subset_sizes[label][0] < per_label_subset_sizes[label][1]:
+        subset = 1  # control group needs this label more
       else:
-        largest_subsets = np.argwhere(
-            subset_sizes == np.amax(subset_sizes)
-        ).flatten()
-        if len(largest_subsets) == 1:
-          subset = largest_subsets[0]
+        # If tied on this label, check overall group sizes
+        if subset_sizes[0] > subset_sizes[1]:
+          subset = 0  # test group needs more samples
+        elif subset_sizes[0] < subset_sizes[1]:
+          subset = 1  # control group needs more samples
         else:
-          # If there is more than one such subset, choose at random
-          subset = np.random.choice(largest_subsets)
+          # completely tied, choose randomly
+          subset = np.random.choice([0, 1])
 
       # Store the sample's id in the selected subset
       stratified_data_ids[subset].add(current_id)
 
-      # There is one fewer sample to distribute
-      size -= 1
-      # The selected subset needs one fewer sample
-      subset_sizes[subset] -= 1
+      # Update counts
+      size -= 1  # one less sample to assign
+      subset_sizes[subset] -= 1  # chosen group needs one less sample
 
-      # In the selected subset, there is one more example for each label
-      # the current sample has
+      # Update per-label counts for all labels this sample has
       for l in data[current_id]:
         per_label_subset_sizes[l][subset] -= 1
+        # Remove sample from other label sets
+        if current_id in per_label_data[l]:
+          per_label_data[l].remove(current_id)
 
-      # Remove the sample from the dataset, meaning from all per_label dataset created
-      for l, label_data in per_label_data.items():
-        if current_id in label_data:
-          label_data.remove(current_id)
-
-  # Create the stratified dataset as a list of subsets,
-  # each containing the original labels
+  # Sort indices for consistency
   stratified_data_ids = [sorted(strat) for strat in stratified_data_ids]
-  stratified_data = [[data[i] for i in strat] for strat in stratified_data_ids]
 
-  # Return both the stratified indexes, to be used to sample the `features`
-  # associated with your labels. And the stratified labels dataset.
-  return stratified_data_ids, stratified_data
+  # Return the stratified indexes (0 - test users, 1 - control users)
+  return stratified_data_ids
 
 
-def get_diff_columns(train_df,
-                     test_df,
-                     show_plots=True,
-                     show_all=False,
-                     threshold=0.1,
-                     alternative='two-sided',
-                     kde=False):
-  """Use KS to estimate columns where distributions differ a lot from each other"""
+def binsify(df: pd.DataFrame,
+            col: str,
+            percentile: list[float] | None = None) -> list[float]:
+  """Convert continuous values into bins based on percentiles.
 
-  alternative = {'less': 'lt', 'greater': 'gt', 'two-sided': 'neq'}
+  Creates bin edges starting from 0.0 and adding edges at specified percentiles.
+  For example, with default percentiles [0.2, 0.4, 0.6, 0.8], creates 5 bins:
+  - bin 1: values between 0 and 20th percentile
+  - bin 2: values between 20th and 40th percentile
+  - bin 3: values between 40th and 60th percentile
+  - bin 4: values between 60th and 80th percentile
+  - bin 5: values above 80th percentile
 
-  # Find the columns where the distributions are very different
-  all_tests = {}
-  for hypothesis, alias in alternative.items():
-    diff_data = []
-    for col in train_df.columns:
-      statistic, pvalue = stats.ks_2samp(
-          train_df[col].values,
-          test_df[col].values,
-          alternative=hypothesis
-      )
-      #if pvalue <= 0.05 and np.abs(statistic) >= threshold:
-      diff_data.append({'feature': col,
-                        'p_' + alias: np.round(pvalue, 5),
-                        'statistic_' + alias: np.round(np.abs(statistic), 3)
-                       })
-    all_tests[hypothesis] = diff_data
+  Args:
+    df: DataFrame containing the column to bin.
+    col: Name of the column to bin.
+    percentile: List of percentile points (between 0 and 1) for bin edges.
 
-  # Put the differences into a dataframe
-  all_dfs = []
-  for _, diff_data in all_tests.items():
-    diff_df = pd.DataFrame(diff_data)
-    #diff_df.sort_values(by='statistic', ascending=False, inplace=True)
-    all_dfs.append(diff_df)
-
-  df = all_dfs[0]
-
-  for i in range(len(all_dfs)-1):
-    tmp_df = all_dfs[i+1]
-    df = df.merge(tmp_df, how='left', on= 'feature')
-
-  diff_df = df
-  #print(diff_df.columns)
-
-  if show_plots:
-    # Let us see the distributions of these columns to confirm they are indeed different
-    n_cols = 3
-    if show_all:
-      n_rows = int(len(diff_df) / 3)
-    else:
-      n_rows = 2
-    _, axes = plt.subplots(n_rows, n_cols, figsize=(30, 3*n_rows))
-    axes = [x for l in axes for x in l]
-
-    # Create plots
-    for i, (_, row) in enumerate(diff_df.iterrows()):
-      if i >= len(axes):
-        break
-      if not kde:
-        extreme = np.max(np.abs(train_df[row.feature].tolist() + test_df[row.feature].tolist()))
-        train_df.loc[:, row.feature].hist(
-            ax=axes[i], alpha=0.5, label='Train', density=True,
-            bins=np.arange(0, extreme, 0.05)
-        )
-        test_df.loc[:, row.feature].hist(
-            ax=axes[i], alpha=0.5, label='Test', density=True,
-            bins=np.arange(0, extreme, 0.05)
-        )
-        axes[i].legend()
-      else:
-        sns.distplot(train_df.loc[:, row.feature], label='Train',
-                     hist=False, kde=True, norm_hist=True, ax=axes[i])
-        sns.distplot(test_df.loc[:, row.feature], label='Test',
-                     hist=False, kde=True, norm_hist=True, ax=axes[i])
-        axes[i].legend()
-
-      axes[i].set_title('Two-Sided Test: Statistic = {}, p = {}'.format(row.statistic_neq, row.p_neq))
-      axes[i].set_xlabel('{}'.format(row.feature))
-
-
-    plt.tight_layout()
-    plt.legend()
-    plt.show()
-
-  return diff_df
-
-
-def binsify(df: pd.DataFrame, col: str, percentile=[0.2, 0.4, 0.6, 0.8]):
+  Returns:
+    List of bin edges starting with 0.0.
+  """
+  if not percentile:
+    percentile = [0.2, 0.4, 0.6, 0.8]
   bins = [0.0]
   p = sorted(list(set(np.quantile(df[col].values, percentile))))
   bins.extend(p)
   return bins
 
 
-def offset_features(df: pd.DataFrame, cat_features: list[str]):
-  SHIFT = max(df.days_since_install.max(),
-              df.num_sessions_bins.max())  # UPDATE FEATURES
+def offset_features(df: pd.DataFrame, cat_features: list[str],
+                    numeric_features: list[str]):
+  """Offset categorical features to ensure no overlap in encoded values.
+
+  Args:
+    df: DataFrame with encoded categorical features.
+    cat_features: List of categorical column names.
+    numeric_features: List of numeric columns to consider for initial shift.
+
+  Returns:
+    Same DataFrame as input 'df'.
+  """
+  # Get initial shift from max value in base numeric columns
+  offset = max(df[numeric_features].max().max(), 0)
+  # Offset each categorical feature
   for f in cat_features:
-    offset = len(df[f].unique())
-    df[f] = df[f].apply(lambda x: x + SHIFT)
-    SHIFT += offset
+    delta = len(df[f].unique())
+    df[f] = df[f].apply(lambda x: x + offset)
+    offset += delta
   return df
 
 
-def countClasses(df):
-  n = []
-  for c in ['num_sessions_bins', 'days_since_install', 'brand', 'src', 'osv']:
-    n = n + list(df[c].unique())
-  return n
+def get_unique_values(df: pd.DataFrame,
+                      stratify_features: list[str]) -> list[str]:
+  """Collect all unique values across features used for stratification.
+
+  Args:
+    df: DataFrame with encoded and processed features.
+    stratify_features: List of feature names to collect values from.
+
+  Returns:
+    List of all unique values found across specified features.
+  """
+  values = []
+  for col in stratify_features:
+    unique_vals = df[col].astype(str).unique()
+    values.extend(unique_vals)
+  return values
 
 
-def pred_data_for_test(df: pd.DataFrame, test_ids: list[str], test_frac):
-  #df['ab_group'] = ['control' for x in range(df.shape[0])]
-  #df.loc[test_ids, ['ab_group']] = 'test'
-  #ts = int(dt.datetime.now().timestamp() * 1000000)
-  #df['ts'] = [ts for x in range(df.shape[0])]
+def split_via_stratification(df: pd.DataFrame,
+                             split_ratio: float = 0.5) -> SplittingResult:
+  """Split users using stratified sampling.
 
-  users_test = df.loc[test_ids, ['user']]
-  users_control = df.loc[~df['user'].isin(test_ids)]
+  Split users while maintaining similar distributions of multiple features
+  across test and control groups.
 
-  #ab_group = df[['user', 'ab_group', 'ts']]
+  Args:
+    df: A DataFrame with users.
+    split_ratio: A ratio of test and control groups.
 
-  #customer_match.rename(columns={'user':'Mobile Device ID'}, inplace=True)
-  #print('pred_data_for_test::', customer_match)
-
-  #return users_test, ab_group, test_frac
-  return users_test, users_control
-
-
-def process_df(df: pd.DataFrame, split_ratio: float, max_test_share=30):
-
-  bins = binsify(df, 'n_sessions')
-  df['num_sessions_bins'] = np.searchsorted(bins, df['n_sessions'].values)
-
-  # encode original DF: all categorical columns will be encoded as integers
-  encoded, cat_f = makeEncoding(df, exclude_cols=['user'], all_cols=df.columns)
-  encoded = offset_features(encoded, cat_f)
-
-  all_classes = countClasses(encoded)
-  cols = df.drop(columns=['user', 'n_sessions']).columns
-  encoded['labels'] = encoded.apply(lambda x: list(map(str, [x[c] for c in cols])), axis =1)
+  Returns:
+    SplittingResult with test and control users,
+    and metrics and distributions to assess the split quality.
+  """
+  # we tolerate duplicates in the input DF
+  original_len = len(df)
+  df = df.drop_duplicates(subset=['user'], keep='last')
+  dedup_len = len(df)
+  if dedup_len != original_len:
+    logger.parent.warning(
+        'Dataset passed to stratification contained %s duplicating rows',
+        original_len - dedup_len)
 
   if not split_ratio:
     split_ratio = 0.5
-  encoded_ids, encoded_data = stratify(data=encoded.labels.values, classes=list(map(str,all_classes)), ratios=[split_ratio, 1 - split_ratio], one_hot=False)
 
-  # for i in range(max_test_share):
-  #   logger.debug(f'fraction test: {i}')
-  #   frac_test += (i+1) / 100
-  #   new_encoded_ids, new_encoded_data = stratify(data=encoded.labels.values, classes=list(map(str,all_classes)), ratios=[frac_test, 1 - frac_test], one_hot=False)
-  #   test = encoded.loc[new_encoded_ids[0], cols]
-  #   control = encoded.loc[new_encoded_ids[1], cols]
-  #   stat_df = get_diff_columns(test, control, show_all = False, kde=True, show_plots=False)
-  #   p_val = (sum(stat_df['p_gt'].values < .1) + sum(stat_df['p_lt'].values < .1) + sum(stat_df['p_neq'].values < .1))
-  #   if p_val > 0:
-  #     logger.debug(f'P-val sum of 3: {p_val}')
-  #     break
-  #   encoded_ids, encoded_data = new_encoded_ids, new_encoded_data
+  # Define features we'll never use for stratification
+  exclude_cols = ['user']
+
+  # Special feature that needs binning
+  binning_cols = ['n_sessions', 'days_since_install']
+
+  # Automatically detect numeric and categorical features
+  numeric_features = df.drop(columns=exclude_cols + binning_cols).select_dtypes(
+      include=['int64', 'float64']).columns.tolist()
+  cat_features = df.drop(columns=exclude_cols + binning_cols).select_dtypes(
+      include=['object', 'category']).columns.tolist()
+
+  # do binning
+  for col in binning_cols:
+    bins = binsify(df, col)
+    df[f'{col}_bins'] = np.searchsorted(bins, df[col].values)
+    numeric_features.append(f'{col}_bins')
+
+  logger.debug('Detected numeric features: %s', numeric_features)
+  logger.debug('Detected categorical features: %s', cat_features)
+
+  # encode original DF: all categorical columns will be encoded as integers
+  encoded, cat_features = make_encoding(
+      df, exclude_cols=exclude_cols, all_cols=df.columns)
+
+  encoded = offset_features(encoded, cat_features, numeric_features)
+  # Define all features we want to stratify on
+  # e.g. ['num_sessions_bins', 'days_since_install_bins', 'brand','src', 'osv']
+  stratify_features = numeric_features + cat_features
+  unique_values = get_unique_values(encoded, stratify_features)
+  cols = df.drop(columns=['user', 'n_sessions', 'days_since_install']).columns
+  # creates a new 'labels' column where each row contains a list of
+  # all feature values for that row, converted to strings
+  encoded['labels'] = encoded.apply(
+      lambda x: list(map(str, [x[c] for c in cols])), axis=1)
+
+  encoded_ids = stratify(
+      data=encoded.labels.values,
+      classes=list(map(str, unique_values)),
+      ratio=split_ratio)
 
   # split DF onto two DF with test and control users
   test_ids = encoded_ids[0]
   users_test = encoded.loc[test_ids, ['user']]
   users_control = encoded.loc[~(encoded['user'].isin(users_test['user'])),
                               ['user']]
+  logger.debug('Test group size: %s, control group size: %s', len(users_test),
+               len(users_control))
 
-  return users_test, users_control, split_ratio
+  # Calculate validation metrics
+  metrics = get_split_metrics(
+      df,
+      users_test,
+      users_control,
+      numeric_features=numeric_features,
+      categorical_features=cat_features)
+
+  # Get distribution data
+  distributions = prepare_distribution_data(df, users_test, users_control,
+                                            numeric_features, cat_features)
+
+  logger.debug(metrics)
+
+  return SplittingResult(
+      users_test=users_test,
+      users_control=users_control,
+      metrics=metrics,
+      distributions=distributions)
 
 
-def split_via_stratification(df: pd.DataFrame, split_ratio: float = 0.5):
-  users_test, users_control, split_ratio = process_df(
-      df, split_ratio=split_ratio)
-  # frac_test - integer, test group split ratio
-  # (the fraction of users in the test group of the total number of the users)
-  user_count = df.shape[0]
-  user_count_test = users_test.shape[0]
-  user_count_control = users_control.shape[0]
-  logger.info(
-      'Data sampling completed ('
-      'user count: %s, test count: %s, control count: %s, test split_ratio: %s)',
-      user_count, user_count_test, user_count_control, split_ratio)
+def get_split_metrics(
+    df: pd.DataFrame, users_test: pd.DataFrame, users_control: pd.DataFrame,
+    numeric_features: list[str],
+    categorical_features: list[str]) -> dict[str, FeatureMetrics]:
+  """Calculate metrics comparing test and control group distributions.
 
-  return users_test, users_control
+  Uses chi-square test for categorical features and calculates mean/std ratios
+  for numeric features to validate quality of the split.
+
+  Args:
+    df: Original DataFrame with all users.
+    users_test: DataFrame with test group user IDs.
+    users_control: DataFrame with control group user IDs.
+    numeric_features: List of numeric column names to compare.
+    categorical_features: List of categorical column names to compare.
+
+  Returns:
+    dict: Metrics for each feature containing:
+      For categorical features:
+        - p_value: Chi-square test p-value
+        - js_divergence: Jensen-Shannon divergence between distributions
+        - warnings: Dict of warnings if distributions differ significantly
+      For numeric features:
+        - mean_ratio: Ratio of test/control means
+        - std_ratio: Ratio of test/control standard deviations
+        - warnings: Dict of warnings if ratios exceed thresholds
+  """
+  test_df = df[df['user'].isin(users_test['user'])]
+  control_df = df[df['user'].isin(users_control['user'])]
+
+  metrics = {}
+
+  # For numeric features - compare means and standard deviations
+  for feat in numeric_features:
+    warnings = {}
+    feat_metrics = FeatureMetrics()
+    metrics[feat] = feat_metrics
+
+    # mean and std deviations
+    mean_ratio = test_df[feat].mean() / control_df[feat].mean()
+    std_ratio = test_df[feat].std() / control_df[feat].std()
+    feat_metrics.mean_ratio = mean_ratio
+    feat_metrics.std_ratio = std_ratio
+
+    # The Kolmogorov-Smirnov (KS) test is a statistical test that
+    # determines if two samples come from the same distribution
+    statistic, p_neq = stats.ks_2samp(
+        test_df[feat], control_df[feat], alternative='two-sided')
+    _, p_gt = stats.ks_2samp(
+        test_df[feat], control_df[feat], alternative='greater')
+    _, p_lt = stats.ks_2samp(
+        test_df[feat], control_df[feat], alternative='less')
+
+    feat_metrics.ks_statistic = statistic
+    feat_metrics.ks_pvalue_neq = p_neq
+    feat_metrics.ks_pvalue_gt = p_gt
+    feat_metrics.ks_pvalue_lt = p_lt
+
+    # Warning if mean differs by more than 10%
+    if pd.notnull(mean_ratio) and abs(mean_ratio - 1) > 0.1:
+      warnings['mean_ratio'] = f'Mean differs by {abs(mean_ratio-1)*100:.1f}%'
+    # Warning if std differs by more than 20%
+    if pd.notnull(std_ratio) and abs(std_ratio - 1) > 0.2:
+      warnings['std_ratio'] = (
+          f'Standard deviation differs by {abs(std_ratio-1)*100:.1f}%')
+    if p_neq < 0.05:
+      warnings['ks_test'] = (
+          f'Significantly different distributions (KS p={p_neq:.3f})')
+
+    if warnings:
+      feat_metrics.warnings = warnings
+
+  # For categorical features - compare value distributions
+  for feat in categorical_features:
+    warnings = {}
+    feat_metrics = FeatureMetrics()
+    metrics[feat] = feat_metrics
+
+    # Get distributions including nulls (nulls will be counted as a category)
+    test_dist = test_df[feat].value_counts(dropna=False)
+    control_dist = control_df[feat].value_counts(dropna=False)
+
+    # Ensure both distributions have same categories
+    categories = set(test_dist.index) | set(control_dist.index)
+    test_aligned = pd.Series(0, index=categories)
+    control_aligned = pd.Series(0, index=categories)
+    test_aligned[test_dist.index] = test_dist
+    control_aligned[control_dist.index] = control_dist
+
+    # Calculate chi-square test with raw counts
+    try:
+      # Chi-square test on raw counts
+      chi2, p_value = stats.chisquare(test_aligned, control_aligned)
+      feat_metrics.p_value = p_value
+      if p_value < 0.05:
+        warnings[
+            'p_value'] = f'Significantly different distributions {p_value:.3f}'
+    except BaseException as e:
+      feat_metrics.p_value = None
+      warnings['p_value'] = 'Unable to compare distributions: ' + str(e)
+
+    # Jensen-Shannon divergence (similarity measure)
+    # js_div = stats.entropy(test_dist, control_dist)
+    # feat_metrics['js_divergence'] = js_div
+    # if js_div > 0.1:
+    #   warnings['js_divergence'] = f'High JS divergence: {js_div:.3f}'
+    try:
+      # JS divergence needs probability distributions
+      test_prop = test_aligned / test_aligned.sum()
+      control_prop = control_aligned / control_aligned.sum()
+      js_div = stats.entropy(test_prop, control_prop)
+      feat_metrics.js_divergence = js_div
+      if js_div > 0.1:
+        warnings['js_divergence'] = f'High JS divergence: {js_div:.3f}'
+    except BaseException as e:
+      feat_metrics.js_divergence = None
+      warnings['js_divergence'] = 'Unable to calculate JS divergence: ' + str(e)
+
+    if warnings:
+      feat_metrics.warnings = warnings
+
+  return metrics
+
+
+def prepare_distribution_data(
+    df: pd.DataFrame, users_test: pd.DataFrame, users_control: pd.DataFrame,
+    numeric_features: list[str],
+    categorical_features: list[str]) -> list[DistributionData]:
+  """Prepare feature distribution data for visualization and analysis.
+
+  Args:
+    df: Original DataFrame with all users.
+    users_test: DataFrame with test group user IDs.
+    users_control: DataFrame with control group user IDs.
+    numeric_features: List of numeric column names to compare.
+    categorical_features: List of categorical column names to compare.
+
+  Returns:
+    List of DistributionData per feature containing:
+      feature_name: Name of the feature.
+      is_numeric: Whether feature is numeric or categorical.
+      categories: Category names for categorical or bin centers for numeric.
+      bin_edges: Bin edges for numeric features (None for categorical).
+      test_distribution: Distribution of values in test group (proportions).
+      control_distribution: Distribution of values in control group.
+  """
+  test_df = df[df['user'].isin(users_test['user'])]
+  control_df = df[df['user'].isin(users_control['user'])]
+
+  distributions = []
+
+  # For numeric features
+  for feat in numeric_features:
+    # Calculate histogram bins
+    all_values = df[feat].values
+    min_val = all_values.min()
+    max_val = all_values.max()
+    n_bins = 30
+    bin_edges = np.linspace(min_val, max_val, n_bins + 1)
+    bin_centers = [(bin_edges[i] + bin_edges[i + 1]) / 2
+                   for i in range(len(bin_edges) - 1)]
+
+    # Calculate distributions
+    test_hist, _ = np.histogram(test_df[feat], bins=bin_edges, density=True)
+    control_hist, _ = np.histogram(
+        control_df[feat], bins=bin_edges, density=True)
+
+    distributions.append(
+        DistributionData(
+            feature_name=feat,
+            is_numeric=True,
+            categories=bin_centers,
+            bin_edges=bin_edges.tolist(),
+            test_distribution=test_hist.tolist(),
+            control_distribution=control_hist.tolist()))
+
+  # For categorical features
+  for feat in categorical_features:
+    test_dist = test_df[feat].value_counts(normalize=True)
+    control_dist = control_df[feat].value_counts(normalize=True)
+
+    # Get all categories
+    all_categories = sorted(set(test_dist.index) | set(control_dist.index))
+
+    distributions.append(
+        DistributionData(
+            feature_name=feat,
+            is_numeric=False,
+            categories=all_categories,
+            bin_edges=[],
+            test_distribution=[test_dist.get(cat, 0) for cat in all_categories],
+            control_distribution=[
+                control_dist.get(cat, 0) for cat in all_categories
+            ]))
+
+  return distributions
 
 
 def poisson_rate_test(event_count_test: int, event_count_control: int,
