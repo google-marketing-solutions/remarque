@@ -49,17 +49,48 @@ datetime = datetime.datetime
 
 
 class JsonEncoder(json.JSONEncoder):
-  """A custom JSON encoder to support serialization of Audience objects"""
+  """A custom JSON encoder to support serialization of Audience objects."""
   flask_default: Callable[[Any], Any]
 
+  def __init__(self, *args, **kwargs):
+    super().__init__(*args, **kwargs)
+    self.flask_default = DefaultJSONProvider.default
+
   def default(self, o):
+    # Handle numpy types first
+    if isinstance(o, np.floating):
+      if np.isfinite(o):
+        return float(o)
+      if np.isinf(o):
+        return 'Infinity' if o > 0 else '-Infinity'
+      if np.isnan(o):
+        return 'NaN'
+
+    # Handle regular Python floats
+    if isinstance(o, float):
+      if math.isinf(o):
+        return 'Infinity' if o > 0 else '-Infinity'
+      if math.isnan(o):
+        return 'NaN'
+
+    # Handle numpy arrays
+    if isinstance(o, np.ndarray):
+      return o.tolist()
+
+    if isinstance(o, (models.FeatureMetrics, models.DistributionData)):
+      # Convert to dict and recursively handle numpy values
+      return {
+          k: self.default(v) if isinstance(v, (np.floating, np.ndarray)) else v
+          for k, v in o.__dict__.items()
+      }
+
     if isinstance(o, models.Audience):
       return o.to_dict()
-    return JsonEncoder.flask_default(o)
+    return self.flask_default(o)
 
 
 class JSONProvider(DefaultJSONProvider):
-  """A JSON provider to replace JsonEncoder used by Flask"""
+  """A JSON provider to replace JsonEncoder used by Flask."""
 
   def dumps(self, obj: Any, **kwargs: Any) -> str:
     """Serialize data as JSON to a string.
@@ -71,7 +102,6 @@ class JSONProvider(DefaultJSONProvider):
     :param obj: The data to serialize.
     :param kwargs: Passed to :func:`json.dumps`.
     """
-    JsonEncoder.flask_default = DefaultJSONProvider.default
     kwargs.setdefault('cls', JsonEncoder)
     kwargs.setdefault('default', None)
     return DefaultJSONProvider.dumps(self, obj, **kwargs)
@@ -511,12 +541,22 @@ def get_power_analysis():
 
 @app.route('/api/process', methods=['POST'])
 def process():
-  # it's a method for automated execution (via Cloud Scheduler)
+  """Process all or specified audiences.
+
+  Also used for background processing via Cloud Scheduler.
+
+  Returns:
+    dict with `result` field containing a dict keyed by audience name and
+    values as AudienceLog extended with 'metrics' and 'distributions' from
+    SplittingResult.
+  """
   context = create_context(create_ads=True)
   params: dict = request.get_json(force=True)
   audience_name = request.args.get('audience') or params.get('audience')
   mode = request.args.get('mode') or params.get('mode')
   skip_upload = request.args.get('skip_upload') or params.get('skip_upload')
+  include_distributions = request.args.get(
+      'include_distributions') or params.get('include_distributions')
 
   if not context.target:
     # pylint: disable=broad-exception-raised
@@ -553,18 +593,29 @@ def process():
       continue
     if audience_name and audience.name != audience_name:
       continue
-    users_test, users_control = run_sampling_for_audience(context, audience)
+    users_test, users_control, split_result = run_sampling_for_audience(
+        context, audience)
     if skip_upload:
       result[audience.name] = {
-          'test_user_count': len(users_test),
-          'control_user_count': len(users_control),
+          'test_user_count':
+              len(users_test),
+          'control_user_count':
+              len(users_control),
+          'new_test_user_count':
+              len(split_result.users_test) if split_result else 0,
+          'new_control_user_count':
+              len(split_result.users_control) if split_result else 0
       }
     else:
       audience_log = audiences_log.get(audience.name, None)
       log_item = upload_customer_match_audience(context, audience, audience_log,
                                                 users_test)
-    log.append(log_item)
-    result[audience.name] = log_item.to_dict()
+      log.append(log_item)
+      result[audience.name] = log_item.to_dict()
+    if split_result:
+      result[audience.name]['metrics'] = split_result.metrics
+      if include_distributions:
+        result[audience.name]['distributions'] = split_result.distributions
 
   if log:
     context.data_gateway.update_audiences_log(context.target, log)
@@ -572,6 +623,7 @@ def process():
   elapsed: timedelta = datetime.now() - ts_start
   if not skip_upload and not audience_name:
     send_success_notification(context, log, elapsed)
+
   return jsonify({'result': result})
 
 

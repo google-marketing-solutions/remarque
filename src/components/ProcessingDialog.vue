@@ -1,7 +1,7 @@
 <template>
   <q-dialog
     v-model="show"
-    :persistent="isProcessing && !isCancelled"
+    :persistent="isProcessing && !isStopped"
     :maximized="false"
     transition-show="scale"
     transition-hide="scale"
@@ -16,7 +16,7 @@
           round
           dense
           v-close-popup
-          :disable="isProcessing && !isCancelled"
+          :disable="isProcessing && !isStopped"
         />
       </q-card-section>
       <q-card-section>
@@ -91,12 +91,30 @@
                   {{ getResult(audience.name) }}
                 </template>
                 <template v-else>
-                  Test users: {{ getResult(audience.name).test_user_count
-                  }}<br />
-                  Control users: {{ getResult(audience.name).control_user_count
-                  }}<br />
-                  Uploaded users:
-                  {{ getResult(audience.name).uploaded_user_count }}
+                  <div>
+                    Test users: {{ formatResult(audience.name, 'test') }} <br />
+                    Control users: {{ formatResult(audience.name, 'control')
+                    }}<br />
+                    Uploaded users:
+                    {{ getResult(audience.name)!.uploaded_user_count }}
+                  </div>
+                  <div class="q-mt-sm" v-if="getResult(audience.name)!.metrics">
+                    <q-btn
+                      flat
+                      dense
+                      color="primary"
+                      label="Metrics"
+                      @click="showMetrics(audience.name)"
+                    />
+                    <q-btn
+                      flat
+                      dense
+                      color="primary"
+                      label="Distributions"
+                      @click="showDistributions(audience.name)"
+                      class="q-ml-sm"
+                    />
+                  </div>
                 </template>
               </q-item-label>
             </q-item-section>
@@ -149,32 +167,100 @@
         <q-btn
           v-if="isProcessing"
           flat
+          label="Stop"
+          color="primary"
+          @click="handleStop"
+          :disable="isStopped"
+        />
+        <q-btn
+          v-if="isProcessing"
+          flat
           label="Cancel"
           color="primary"
           @click="handleCancel"
-          :disable="isCancelled"
         />
         <q-btn
           flat
           label="Close"
           color="primary"
           @click="handleClose"
-          :disable="isProcessing && !isCancelled"
+          :disable="isProcessing && !isStopped"
         />
       </q-card-actions>
     </q-card>
   </q-dialog>
+
+  <!-- Metrics Dialog -->
+  <q-dialog v-model="showMetricsDialog">
+    <q-card style="width: 90vw; max-width: 1200px">
+      <q-card-section class="row items-center">
+        <div class="text-h6">Split Metrics</div>
+        <q-space />
+        <q-btn icon="close" flat round dense v-close-popup />
+      </q-card-section>
+
+      <q-card-section class="q-pa-none">
+        <q-table
+          :rows="metricsRows"
+          :columns="metricsColumns"
+          row-key="feature"
+          class="full-width"
+          :pagination="{ rowsPerPage: 0 }"
+        >
+          <template v-slot:body-cell-warnings="props">
+            <q-td :props="props">
+              <template v-if="props.row.warnings">
+                <div
+                  v-for="warning in props.row.warnings"
+                  :key="warning"
+                  class="text-negative"
+                >
+                  {{ warning }}
+                </div>
+              </template>
+            </q-td>
+          </template>
+        </q-table>
+      </q-card-section>
+    </q-card>
+  </q-dialog>
+
+  <!-- Distributions Dialog -->
+  <q-dialog v-model="showDistributionsDialog" maximized>
+    <q-card>
+      <q-card-section class="row items-center">
+        <div class="text-h6">Feature Distributions</div>
+        <q-space />
+        <q-btn icon="close" flat round dense v-close-popup />
+      </q-card-section>
+
+      <q-card-section class="row q-col-gutter-md">
+        <template
+          v-for="dist in selectedDistributions"
+          :key="dist.feature_name"
+        >
+          <div
+            class="col-12"
+            :class="dist.is_numeric ? 'col-md-6' : 'col-md-12'"
+          >
+            <q-card>
+              <q-card-section>
+                <apexchart
+                  height="350"
+                  :options="getDistributionChartOptions(dist)"
+                  :series="getDistributionChartSeries(dist)"
+                />
+              </q-card-section>
+            </q-card>
+          </div>
+        </template>
+      </q-card-section>
+    </q-card>
+  </q-dialog>
 </template>
 
-<script lang="ts">
-import {
-  defineComponent,
-  ref,
-  onBeforeUnmount,
-  PropType,
-  watch,
-  computed,
-} from 'vue';
+<script setup lang="ts">
+import { ref, onBeforeUnmount, watch, computed } from 'vue';
 import { AudienceMode, AudienceWithLog } from 'stores/audiences';
 import { AudienceProcessResult, AudiencesProcessResponse } from 'src/boot/api';
 import { postApi } from 'src/boot/axios';
@@ -191,6 +277,7 @@ export interface ProcessingStatus {
   startTime?: number; // timestamp when processing started
   endTime?: number; // timestamp when processing ended
   duration?: number; // duration in milliseconds
+  abortController?: AbortController;
 }
 
 enum ProcessMode {
@@ -198,236 +285,457 @@ enum ProcessMode {
   OnlySampling,
   OnlyUploading,
 }
-export default defineComponent({
-  name: 'ProcessingDialog',
 
-  props: {
-    modelValue: {
-      type: Boolean,
-      required: true,
-    },
-    audiences: {
-      type: Array as PropType<AudienceWithLog[]>,
-      required: true,
-    },
+interface Props {
+  modelValue: boolean;
+  audiences: AudienceWithLog[];
+}
+const props = defineProps<Props>();
+
+const emit = defineEmits<{
+  (e: 'update:modelValue', show: boolean): void;
+}>();
+
+interface Distributions {
+  bin_edges: number[];
+  categories: (string | number)[];
+  control_distribution: number[];
+  feature_name: string;
+  is_numeric: boolean;
+  test_distribution: number[];
+}
+const processingStatus = ref<Record<string, ProcessingStatus>>({});
+const isProcessing = ref(false);
+const isStopped = ref(false);
+const show = ref(props.modelValue);
+const audienceModes = ref<Record<string, AudienceMode>>({});
+const timer = ref<number | null>(null); // for setInterval
+const processMode = ref<ProcessMode>(ProcessMode.Default);
+const showMetricsDialog = ref(false);
+const showDistributionsDialog = ref(false);
+const selectedMetrics = ref<Map<string, Record<string, string>> | null>(null);
+const selectedDistributions = ref<Distributions[]>([]);
+
+const metricsColumns = [
+  {
+    name: 'feature',
+    label: 'Feature',
+    field: 'feature',
+    align: 'left',
   },
-
-  emits: ['update:modelValue'],
-
-  setup(props, { emit }) {
-    const processingStatus = ref<Record<string, ProcessingStatus>>({});
-    const isProcessing = ref(false);
-    const isCancelled = ref(false);
-    const show = ref(props.modelValue);
-    const audienceModes = ref<Record<string, AudienceMode>>({});
-    const timer = ref<number | null>(null); // for setInterval
-    const processMode = ref<ProcessMode>(ProcessMode.Default);
-
-    // Sync show with v-model
-    watch(
-      () => props.modelValue,
-      (val) => {
-        show.value = val;
-      },
-    );
-    watch(
-      () => show.value,
-      (val) => {
-        emit('update:modelValue', val);
-      },
-    );
-
-    watch(
-      () => show.value,
-      (newVal) => {
-        if (newVal) {
-          initializeModes();
-        }
-      },
-    );
-
-    onBeforeUnmount(() => {
-      stopTimer();
-    });
-
-    const initializeModes = () => {
-      audienceModes.value = props.audiences.reduce(
-        (acc, audience) => {
-          acc[audience.name] = audience.mode;
-          return acc;
-        },
-        {} as Record<string, AudienceMode>,
-      );
-    };
-
-    const hasEnabledAudiences = computed(() => {
-      return Object.values(audienceModes.value).some((mode) => mode !== 'off');
-    });
-
-    const updateAudienceMode = (audienceName: string, mode: AudienceMode) => {
-      audienceModes.value[audienceName] = mode;
-    };
-
-    const startProcessing = () => {
-      isProcessing.value = true;
-      isCancelled.value = false;
-      processingStatus.value = props.audiences.reduce(
-        (acc, audience) => {
-          if (audienceModes.value[audience.name] !== 'off') {
-            acc[audience.name] = { status: 'pending', result: null };
-          } else {
-            acc[audience.name] = { status: 'skipped', result: null };
-          }
-          return acc;
-        },
-        {} as Record<string, ProcessingStatus>,
-      );
-
-      processAudiences();
-    };
-
-    const processAudiences = async () => {
-      startTimer();
-      for (const audience of props.audiences) {
-        if (audienceModes.value[audience.name] === 'off') {
-          continue;
-        }
-        if (isCancelled.value) {
-          Object.keys(processingStatus.value).forEach((name) => {
-            if (processingStatus.value[name].status === 'pending') {
-              processingStatus.value[name] = {
-                status: 'cancelled',
-                result: null,
-                duration: 0,
-              };
-            }
-          });
-          break;
-        }
-
-        const startTime = Date.now();
-        processingStatus.value[audience.name] = {
-          status: 'processing',
-          result: null,
-          startTime: startTime,
-          duration: 0,
-        };
-
-        try {
-          const result = await postApi<AudiencesProcessResponse>(
-            processMode.value === ProcessMode.OnlyUploading
-              ? 'ads/upload'
-              : 'process',
-            {
-              audience: audience.name,
-              mode: audienceModes.value[audience.name],
-              skip_upload:
-                processMode.value === ProcessMode.OnlySampling
-                  ? true
-                  : undefined,
-            },
-          );
-          const endTime = Date.now();
-          const duration = endTime - startTime;
-
-          processingStatus.value[audience.name] = {
-            status: 'completed',
-            result: result.data.result[audience.name],
-            endTime,
-            duration,
-          };
-        } catch (error) {
-          const endTime = Date.now();
-          const duration = endTime - startTime;
-
-          processingStatus.value[audience.name] = {
-            status: 'failed',
-            result:
-              error instanceof Error ? error.message : 'Processing failed',
-            endTime,
-            duration,
-          };
-        }
-      }
-      stopTimer();
-      isProcessing.value = false;
-    };
-
-    const handleCancel = () => {
-      isCancelled.value = true;
-    };
-
-    const handleClose = () => {
-      if (
-        !isProcessing.value ||
-        window.confirm('Are you sure you want to close while processing?')
-      ) {
-        show.value = false;
-      }
-    };
-
-    const getStatus = (audienceName: string): string => {
-      return processingStatus.value[audienceName]?.status;
-    };
-
-    const formatDuration = (ms: number) => {
-      const seconds = Math.floor(ms / 1000);
-      const minutes = Math.floor(seconds / 60);
-      const remainingSeconds = seconds % 60;
-      return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-    };
-
-    const getCurrentDuration = (audienceName: string) => {
-      const status = processingStatus.value[audienceName];
-      if (status?.duration) {
-        return formatDuration(status.duration);
-      }
-      return '';
-    };
-
-    const getResult = (audienceName: string): any => {
-      return processingStatus.value[audienceName]?.result || null;
-    };
-
-    const capitalize = (str: string): string => {
-      return str ? str.charAt(0).toUpperCase() + str.slice(1) : '';
-    };
-
-    const startTimer = () => {
-      timer.value = window.setInterval(() => {
-        Object.keys(processingStatus.value).forEach((name) => {
-          const status = processingStatus.value[name];
-          if (status.status === 'processing' && status.startTime) {
-            status.duration = Date.now() - status.startTime;
-          }
-        });
-      }, 1000);
-    };
-
-    const stopTimer = () => {
-      if (timer.value) {
-        clearInterval(timer.value);
-        timer.value = null;
-      }
-    };
-
-    return {
-      show,
-      processMode,
-      ProcessMode,
-      isProcessing,
-      isCancelled,
-      audienceModes,
-      hasEnabledAudiences,
-      startProcessing,
-      updateAudienceMode,
-      handleCancel,
-      handleClose,
-      getStatus,
-      getCurrentDuration,
-      getResult,
-      capitalize,
-    };
+  {
+    name: 'mean_ratio',
+    label: 'Mean Ratio',
+    field: 'mean_ratio',
+    format: (val: number | null) => (val ? (val * 100).toFixed(1) + '%' : '-'),
   },
+  {
+    name: 'std_ratio',
+    label: 'Std Ratio',
+    field: 'std_ratio',
+    format: (val: number | null) => (val ? (val * 100).toFixed(1) + '%' : '-'),
+  },
+  {
+    name: 'ks_statistic',
+    label: 'KS Statistic',
+    field: 'ks_statistic',
+    format: (val: number | null) => val?.toFixed(3) ?? '-',
+  },
+  {
+    name: 'p_value',
+    label: 'P-Value',
+    field: 'p_value',
+    format: (val: number | string | null) =>
+      typeof val === 'number' ? val.toFixed(3) : (val ?? '-'),
+  },
+  {
+    name: 'warnings',
+    label: 'Warnings',
+    field: 'warnings',
+  },
+];
+
+const metricsRows = computed(() => {
+  if (!selectedMetrics.value) return [];
+
+  return Object.entries(selectedMetrics.value).map(([feature, metrics]) => ({
+    feature,
+    ...metrics,
+    warnings: metrics.warnings ? Object.values(metrics.warnings) : null,
+  }));
 });
+
+const showMetrics = (audienceName: string) => {
+  const result = getResult(audienceName);
+  if (result?.metrics) {
+    selectedMetrics.value = result.metrics;
+    showMetricsDialog.value = true;
+  }
+};
+
+const showDistributions = (audienceName: string) => {
+  const result = getResult(audienceName);
+  if (result?.distributions) {
+    selectedDistributions.value = result.distributions;
+    showDistributionsDialog.value = true;
+  }
+};
+
+const getDistributionChartOptions = (dist: Distributions) => {
+  if (dist.is_numeric) {
+    // For numeric features - line chart for histogram
+    return {
+      chart: {
+        type: 'line',
+        zoom: { enabled: false },
+      },
+      stroke: {
+        curve: 'stepline',
+      },
+      title: {
+        text: dist.feature_name,
+        align: 'left',
+      },
+      xaxis: {
+        type: 'numeric',
+        labels: {
+          formatter: (val: number) => val.toFixed(1),
+        },
+        title: {
+          text: 'Value',
+        },
+      },
+      yaxis: {
+        labels: {
+          formatter: (val: number) => val.toFixed(3),
+        },
+        title: {
+          text: 'Density',
+        },
+      },
+      tooltip: {
+        x: {
+          formatter: (val: number) => val.toFixed(1),
+        },
+        y: {
+          formatter: (val: number) => val.toFixed(3),
+        },
+      },
+    };
+  } else {
+    // For categorical features - horizontal bar chart
+    return {
+      chart: {
+        type: 'bar',
+        height: Math.max(350, dist.categories.length * 50), // Dynamic height based on categories
+      },
+      plotOptions: {
+        bar: {
+          horizontal: true,
+          dataLabels: {
+            position: 'top',
+          },
+        },
+      },
+      title: {
+        text: dist.feature_name,
+        align: 'left',
+      },
+      xaxis: {
+        categories: dist.categories,
+        labels: {
+          formatter: (val: number) => val.toFixed(1) + '%',
+        },
+        title: {
+          text: 'Percentage',
+        },
+      },
+      yaxis: {
+        labels: {
+          maxWidth: 150,
+        },
+      },
+      tooltip: {
+        y: {
+          formatter: (val: number) => val.toFixed(1) + '%',
+        },
+      },
+    };
+  }
+};
+
+const getDistributionChartSeries = (dist: Distributions) => {
+  if (dist.is_numeric) {
+    // For numeric features
+    return [
+      {
+        name: 'Test',
+        data: dist.categories.map((x, i) => ({
+          x,
+          y: dist.test_distribution[i],
+        })),
+      },
+      {
+        name: 'Control',
+        data: dist.categories.map((x, i) => ({
+          x,
+          y: dist.control_distribution[i],
+        })),
+      },
+    ];
+  } else {
+    // For categorical features - convert to percentages
+    return [
+      {
+        name: 'Test',
+        data: dist.test_distribution.map((v) => v * 100),
+      },
+      {
+        name: 'Control',
+        data: dist.control_distribution.map((v) => v * 100),
+      },
+    ];
+  }
+};
+
+// Sync show with v-model
+watch(
+  () => props.modelValue,
+  (val) => {
+    show.value = val;
+  },
+);
+watch(
+  () => show.value,
+  (val) => {
+    emit('update:modelValue', val);
+  },
+);
+
+watch(
+  () => show.value,
+  (newVal) => {
+    if (newVal) {
+      initializeModes();
+    }
+  },
+);
+
+onBeforeUnmount(() => {
+  stopTimer();
+});
+
+const initializeModes = () => {
+  audienceModes.value = props.audiences.reduce(
+    (acc, audience) => {
+      acc[audience.name] = audience.mode;
+      return acc;
+    },
+    {} as Record<string, AudienceMode>,
+  );
+};
+
+const hasEnabledAudiences = computed(() => {
+  return Object.values(audienceModes.value).some((mode) => mode !== 'off');
+});
+
+const updateAudienceMode = (audienceName: string, mode: AudienceMode) => {
+  audienceModes.value[audienceName] = mode;
+};
+
+const startProcessing = () => {
+  isProcessing.value = true;
+  isStopped.value = false;
+  processingStatus.value = props.audiences.reduce(
+    (acc, audience) => {
+      if (audienceModes.value[audience.name] !== 'off') {
+        acc[audience.name] = { status: 'pending', result: null };
+      } else {
+        acc[audience.name] = { status: 'skipped', result: null };
+      }
+      return acc;
+    },
+    {} as Record<string, ProcessingStatus>,
+  );
+
+  processAudiences();
+};
+
+const processAudiences = async () => {
+  startTimer();
+  for (const audience of props.audiences) {
+    if (audienceModes.value[audience.name] === 'off') {
+      continue;
+    }
+    if (isStopped.value) {
+      Object.keys(processingStatus.value).forEach((name) => {
+        if (processingStatus.value[name].status === 'pending') {
+          processingStatus.value[name] = {
+            status: 'cancelled',
+            result: null,
+            duration: 0,
+          };
+        }
+      });
+      break;
+    }
+
+    const startTime = Date.now();
+    const abortController = new AbortController();
+    processingStatus.value[audience.name] = {
+      status: 'processing',
+      result: null,
+      startTime: startTime,
+      duration: 0,
+      abortController,
+    };
+
+    try {
+      const result = await postApi<AudiencesProcessResponse>(
+        processMode.value === ProcessMode.OnlyUploading
+          ? 'ads/upload'
+          : 'process',
+        {
+          audience: audience.name,
+          mode: audienceModes.value[audience.name],
+          skip_upload:
+            processMode.value === ProcessMode.OnlySampling ? true : undefined,
+          include_distributions: true,
+        },
+        undefined,
+        { signal: abortController.signal },
+      );
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+
+      processingStatus.value[audience.name] = {
+        status: 'completed',
+        result: result.data.result[audience.name],
+        endTime,
+        duration,
+      };
+    } catch (error) {
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+
+      processingStatus.value[audience.name] = {
+        status: 'failed',
+        result: error instanceof Error ? error.message : 'Processing failed',
+        endTime,
+        duration,
+      };
+    }
+  }
+  stopTimer();
+  isProcessing.value = false;
+};
+
+const handleStop = () => {
+  isStopped.value = true;
+};
+
+const handleCancel = async () => {
+  // Find currently processing audience and cancel its request
+  const processingAudience = Object.entries(processingStatus.value).find(
+    ([_, status]) => status.status === 'processing',
+  );
+
+  if (processingAudience) {
+    const [name, status] = processingAudience;
+    status.abortController?.abort();
+
+    processingStatus.value[name] = {
+      status: 'cancelled',
+      result: 'Operation cancelled',
+      startTime: status.startTime,
+      endTime: Date.now(),
+      duration: status.startTime ? Date.now() - status.startTime : 0,
+    };
+  }
+
+  // Mark remaining as cancelled
+  Object.keys(processingStatus.value).forEach((name) => {
+    if (processingStatus.value[name].status === 'pending') {
+      processingStatus.value[name] = {
+        status: 'cancelled',
+        result: null,
+        duration: 0,
+      };
+    }
+  });
+
+  isStopped.value = true; // Set stopped flag to prevent further processing
+  stopTimer();
+  isProcessing.value = false;
+};
+
+const handleClose = () => {
+  if (
+    !isProcessing.value ||
+    window.confirm('Are you sure you want to close while processing?')
+  ) {
+    show.value = false;
+  }
+};
+
+const getStatus = (audienceName: string): string => {
+  return processingStatus.value[audienceName]?.status;
+};
+
+const formatDuration = (ms: number) => {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+};
+
+const getCurrentDuration = (audienceName: string) => {
+  const status = processingStatus.value[audienceName];
+  if (status?.duration) {
+    return formatDuration(status.duration);
+  }
+  return '';
+};
+
+const getResult = (
+  audienceName: string,
+): string | AudienceProcessResult | null => {
+  return processingStatus.value[audienceName]?.result || null;
+};
+
+const formatResult = (audienceName: string, groupName: string): string => {
+  const res = getResult(audienceName);
+  if (typeof res === 'string') {
+    return res;
+  } else if (res) {
+    if (groupName === 'test') {
+      return `${res.test_user_count} (${res.new_test_user_count || 0} new, ${res.total_test_user_count || 0} total)`;
+    } else if (groupName === 'control') {
+      return `${res.control_user_count} (${res.new_control_user_count || 0} new, ${res.total_control_user_count || 0} total)`;
+    }
+  }
+  return '';
+};
+
+const capitalize = (str: string): string => {
+  return str ? str.charAt(0).toUpperCase() + str.slice(1) : '';
+};
+
+const startTimer = () => {
+  timer.value = window.setInterval(() => {
+    Object.keys(processingStatus.value).forEach((name) => {
+      const status = processingStatus.value[name];
+      if (status.status === 'processing' && status.startTime) {
+        status.duration = Date.now() - status.startTime;
+      }
+    });
+  }, 1000);
+};
+
+const stopTimer = () => {
+  if (timer.value) {
+    clearInterval(timer.value);
+    timer.value = null;
+  }
+};
 </script>
