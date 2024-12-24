@@ -112,23 +112,16 @@ class TableSchemas:
       bigquery.SchemaField(name='ttl', field_type='INT64'),
   ]
   splitstat_schema = [
-      bigquery.SchemaField(
-          name='feature_name',
-          field_type='STRING',
-          mode='REQUIRED',
-          description='Name of the feature (e.g., days_since_install, brand)'),
-      bigquery.SchemaField(
-          name='is_numeric', field_type='BOOLEAN', mode='REQUIRED'),
-      bigquery.SchemaField(
-          name='categories', field_type='STRING', mode='REPEATED'),
-      bigquery.SchemaField(
-          name='bin_edges', field_type='FLOAT64', mode='REPEATED'),
-      bigquery.SchemaField(
-          name='test_distribution', field_type='FLOAT64', mode='REPEATED'),
-      bigquery.SchemaField(
-          name='control_distribution', field_type='FLOAT64', mode='REPEATED'),
-      bigquery.SchemaField(
-          name='warnings', field_type='STRING', mode='NULLABLE')
+      bigquery.SchemaField('feature_name', 'STRING'),
+      bigquery.SchemaField('is_numeric', 'BOOLEAN'),
+      # For numeric features
+      bigquery.SchemaField('test_values', 'FLOAT64', mode='REPEATED'),
+      bigquery.SchemaField('control_values', 'FLOAT64', mode='REPEATED'),
+      # For categorical features
+      bigquery.SchemaField('categories', 'STRING', mode='REPEATED'),
+      bigquery.SchemaField('test_distribution', 'FLOAT64', mode='REPEATED'),
+      bigquery.SchemaField('control_distribution', 'FLOAT64', mode='REPEATED'),
+      bigquery.SchemaField('warnings', 'STRING'),
   ]
 
 
@@ -1367,20 +1360,36 @@ WHERE table_name LIKE '{audience_table_name}_{group_name}_%' ORDER BY 1 DESC"""
         if feature_metrics.warnings:
           warnings = '; '.join(feature_metrics.warnings.values())
 
-      rows.append({
+      row = {
           'feature_name': dist.feature_name,
           'is_numeric': dist.is_numeric,
-          'categories': [str(c) for c in dist.categories],
-          'bin_edges': dist.bin_edges if dist.is_numeric else [],
-          'test_distribution': dist.test_distribution,
-          'control_distribution': dist.control_distribution,
           'warnings': warnings
-      })
+      }
+
+      if dist.is_numeric:
+        row.update({
+            'test_values': dist.test_values,
+            'control_values': dist.control_values,
+            'categories': [],  # Empty for numeric features
+            'test_distribution': [],  # Empty for numeric features
+            'control_distribution': []  # Empty for numeric features
+        })
+      else:
+        row.update({
+            'categories': [str(c) for c in dist.categories],
+            'test_distribution': dist.test_distribution,
+            'control_distribution': dist.control_distribution,
+            'test_values': [],  # Empty for categorical features
+            'control_values': []  # Empty for categorical features
+        })
+
+      rows.append(row)
     custom_retry = retry.Retry(
         timeout=60, predicate=retry.if_exception_type(exceptions.NotFound))
     errors = self.bq_client.insert_rows_json(table, rows, retry=custom_retry)
     if errors:
-      raise Exception('"Error inserting rows: {errors}')
+      # pylint: disable=broad-exception-raised
+      raise Exception(f'Error inserting rows: {errors}')
 
   def add_previous_sampled_users(self,
                                  target: ConfigTarget,

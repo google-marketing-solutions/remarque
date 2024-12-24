@@ -19,7 +19,6 @@ import warnings
 from scipy import stats
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OrdinalEncoder
-import math
 from logger import logger
 from models import FeatureMetrics, DistributionData, SplittingResult
 
@@ -511,47 +510,33 @@ def prepare_distribution_data(
     List of DistributionData per feature containing:
       feature_name: Name of the feature.
       is_numeric: Whether feature is numeric or categorical.
-      categories: Category names for categorical or bin centers for numeric.
-      bin_edges: Bin edges for numeric features (None for categorical).
-      test_distribution: Distribution of values in test group (proportions).
-      control_distribution: Distribution of values in control group.
+      For numeric features:
+        test_values: Raw values for test group
+        control_values: Raw values for control group
+      For categorical features:
+        categories: Category names
+        test_distribution: Distribution of values in test group (proportions)
+        control_distribution: Distribution of values in control group
   """
   test_df = df[df['user'].isin(users_test['user'])]
   control_df = df[df['user'].isin(users_control['user'])]
 
   distributions = []
 
-  # For numeric features
+  # For numeric features - just collect values
   for feat in numeric_features:
-    # Calculate histogram bins
-    all_values = df[feat].values
-    min_val = all_values.min()
-    max_val = all_values.max()
-    n_bins = 30
-    bin_edges = np.linspace(min_val, max_val, n_bins + 1)
-    bin_centers = [(bin_edges[i] + bin_edges[i + 1]) / 2
-                   for i in range(len(bin_edges) - 1)]
-
-    # Calculate distributions
-    test_hist, _ = np.histogram(test_df[feat], bins=bin_edges, density=True)
-    control_hist, _ = np.histogram(
-        control_df[feat], bins=bin_edges, density=True)
-
     distributions.append(
         DistributionData(
             feature_name=feat,
             is_numeric=True,
-            categories=bin_centers,
-            bin_edges=bin_edges.tolist(),
-            test_distribution=test_hist.tolist(),
-            control_distribution=control_hist.tolist()))
+            test_values=test_df[feat].tolist(),
+            control_values=control_df[feat].tolist()))
 
-  # For categorical features
+  # For categorical features - keep the same
   for feat in categorical_features:
     test_dist = test_df[feat].value_counts(normalize=True)
     control_dist = control_df[feat].value_counts(normalize=True)
 
-    # Get all categories
     all_categories = sorted(set(test_dist.index) | set(control_dist.index))
 
     distributions.append(
@@ -559,32 +544,9 @@ def prepare_distribution_data(
             feature_name=feat,
             is_numeric=False,
             categories=all_categories,
-            bin_edges=[],
             test_distribution=[test_dist.get(cat, 0) for cat in all_categories],
             control_distribution=[
                 control_dist.get(cat, 0) for cat in all_categories
             ]))
 
   return distributions
-
-
-def poisson_rate_test(event_count_test: int, event_count_control: int,
-                      exposure_test: int,
-                      exposure_control: int) -> tuple[float, float]:
-  """Perform a Poisson rate test for comparing event rates between two groups.
-
-  Args:
-    event_count_test: Number of events in the test group.
-    event_count_control: Number of events in the control group.
-    exposure_test: Total exposure (e.g., user-days) in the test group.
-    exposure_control: Total exposure (e.g., user-days) in the control group.
-  Returns:
-    A tuple of test statistic, p-value
-  """
-  rate_ratio = (event_count_test / exposure_test) / (
-      event_count_control / exposure_control)
-  se_log_rate_ratio = ((1 / event_count_test) + (1 / event_count_control))**0.5
-  z_statistic = abs(math.log(rate_ratio) / se_log_rate_ratio)
-  p_value = 2 * (1 - stats.norm.cdf(z_statistic))  # Two-tailed test
-
-  return z_statistic, p_value

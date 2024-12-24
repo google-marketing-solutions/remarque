@@ -86,19 +86,34 @@
 
             <q-item-section>
               <q-item-label>{{ audience.name }}</q-item-label>
-              <q-item-label caption v-if="getResult(audience.name)">
+              <q-item-label
+                caption
+                v-if="getResult(audience.name)"
+                v-let="{ result: getResult(audience.name) }"
+              >
                 <template v-if="typeof getResult(audience.name) === 'string'">
                   {{ getResult(audience.name) }}
                 </template>
-                <template v-else>
+                <template
+                  v-else-if="isAudienceProcessResult(getResult(audience.name))"
+                >
                   <div>
                     Test users: {{ formatResult(audience.name, 'test') }} <br />
                     Control users: {{ formatResult(audience.name, 'control')
                     }}<br />
                     Uploaded users:
-                    {{ getResult(audience.name)!.uploaded_user_count }}
+                    {{
+                      (getResult(audience.name) as AudienceProcessResult)
+                        .uploaded_user_count
+                    }}
                   </div>
-                  <div class="q-mt-sm" v-if="getResult(audience.name)!.metrics">
+                  <div
+                    class="q-mt-sm"
+                    v-if="
+                      (getResult(audience.name) as AudienceProcessResult)
+                        .metrics
+                    "
+                  >
                     <q-btn
                       flat
                       dense
@@ -245,11 +260,7 @@
           >
             <q-card>
               <q-card-section>
-                <apexchart
-                  height="350"
-                  :options="getDistributionChartOptions(dist)"
-                  :series="getDistributionChartSeries(dist)"
-                />
+                <apexchart height="350" v-bind="getDistributionChart(dist)" />
               </q-card-section>
             </q-card>
           </div>
@@ -262,8 +273,13 @@
 <script setup lang="ts">
 import { ref, onBeforeUnmount, watch, computed } from 'vue';
 import { AudienceMode, AudienceWithLog } from 'stores/audiences';
-import { AudienceProcessResult, AudiencesProcessResponse } from 'src/boot/api';
+import {
+  AudienceProcessResult,
+  AudiencesProcessResponse,
+  Distributions as DistributionData,
+} from 'src/boot/api';
 import { postApi } from 'src/boot/axios';
+import { QTableColumn } from 'quasar';
 
 export interface ProcessingStatus {
   status:
@@ -296,14 +312,6 @@ const emit = defineEmits<{
   (e: 'update:modelValue', show: boolean): void;
 }>();
 
-interface Distributions {
-  bin_edges: number[];
-  categories: (string | number)[];
-  control_distribution: number[];
-  feature_name: string;
-  is_numeric: boolean;
-  test_distribution: number[];
-}
 const processingStatus = ref<Record<string, ProcessingStatus>>({});
 const isProcessing = ref(false);
 const isStopped = ref(false);
@@ -314,9 +322,9 @@ const processMode = ref<ProcessMode>(ProcessMode.Default);
 const showMetricsDialog = ref(false);
 const showDistributionsDialog = ref(false);
 const selectedMetrics = ref<Map<string, Record<string, string>> | null>(null);
-const selectedDistributions = ref<Distributions[]>([]);
+const selectedDistributions = ref<DistributionData[]>([]);
 
-const metricsColumns = [
+const metricsColumns: QTableColumn[] = [
   {
     name: 'feature',
     label: 'Feature',
@@ -366,7 +374,7 @@ const metricsRows = computed(() => {
 });
 
 const showMetrics = (audienceName: string) => {
-  const result = getResult(audienceName);
+  const result = getResult(audienceName) as AudienceProcessResult;
   if (result?.metrics) {
     selectedMetrics.value = result.metrics;
     showMetricsDialog.value = true;
@@ -374,127 +382,176 @@ const showMetrics = (audienceName: string) => {
 };
 
 const showDistributions = (audienceName: string) => {
-  const result = getResult(audienceName);
+  const result = getResult(audienceName) as AudienceProcessResult;
   if (result?.distributions) {
     selectedDistributions.value = result.distributions;
     showDistributionsDialog.value = true;
   }
 };
 
-const getDistributionChartOptions = (dist: Distributions) => {
-  if (dist.is_numeric) {
-    // For numeric features - line chart for histogram
-    return {
-      chart: {
-        type: 'line',
-        zoom: { enabled: false },
-      },
-      stroke: {
-        curve: 'stepline',
-      },
-      title: {
-        text: dist.feature_name,
-        align: 'left',
-      },
-      xaxis: {
-        type: 'numeric',
-        labels: {
-          formatter: (val: number) => val.toFixed(1),
-        },
-        title: {
-          text: 'Value',
-        },
-      },
-      yaxis: {
-        labels: {
-          formatter: (val: number) => val.toFixed(3),
-        },
-        title: {
-          text: 'Density',
-        },
-      },
-      tooltip: {
-        x: {
-          formatter: (val: number) => val.toFixed(1),
-        },
-        y: {
-          formatter: (val: number) => val.toFixed(3),
-        },
-      },
+const prepareHistogramData = (values: number[], bins: number[]) => {
+  const counts = new Array(bins.length - 1).fill(0);
+  const total = values.length;
+
+  values.forEach((value) => {
+    for (let i = 0; i < bins.length - 1; i++) {
+      if (value >= bins[i] && value < bins[i + 1]) {
+        counts[i]++;
+        break;
+      }
+    }
+  });
+
+  // Convert to percentages
+  return counts.map((count) => (count / total) * 100);
+};
+
+const getNumericDistributionData = (dist: DistributionData) => {
+  const allValues = [...dist.test_values!, ...dist.control_values!];
+  const min = Math.min(...allValues);
+  const max = Math.max(...allValues);
+
+  // For integer features
+  if (allValues.every((v) => Number.isInteger(v))) {
+    const bins = Array.from({ length: max - min + 2 }, (_, i) => min + i - 0.5);
+    const categories = Array.from({ length: max - min + 1 }, (_, i) => min + i);
+
+    const data = {
+      categories,
+      bins,
+      test: prepareHistogramData(dist.test_values!, bins),
+      control: prepareHistogramData(dist.control_values!, bins),
     };
-  } else {
-    // For categorical features - horizontal bar chart
+    console.log('Prepared numeric data:', data);
+    return data;
+  }
+
+  // For continuous features
+  const n_bins = 30;
+  const bins = Array.from(
+    { length: n_bins + 1 },
+    (_, i) => min + (max - min) * (i / n_bins),
+  );
+  const categories = bins.slice(0, -1).map((v, i) => (v + bins[i + 1]) / 2);
+
+  return {
+    categories,
+    bins,
+    test: prepareHistogramData(dist.test_values!, bins),
+    control: prepareHistogramData(dist.control_values!, bins),
+  };
+};
+
+const getDistributionChart = (dist: DistributionData) => {
+  if (dist.is_numeric) {
+    const data = getNumericDistributionData(dist);
+
     return {
-      chart: {
-        type: 'bar',
-        height: Math.max(350, dist.categories.length * 50), // Dynamic height based on categories
-      },
-      plotOptions: {
-        bar: {
-          horizontal: true,
-          dataLabels: {
-            position: 'top',
+      options: {
+        chart: {
+          type: 'line',
+          zoom: { enabled: false },
+        },
+        stroke: {
+          curve: 'stepline',
+          width: 2,
+        },
+        title: {
+          text: dist.feature_name,
+          align: 'left',
+        },
+        xaxis: {
+          categories: data.categories,
+          title: {
+            text: 'Value',
+          },
+          labels: {
+            formatter: function (val: any) {
+              return val?.toString() ?? '';
+            },
+          },
+        },
+        yaxis: {
+          title: {
+            text: 'Percentage of Users',
+          },
+          labels: {
+            formatter: (val: number) => val.toFixed(1) + '%',
+          },
+        },
+        tooltip: {
+          x: {
+            formatter: (val: number) =>
+              Number.isInteger(val) ? val.toString() : val.toFixed(1),
+          },
+          y: {
+            formatter: (val: number) => val.toFixed(1) + '%',
           },
         },
       },
-      title: {
-        text: dist.feature_name,
-        align: 'left',
-      },
-      xaxis: {
-        categories: dist.categories,
-        labels: {
-          formatter: (val: number) => val.toFixed(1) + '%',
+      series: [
+        {
+          name: 'Test',
+          data: data.test,
+        },
+        {
+          name: 'Control',
+          data: data.control,
+        },
+      ],
+    };
+  } else {
+    // For categorical features
+    return {
+      options: {
+        chart: {
+          type: 'bar',
+          height: Math.max(350, dist.categories!.length * 50),
+        },
+        plotOptions: {
+          bar: {
+            horizontal: true,
+            dataLabels: {
+              position: 'right',
+              formatter: (val: number) => val.toFixed(1) + '%',
+            },
+          },
         },
         title: {
-          text: 'Percentage',
+          text: dist.feature_name,
+          align: 'left',
+        },
+        xaxis: {
+          categories: dist.categories,
+          title: {
+            text: 'Percentage',
+          },
+          labels: {
+            formatter: (val: number) => val.toFixed(1) + '%',
+          },
+        },
+        yaxis: {
+          labels: {
+            maxWidth: 150,
+          },
+        },
+        tooltip: {
+          y: {
+            formatter: (val: number) => val.toFixed(1) + '%',
+          },
         },
       },
-      yaxis: {
-        labels: {
-          maxWidth: 150,
+      series: [
+        {
+          name: 'Test',
+          data: dist.test_distribution!.map((v) => v * 100),
         },
-      },
-      tooltip: {
-        y: {
-          formatter: (val: number) => val.toFixed(1) + '%',
+        {
+          name: 'Control',
+          data: dist.control_distribution!.map((v) => v * 100),
         },
-      },
+      ],
     };
-  }
-};
-
-const getDistributionChartSeries = (dist: Distributions) => {
-  if (dist.is_numeric) {
-    // For numeric features
-    return [
-      {
-        name: 'Test',
-        data: dist.categories.map((x, i) => ({
-          x,
-          y: dist.test_distribution[i],
-        })),
-      },
-      {
-        name: 'Control',
-        data: dist.categories.map((x, i) => ({
-          x,
-          y: dist.control_distribution[i],
-        })),
-      },
-    ];
-  } else {
-    // For categorical features - convert to percentages
-    return [
-      {
-        name: 'Test',
-        data: dist.test_distribution.map((v) => v * 100),
-      },
-      {
-        name: 'Control',
-        data: dist.control_distribution.map((v) => v * 100),
-      },
-    ];
   }
 };
 
@@ -738,4 +795,10 @@ const stopTimer = () => {
     timer.value = null;
   }
 };
+
+function isAudienceProcessResult(
+  result: string | AudienceProcessResult | null,
+): result is AudienceProcessResult {
+  return result !== null && typeof result !== 'string';
+}
 </script>

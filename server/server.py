@@ -28,6 +28,7 @@ from flask_cors import CORS
 import gaarf
 import numpy as np
 import statsmodels.stats.proportion as proportion
+from statsmodels.stats.rates import test_poisson_2indep
 from statsmodels.stats.power import TTestIndPower
 
 from env import IS_GAE
@@ -39,7 +40,6 @@ from config import Config, ConfigTarget, parse_arguments, get_config, save_confi
 from middleware import run_sampling_for_audience, upload_customer_match_audience, update_customer_match_mappings
 from cloud_scheduler_gateway import Job
 from mailer import send_email
-from sampling import poisson_rate_test
 from utils import format_duration
 
 # make linter happy (avoid import-member)
@@ -1006,10 +1006,18 @@ def get_user_conversions():
         z_statistic = None
         pval_events = None
       else:
-        z_statistic, pval_events = poisson_rate_test(
-            int(last_day_result['cum_test_events']),
-            int(last_day_result['cum_control_events']), exposure_test,
-            exposure_control)
+        try:
+          z_statistic, pval_events = test_poisson_2indep(
+              count1=int(last_day_result['cum_test_events']),
+              exposure1=exposure_test,
+              count2=int(last_day_result['cum_control_events']),
+              exposure2=exposure_control,
+              method='score'
+          )
+        except Exception as e:  # pylint: disable=broad-except
+          logger.warning('Failed to calculate event rate p-value: %s', str(e))
+          z_statistic = None
+          pval_events = None
       logger.debug(
           'Calculated pval: %s, chi: %s, pval_events: %s, z_statistic: %s',
           pval, chi, pval_events, z_statistic)

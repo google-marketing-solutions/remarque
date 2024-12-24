@@ -55,7 +55,7 @@ def run_sampling_for_audience(
     # (brand, osv, days_since_install, src, n_sessions).
     # i.e. it doesn't contain users from today's segment that got into audience
     # on any previous day (we'll load them later)
-    if sampled_users_new:
+    if not sampled_users_new.empty:
       logger.debug(
           "Starting splitting users (%s) of audience '%s' "
           'via stratification with %s ratio', len(sampled_users_new),

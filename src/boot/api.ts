@@ -23,6 +23,21 @@ import {
 } from 'src/stores/audiences';
 
 /**
+ * Feature distribution from splitting
+ */
+export interface Distributions {
+  feature_name: string;
+  is_numeric: boolean;
+  // For numeric features
+  test_values?: number[];
+  control_values?: number[];
+  // For categorical features
+  categories?: string[];
+  test_distribution?: number[];
+  control_distribution?: number[];
+}
+
+/**
  * Result of processing of one audience (via 'process').
  */
 export interface AudienceProcessResult {
@@ -35,6 +50,8 @@ export interface AudienceProcessResult {
   new_control_user_count: number;
   total_test_user_count: number;
   total_control_user_count: number;
+  distributions: Distributions[];
+  metrics: Map<string, Record<string, string>>;
 }
 /**
  * Result of audience(s) processing.

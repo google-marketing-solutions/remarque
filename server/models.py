@@ -142,10 +142,13 @@ class DistributionData:
   """A feature distribution after split in test/control groups."""
   feature_name: str
   is_numeric: bool
-  categories: list[str | float]
-  bin_edges: list[float] | None
-  test_distribution: list[float]
-  control_distribution: list[float]
+  # For numeric features
+  test_values: list[float] | None = None
+  control_values: list[float] | None = None
+  # For categorical features
+  categories: list[str] | None = None
+  test_distribution: list[float] | None = None
+  control_distribution: list[float] | None = None
 
 
 @dataclass
