@@ -285,7 +285,7 @@ def split_via_stratification(df: pd.DataFrame,
 
   Returns:
     SplittingResult with test and control users,
-    and metrics and distributions to assess the split quality.
+    as well as metrics and distributions to assess the split quality.
   """
   # we tolerate duplicates in the input DF
   original_len = len(df)
@@ -390,105 +390,143 @@ def get_split_metrics(
       For categorical features:
         - p_value: Chi-square test p-value
         - js_divergence: Jensen-Shannon divergence between distributions
-        - warnings: Dict of warnings if distributions differ significantly
+        - proportion_diffs: differences for each category
+        - max_diff: max difference
       For numeric features:
         - mean_ratio: Ratio of test/control means
         - std_ratio: Ratio of test/control standard deviations
-        - warnings: Dict of warnings if ratios exceed thresholds
+        - ks_statistic: Kolmogorov-Smirnov (KS) test
+        - p_value: KS-test p-value
+      - warnings: Dict of warnings detected
   """
   test_df = df[df['user'].isin(users_test['user'])]
   control_df = df[df['user'].isin(users_control['user'])]
 
   metrics = {}
 
-  # For numeric features - compare means and standard deviations
+  # Numeric features
   for feat in numeric_features:
     warnings = {}
-    feat_metrics = FeatureMetrics()
-    metrics[feat] = feat_metrics
 
-    # mean and std deviations
-    mean_ratio = test_df[feat].mean() / control_df[feat].mean()
-    std_ratio = test_df[feat].std() / control_df[feat].std()
-    feat_metrics.mean_ratio = mean_ratio
-    feat_metrics.std_ratio = std_ratio
-
-    # The Kolmogorov-Smirnov (KS) test is a statistical test that
-    # determines if two samples come from the same distribution
-    statistic, p_neq = stats.ks_2samp(
-        test_df[feat], control_df[feat], alternative='two-sided')
-    _, p_gt = stats.ks_2samp(
-        test_df[feat], control_df[feat], alternative='greater')
-    _, p_lt = stats.ks_2samp(
-        test_df[feat], control_df[feat], alternative='less')
-
-    feat_metrics.ks_statistic = statistic
-    feat_metrics.ks_pvalue_neq = p_neq
-    feat_metrics.ks_pvalue_gt = p_gt
-    feat_metrics.ks_pvalue_lt = p_lt
-
-    # Warning if mean differs by more than 10%
-    if pd.notnull(mean_ratio) and abs(mean_ratio - 1) > 0.1:
+    # Mean and std ratios
+    test_mean = test_df[feat].mean()
+    control_mean = control_df[feat].mean()
+    mean_ratio = (
+        test_mean / control_mean if pd.notnull(test_mean) and
+        pd.notnull(control_mean) and control_mean != 0 else None)
+    if mean_ratio and abs(mean_ratio - 1) > 0.1:
       warnings['mean_ratio'] = f'Mean differs by {abs(mean_ratio-1)*100:.1f}%'
-    # Warning if std differs by more than 20%
-    if pd.notnull(std_ratio) and abs(std_ratio - 1) > 0.2:
-      warnings['std_ratio'] = (
-          f'Standard deviation differs by {abs(std_ratio-1)*100:.1f}%')
-    if p_neq < 0.05:
-      warnings['ks_test'] = (
-          f'Significantly different distributions (KS p={p_neq:.3f})')
 
-    if warnings:
-      feat_metrics.warnings = warnings
+    test_std = test_df[feat].std()
+    control_std = control_df[feat].std()
+    std_ratio = (
+        test_std / control_std if pd.notnull(test_std) and
+        pd.notnull(control_std) and control_std != 0 else None)
+    if std_ratio and abs(std_ratio - 1) > 0.2:
+      warnings[
+          'std_ratio'] = f'Standard deviation differs by {abs(std_ratio-1)*100:.1f}%'
 
-  # For categorical features - compare value distributions
+    # KS test: The Kolmogorov-Smirnov (KS) test is comparing two distributions
+    # by looking at their cumulative distribution functions (CDFs).
+    # The test calculates maximum distance between these CDFs.
+    try:
+      ks_stat, p_neq = stats.ks_2samp(
+          test_df[feat], control_df[feat], alternative='two-sided')
+
+      # p-values < 0.05 means we got statistically significant difference
+      if p_neq < 0.05:
+        warnings[
+            'ks_test'] = f'Distributions are significantly different (p={p_neq:.3f})'
+        # ks_stat shows how big the difference is
+        if ks_stat > 0.1:
+          warnings[
+              'ks_statistic'] = f'Large difference in distributions: {ks_stat:.1%}'
+    except:
+      ks_stat = p_neq = None
+
+    metrics[feat] = FeatureMetrics(
+        mean_ratio=mean_ratio,
+        std_ratio=std_ratio,
+        ks_statistic=ks_stat,  # the maximum absolute difference between CDFs
+        p_value=p_neq,  # Tests if distributions are different in any way
+        warnings=warnings if warnings else None)
+
+  # Categorical features
   for feat in categorical_features:
     warnings = {}
-    feat_metrics = FeatureMetrics()
-    metrics[feat] = feat_metrics
 
-    # Get distributions including nulls (nulls will be counted as a category)
-    test_dist = test_df[feat].value_counts(dropna=False)
-    control_dist = control_df[feat].value_counts(dropna=False)
+    # Get distributions
+    test_dist = test_df[feat].value_counts(normalize=True)
+    control_dist = control_df[feat].value_counts(normalize=True)
 
-    # Ensure both distributions have same categories
-    categories = set(test_dist.index) | set(control_dist.index)
-    test_aligned = pd.Series(0, index=categories)
-    control_aligned = pd.Series(0, index=categories)
+    # Calculate differences for each value
+    all_values = sorted(set(test_dist.index) | set(control_dist.index))
+    proportion_diffs = {}
+    for val in all_values:
+      test_prop = test_dist.get(val, 0)
+      control_prop = control_dist.get(val, 0)
+      diff = test_prop - control_prop
+      if diff != 0:
+        proportion_diffs[str(val)] = {
+            'test_pct': test_prop * 100,
+            'control_pct': control_prop * 100,
+            'diff_pct': diff * 100
+        }
+
+    # Calculate maximum difference
+    max_diff = max(
+        abs(test_dist.get(val, 0) - control_dist.get(val, 0))
+        for val in all_values)
+
+    if max_diff > 0.05:
+      max_diff_val = max(
+          all_values,
+          key=lambda x: abs(test_dist.get(x, 0) - control_dist.get(x, 0)))
+      warnings['distribution'] = (
+          f'Large distribution difference for value {max_diff_val}: '
+          f'test={test_dist.get(max_diff_val, 0)*100:.1f}%, '
+          f'control={control_dist.get(max_diff_val, 0)*100:.1f}%')
+
+    # Align distributions for statistical tests
+    test_aligned = pd.Series(0, index=all_values)
+    control_aligned = pd.Series(0, index=all_values)
     test_aligned[test_dist.index] = test_dist
     control_aligned[control_dist.index] = control_dist
 
-    # Calculate chi-square test with raw counts
+    # Scale control distribution to match test total
+    test_total = test_aligned.sum()
+    control_total = control_aligned.sum()
+    control_aligned = control_aligned * (test_total / control_total)
+
+    # Chi-square test
     try:
-      # Chi-square test on raw counts
       chi2, p_value = stats.chisquare(test_aligned, control_aligned)
-      feat_metrics.p_value = p_value
       if p_value < 0.05:
         warnings[
-            'p_value'] = f'Significantly different distributions {p_value:.3f}'
-    except BaseException as e:
-      feat_metrics.p_value = None
-      warnings['p_value'] = 'Unable to compare distributions: ' + str(e)
+            'p_value'] = f'Significantly different distributions (p={p_value:.3f})'
+    except:
+      p_value = None
 
-    # Jensen-Shannon divergence (similarity measure)
-    # js_div = stats.entropy(test_dist, control_dist)
-    # feat_metrics['js_divergence'] = js_div
-    # if js_div > 0.1:
-    #   warnings['js_divergence'] = f'High JS divergence: {js_div:.3f}'
+    # JS (Jensen-Shannon) divergence
+    # - is a measure of similarity between two distributions:
+    # * 0 indicates identical distributions
+    # * Values > 0.1 suggest substantial differences
+    # * Higher values indicate greater distributional differences
     try:
-      # JS divergence needs probability distributions
-      test_prop = test_aligned / test_aligned.sum()
-      control_prop = control_aligned / control_aligned.sum()
+      test_prop = test_dist / test_dist.sum()
+      control_prop = control_dist / control_dist.sum()
       js_div = stats.entropy(test_prop, control_prop)
-      feat_metrics.js_divergence = js_div
       if js_div > 0.1:
         warnings['js_divergence'] = f'High JS divergence: {js_div:.3f}'
-    except BaseException as e:
-      feat_metrics.js_divergence = None
-      warnings['js_divergence'] = 'Unable to calculate JS divergence: ' + str(e)
+    except:
+      js_div = None
 
-    if warnings:
-      feat_metrics.warnings = warnings
+    metrics[feat] = FeatureMetrics(
+        proportion_diffs=proportion_diffs,
+        max_diff=max_diff,
+        p_value=p_value,
+        js_divergence=js_div,
+        warnings=warnings if warnings else None)
 
   return metrics
 
@@ -507,46 +545,69 @@ def prepare_distribution_data(
     categorical_features: List of categorical column names to compare.
 
   Returns:
-    List of DistributionData per feature containing:
-      feature_name: Name of the feature.
-      is_numeric: Whether feature is numeric or categorical.
-      For numeric features:
-        test_values: Raw values for test group
-        control_values: Raw values for control group
-      For categorical features:
-        categories: Category names
-        test_distribution: Distribution of values in test group (proportions)
-        control_distribution: Distribution of values in control group
+    List of DistributionData
   """
   test_df = df[df['user'].isin(users_test['user'])]
   control_df = df[df['user'].isin(users_control['user'])]
 
   distributions = []
 
-  # For numeric features - just collect values
   for feat in numeric_features:
+    test_dist = test_df[feat].value_counts(normalize=True)
+    control_dist = control_df[feat].value_counts(normalize=True)
+
+    # Debug
+    original_col = feat.replace('_bins', '')
+    bins = binsify(df, original_col)
+
+    # Get all actual bin numbers that exist in data
+    all_bins = sorted(set(test_dist.index) | set(control_dist.index))
+
+    # Create aligned distributions using actual bin numbers
+    test_aligned = pd.Series(0, index=all_bins)
+    control_aligned = pd.Series(0, index=all_bins)
+    test_aligned[test_dist.index] = test_dist
+    control_aligned[control_dist.index] = control_dist
+
+    # Get bin labels for these bin numbers
+    original_col = feat.replace('_bins', '')
+    bins = binsify(df, original_col)
+    #bin_labels = [f"{bins[i]:.0f}-{bins[i+1]:.0f}" for i in all_bins]
+    bin_labels = []
+    for i in all_bins:
+      if i == 1:  # First bin
+        label = f"0-{bins[1]:.0f}"
+      elif i == len(bins):  # Last bin
+        label = f"≥{bins[-1]:.0f}"
+      else:  # Middle bins
+        label = f"{bins[i-1]:.0f}-{bins[i]:.0f}"
+      bin_labels.append(label)
+
     distributions.append(
         DistributionData(
             feature_name=feat,
             is_numeric=True,
-            test_values=test_df[feat].tolist(),
-            control_values=control_df[feat].tolist()))
+            categories=bin_labels,  # human-readable bin labels
+            test_distribution=test_aligned.tolist(),
+            control_distribution=control_aligned.tolist()))
 
-  # For categorical features - keep the same
   for feat in categorical_features:
     test_dist = test_df[feat].value_counts(normalize=True)
     control_dist = control_df[feat].value_counts(normalize=True)
 
-    all_categories = sorted(set(test_dist.index) | set(control_dist.index))
+    # Get all values and align distributions
+    all_values = sorted(set(test_dist.index) | set(control_dist.index))
+    test_aligned = pd.Series(0, index=all_values)
+    control_aligned = pd.Series(0, index=all_values)
+    test_aligned[test_dist.index] = test_dist
+    control_aligned[control_dist.index] = control_dist
 
     distributions.append(
         DistributionData(
             feature_name=feat,
             is_numeric=False,
-            categories=all_categories,
-            test_distribution=[test_dist.get(cat, 0) for cat in all_categories],
-            control_distribution=[
-                control_dist.get(cat, 0) for cat in all_categories
-            ]))
+            categories=[str(x) for x in all_values],
+            test_distribution=test_aligned.tolist(),
+            control_distribution=control_aligned.tolist()))
 
   return distributions

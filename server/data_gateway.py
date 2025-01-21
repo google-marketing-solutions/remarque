@@ -114,14 +114,27 @@ class TableSchemas:
   splitstat_schema = [
       bigquery.SchemaField('feature_name', 'STRING'),
       bigquery.SchemaField('is_numeric', 'BOOLEAN'),
-      # For numeric features
-      bigquery.SchemaField('test_values', 'FLOAT64', mode='REPEATED'),
-      bigquery.SchemaField('control_values', 'FLOAT64', mode='REPEATED'),
-      # For categorical features
-      bigquery.SchemaField('categories', 'STRING', mode='REPEATED'),
-      bigquery.SchemaField('test_distribution', 'FLOAT64', mode='REPEATED'),
-      bigquery.SchemaField('control_distribution', 'FLOAT64', mode='REPEATED'),
-      bigquery.SchemaField('warnings', 'STRING'),
+      bigquery.SchemaField(
+          name='metrics',
+          field_type='RECORD',
+          mode='REPEATED',
+          fields=[
+              bigquery.SchemaField('key', 'STRING', mode='REQUIRED'),
+              bigquery.SchemaField('value', 'FLOAT64', mode='NULLABLE'),
+              bigquery.SchemaField('string_value', 'STRING', mode='NULLABLE')
+          ]),
+      bigquery.SchemaField(
+          name='distribution',
+          field_type='RECORD',
+          mode='REQUIRED',
+          fields=[
+              bigquery.SchemaField('categories', 'STRING', mode='REPEATED'),
+              bigquery.SchemaField(
+                  'test_distribution', 'FLOAT64', mode='REPEATED'),
+              bigquery.SchemaField(
+                  'control_distribution', 'FLOAT64', mode='REPEATED')
+          ]),
+      bigquery.SchemaField('warnings', 'STRING', mode='REPEATED'),
   ]
 
 
@@ -1351,39 +1364,58 @@ WHERE table_name LIKE '{audience_table_name}_{group_name}_%' ORDER BY 1 DESC"""
         timeout=60, predicate=retry.if_exception_type(exceptions.AlreadyExists))
     table = self.bq_client.create_table(table, retry=custom_retry)
 
+    rows_by_feat = {}
     # Prepare and insert rows
-    rows = []
+    for feat_name, feat_metrics in result.metrics.items():
+      metrics_rows = []
+      if feat_metrics.mean_ratio is not None:
+        metrics_rows.append({
+            'key': 'mean_ratio',
+            'value': feat_metrics.mean_ratio
+        })
+      if feat_metrics.std_ratio is not None:
+        metrics_rows.append({
+            'key': 'std_ratio',
+            'value': feat_metrics.std_ratio
+        })
+      if feat_metrics.ks_statistic is not None:
+        metrics_rows.append({
+            'key': 'ks_statistic',
+            'value': feat_metrics.ks_statistic
+        })
+      if feat_metrics.p_value is not None:
+        metrics_rows.append({'key': 'p_value', 'value': feat_metrics.p_value})
+      if feat_metrics.js_divergence is not None:
+        metrics_rows.append({
+            'key': 'js_divergence',
+            'value': feat_metrics.js_divergence
+        })
+      if feat_metrics.max_diff is not None:
+        metrics_rows.append({'key': 'max_diff', 'value': feat_metrics.max_diff})
+      if feat_metrics:
+        rows_by_feat[feat_name] = {
+            'metrics': metrics_rows,
+            'feature_name': feat_name
+        }
+      if feat_metrics.warnings:
+        feat_dist = rows_by_feat.get(feat_name, {})
+        feat_dist.update({
+            'feature_name': feat_name,
+            'warnings': [k + ':' + v for k, v in feat_metrics.warnings.items()],
+        })
+
     for dist in result.distributions:
-      warnings = None
-      if dist.feature_name in result.metrics:
-        feature_metrics = result.metrics[dist.feature_name]
-        if feature_metrics.warnings:
-          warnings = '; '.join(feature_metrics.warnings.values())
-
-      row = {
+      feat_dist = rows_by_feat.get(dist.feature_name, {})
+      feat_dist.update({
           'feature_name': dist.feature_name,
-          'is_numeric': dist.is_numeric,
-          'warnings': warnings
-      }
-
-      if dist.is_numeric:
-        row.update({
-            'test_values': dist.test_values,
-            'control_values': dist.control_values,
-            'categories': [],  # Empty for numeric features
-            'test_distribution': [],  # Empty for numeric features
-            'control_distribution': []  # Empty for numeric features
-        })
-      else:
-        row.update({
-            'categories': [str(c) for c in dist.categories],
-            'test_distribution': dist.test_distribution,
-            'control_distribution': dist.control_distribution,
-            'test_values': [],  # Empty for categorical features
-            'control_values': []  # Empty for categorical features
-        })
-
-      rows.append(row)
+          'distribution': {
+              'categories': dist.categories,
+              'test_distribution': dist.test_distribution,
+              'control_distribution': dist.control_distribution
+          },
+      })
+      rows_by_feat[dist.feature_name] = feat_dist
+    rows = [r for r in rows_by_feat.values()]
     custom_retry = retry.Retry(
         timeout=60, predicate=retry.if_exception_type(exceptions.NotFound))
     errors = self.bq_client.insert_rows_json(table, rows, retry=custom_retry)

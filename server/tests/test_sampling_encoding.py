@@ -145,5 +145,27 @@ def test_large_categorical_values():
   assert result_df['category'].dtype == np.int64
 
 
+def test_nullable_integer_handling():
+  """Test handling of nullable integer columns with NA values."""
+  # Create DataFrame with a regular integer column first
+  df = pd.DataFrame({
+      'user': ['u1', 'u2', 'u3'],
+      'days_since_install': [1, 2, 3],
+      'category': ['A', 'B', 'C']
+  })
+
+  # Convert to nullable integer and introduce NA
+  df['days_since_install'] = df['days_since_install'].astype('Int64')
+  df.loc[1, 'days_since_install'] = pd.NA
+
+  result_df, cat_cols = make_encoding(
+      df, ['user'], ['user', 'days_since_install', 'category'])
+
+  # This should now fail with the same error as in production
+  assert 'days_since_install' in result_df.columns
+  assert not result_df['days_since_install'].isna().any()
+  assert result_df['category'].dtype == np.int64
+
+
 if __name__ == '__main__':
   pytest.main([__file__])

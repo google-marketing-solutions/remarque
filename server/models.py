@@ -125,16 +125,15 @@ class AudienceLog:
 
 @dataclass
 class FeatureMetrics:
-  """Stat metrics of a split."""
-  mean_ratio: float | None = None  # for numeric features
-  std_ratio: float | None = None  # for numeric features
+  """Stat metrics of a split for one feature."""
+  mean_ratio: float | None = None
+  std_ratio: float | None = None
   ks_statistic: float | None = None
-  ks_pvalue_neq: float | None = None
-  ks_pvalue_gt: float | None = None
-  ks_pvalue_lt: float | None = None
-  p_value: float | None = None  # for categorical features
+  p_value: float | None = None
   js_divergence: float | None = None
-  warnings: dict[str, str] = None
+  proportion_diffs: dict[str, dict[str, float]] | None = None
+  max_diff: float | None = None
+  warnings: dict[str, str] | None = None
 
 
 @dataclass
@@ -142,10 +141,6 @@ class DistributionData:
   """A feature distribution after split in test/control groups."""
   feature_name: str
   is_numeric: bool
-  # For numeric features
-  test_values: list[float] | None = None
-  control_values: list[float] | None = None
-  # For categorical features
   categories: list[str] | None = None
   test_distribution: list[float] | None = None
   control_distribution: list[float] | None = None

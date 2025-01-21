@@ -86,11 +86,7 @@
 
             <q-item-section>
               <q-item-label>{{ audience.name }}</q-item-label>
-              <q-item-label
-                caption
-                v-if="getResult(audience.name)"
-                v-let="{ result: getResult(audience.name) }"
-              >
+              <q-item-label caption v-if="getResult(audience.name)">
                 <template v-if="typeof getResult(audience.name) === 'string'">
                   {{ getResult(audience.name) }}
                 </template>
@@ -335,13 +331,15 @@ const metricsColumns: QTableColumn[] = [
     name: 'mean_ratio',
     label: 'Mean Ratio',
     field: 'mean_ratio',
-    format: (val: number | null) => (val ? (val * 100).toFixed(1) + '%' : '-'),
+    format: (val: number | null) =>
+      val ? (Math.abs(val - 1) * 100).toFixed(1) + '%' : '-',
   },
   {
     name: 'std_ratio',
     label: 'Std Ratio',
     field: 'std_ratio',
-    format: (val: number | null) => (val ? (val * 100).toFixed(1) + '%' : '-'),
+    format: (val: number | null) =>
+      val ? (Math.abs(val - 1) * 100).toFixed(1) + '%' : '-',
   },
   {
     name: 'ks_statistic',
@@ -353,6 +351,20 @@ const metricsColumns: QTableColumn[] = [
     name: 'p_value',
     label: 'P-Value',
     field: 'p_value',
+    format: (val: number | string | null) =>
+      typeof val === 'number' ? val.toFixed(3) : (val ?? '-'),
+  },
+  {
+    name: 'max_diff',
+    label: 'Max diff',
+    field: 'max_diff',
+    format: (val: number | string | null) =>
+      typeof val === 'number' ? val.toFixed(3) : (val ?? '-'),
+  },
+  {
+    name: 'js_divergence',
+    label: 'JS divergence',
+    field: 'js_divergence',
     format: (val: number | string | null) =>
       typeof val === 'number' ? val.toFixed(3) : (val ?? '-'),
   },
@@ -389,63 +401,9 @@ const showDistributions = (audienceName: string) => {
   }
 };
 
-const prepareHistogramData = (values: number[], bins: number[]) => {
-  const counts = new Array(bins.length - 1).fill(0);
-  const total = values.length;
-
-  values.forEach((value) => {
-    for (let i = 0; i < bins.length - 1; i++) {
-      if (value >= bins[i] && value < bins[i + 1]) {
-        counts[i]++;
-        break;
-      }
-    }
-  });
-
-  // Convert to percentages
-  return counts.map((count) => (count / total) * 100);
-};
-
-const getNumericDistributionData = (dist: DistributionData) => {
-  const allValues = [...dist.test_values!, ...dist.control_values!];
-  const min = Math.min(...allValues);
-  const max = Math.max(...allValues);
-
-  // For integer features
-  if (allValues.every((v) => Number.isInteger(v))) {
-    const bins = Array.from({ length: max - min + 2 }, (_, i) => min + i - 0.5);
-    const categories = Array.from({ length: max - min + 1 }, (_, i) => min + i);
-
-    const data = {
-      categories,
-      bins,
-      test: prepareHistogramData(dist.test_values!, bins),
-      control: prepareHistogramData(dist.control_values!, bins),
-    };
-    console.log('Prepared numeric data:', data);
-    return data;
-  }
-
-  // For continuous features
-  const n_bins = 30;
-  const bins = Array.from(
-    { length: n_bins + 1 },
-    (_, i) => min + (max - min) * (i / n_bins),
-  );
-  const categories = bins.slice(0, -1).map((v, i) => (v + bins[i + 1]) / 2);
-
-  return {
-    categories,
-    bins,
-    test: prepareHistogramData(dist.test_values!, bins),
-    control: prepareHistogramData(dist.control_values!, bins),
-  };
-};
-
 const getDistributionChart = (dist: DistributionData) => {
   if (dist.is_numeric) {
-    const data = getNumericDistributionData(dist);
-
+    // For numeric features - stepline chart
     return {
       options: {
         chart: {
@@ -461,7 +419,7 @@ const getDistributionChart = (dist: DistributionData) => {
           align: 'left',
         },
         xaxis: {
-          categories: data.categories,
+          categories: dist.categories,
           title: {
             text: 'Value',
           },
@@ -480,10 +438,6 @@ const getDistributionChart = (dist: DistributionData) => {
           },
         },
         tooltip: {
-          x: {
-            formatter: (val: number) =>
-              Number.isInteger(val) ? val.toString() : val.toFixed(1),
-          },
           y: {
             formatter: (val: number) => val.toFixed(1) + '%',
           },
@@ -492,11 +446,11 @@ const getDistributionChart = (dist: DistributionData) => {
       series: [
         {
           name: 'Test',
-          data: data.test,
+          data: dist.test_distribution!.map((v) => v * 100), // convert to percentages
         },
         {
           name: 'Control',
-          data: data.control,
+          data: dist.control_distribution!.map((v) => v * 100),
         },
       ],
     };

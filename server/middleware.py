@@ -69,7 +69,7 @@ def run_sampling_for_audience(
       users_new_control = split_result.users_control
       logger.debug(
           "Splitting users of audience '%s' has completed: "
-          'test count - %s, control count - %s', audience.name,
+          'test count = %s, control count = %s', audience.name,
           len(users_new_test), len(users_new_control))
       context.data_gateway.save_split_statistics(context.target, audience,
                                                  split_result, suffix)
