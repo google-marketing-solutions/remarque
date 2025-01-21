@@ -16,6 +16,7 @@
 import numpy as np
 import pandas as pd
 import warnings
+import logging
 from scipy import stats
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OrdinalEncoder
@@ -25,6 +26,7 @@ from models import FeatureMetrics, DistributionData, SplittingResult
 warnings.filterwarnings('ignore')
 
 logger = logger.getChild('sampling')
+diagnostics_logger = logger.getChild('sampling.diagnostics')
 
 
 def make_encoding(df: pd.DataFrame,
@@ -145,19 +147,40 @@ def stratify(data: list[list[str]], classes: list[str],
   per_label_subset_sizes = {
       c: [r * len(per_label_data[c]) for r in ratios] for c in classes
   }
-  label_combinations = {}
-  for i, labels in enumerate(data):
-    key = tuple(sorted(labels))
-    label_combinations[key] = label_combinations.get(key, 0) + 1
+
+  # Log initial label distributions
+  if diagnostics_logger.isEnabledFor(logging.DEBUG):
+    for label, indices in per_label_data.items():
+      diagnostics_logger.debug('Label %s: %s occurrences, target %.1f for test',
+                               label, len(indices),
+                               len(indices) * ratio)
+
+  # Sort labels by frequency (most frequent first)
+  sorted_labels = sorted(
+      [(l, len(data)) for l, data in per_label_data.items()],
+      key=lambda x: x[1],
+      reverse=True  # Most frequent first
+  )
+  if diagnostics_logger.isEnabledFor(logging.DEBUG):
+    diagnostics_logger.debug('Processing labels order (by frequency):')
+    for label, count in sorted_labels:
+      diagnostics_logger.debug('  %s: %s occurrences', label, count)
 
   # For each subset we want, the set of sample-ids which should end up in it
   stratified_data_ids = [set(), set()]
 
   # For each sample in the data set
   while size > 0:
-    # Find label with fewest remaining samples
-    label = min((l for l, data in per_label_data.items() if data),
-                key=lambda l: len(per_label_data[l]))
+    # Take next unprocessed label with most remaining samples
+    available_labels = [(l, len(per_label_data[l]))
+                        for l, _ in sorted_labels
+                        if per_label_data[l]]
+    if not available_labels:
+      break
+
+    label, count = max(available_labels, key=lambda x: x[1])
+    diagnostics_logger.debug('Processing label %s with %s remaining instances',
+                             label, count)
 
     # Process all samples with this label
     while per_label_data[label]:
@@ -168,19 +191,26 @@ def stratify(data: list[list[str]], classes: list[str],
       #   1. First try to balance specific feature value
       #   2. If tied, try to balance overall group sizes
       #   3. If still tied, random choice
-      if per_label_subset_sizes[label][0] > per_label_subset_sizes[label][1]:
-        subset = 0  # test group needs this label more
-      elif per_label_subset_sizes[label][0] < per_label_subset_sizes[label][1]:
-        subset = 1  # control group needs this label more
+      test_needs_label = per_label_subset_sizes[label][0]
+      control_needs_label = per_label_subset_sizes[label][1]
+      if test_needs_label != control_needs_label:
+        subset = 0 if test_needs_label > control_needs_label else 1
+        diagnostics_logger.debug(
+            'User %s assigned to %s based on label needs (test: %.1f, control: %.1f)',
+            current_id, 'test' if subset == 0 else 'control', test_needs_label,
+            control_needs_label)
       else:
-        # If tied on this label, check overall group sizes
-        if subset_sizes[0] > subset_sizes[1]:
-          subset = 0  # test group needs more samples
-        elif subset_sizes[0] < subset_sizes[1]:
-          subset = 1  # control group needs more samples
+        if subset_sizes[0] != subset_sizes[1]:
+          subset = 0 if subset_sizes[0] > subset_sizes[1] else 1
+          diagnostics_logger.debug(
+              'User %s assigned to %s based on group sizes (test: %s, control: %s)',
+              current_id, 'test' if subset == 0 else 'control', subset_sizes[0],
+              subset_sizes[1])
         else:
-          # completely tied, choose randomly
           subset = np.random.choice([0, 1])
+          diagnostics_logger.debug('User %s assigned to %s randomly',
+                                   current_id,
+                                   'test' if subset == 0 else 'control')
 
       # Store the sample's id in the selected subset
       stratified_data_ids[subset].add(current_id)
@@ -225,7 +255,10 @@ def binsify(df: pd.DataFrame,
     List of bin edges starting with 0.0.
   """
   if not percentile:
-    percentile = [0.2, 0.4, 0.6, 0.8]
+    if len(df) < 10:
+      percentile = [0.5]  # For small datasets, only split at median
+    else:
+      percentile = [0.2, 0.4, 0.6, 0.8]
   bins = [0.0]
   p = sorted(list(set(np.quantile(df[col].values, percentile))))
   bins.extend(p)
@@ -317,8 +350,8 @@ def split_via_stratification(df: pd.DataFrame,
     df[f'{col}_bins'] = np.searchsorted(bins, df[col].values)
     numeric_features.append(f'{col}_bins')
 
-  logger.debug('Detected numeric features: %s', numeric_features)
-  logger.debug('Detected categorical features: %s', cat_features)
+  diagnostics_logger.debug('Detected numeric features: %s', numeric_features)
+  diagnostics_logger.debug('Detected categorical features: %s', cat_features)
 
   # encode original DF: all categorical columns will be encoded as integers
   encoded, cat_features = make_encoding(
@@ -360,7 +393,7 @@ def split_via_stratification(df: pd.DataFrame,
   distributions = prepare_distribution_data(df, users_test, users_control,
                                             numeric_features, cat_features)
 
-  logger.debug(metrics)
+  diagnostics_logger.debug(metrics)
 
   return SplittingResult(
       users_test=users_test,

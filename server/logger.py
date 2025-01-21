@@ -29,6 +29,12 @@ loglevel = os.getenv('LOG_LEVEL') or 'DEBUG'
 logger = logging.getLogger(LOGGER_NAME)
 logger.setLevel(loglevel)
 
+diagnostics_logger = logger.getChild('sampling.diagnostics')
+if os.environ.get('ENABLE_SAMPLING_DIAGNOSTICS'):
+  diagnostics_logger.setLevel(logging.DEBUG)
+else:
+  diagnostics_logger.setLevel(logging.INFO)
+
 if env.IS_GAE:
   import google.cloud.logging
   from google.cloud.logging.handlers import CloudLoggingHandler, setup_logging
