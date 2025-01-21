@@ -54,6 +54,21 @@ def make_encoding(df: pd.DataFrame,
   cat_ix = df.drop(
       exclude_cols,
       axis=1).select_dtypes(include=['object']).columns.values.tolist()
+
+  # Log and handle nullable integer columns
+  dtypes_dct = dict(df.dtypes)
+  for col in df.columns:
+    if str(df[col].dtype) == 'Int64':
+      if logger.isEnabledFor(logging.DEBUG):
+        na_count = df[col].isna().sum()
+        total_count = len(df[col])
+        msg = (
+            f'Column {col} has nullable Int64 dtype with {na_count}/{total_count} '
+            f'({na_count/total_count:.1%}) NA values')
+        logger.debug(msg)
+      # Convert to float64 and fill NA values with a sentinel value
+      df[col] = df[col].astype('float64').fillna(-999)
+
   if not cat_ix:
     # No categorical columns to encode
     return df[all_cols], []
