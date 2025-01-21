@@ -80,31 +80,20 @@ def test_binsify_edge_cases():
 
 def test_searchsorted_binning():
   """Test the full binning process including searchsorted."""
-  df = pd.DataFrame({
-      'n_sessions': [1, 3, 5, 7, 9]  # Values chosen for easy bin verification
-  })
+  # Bins should be sequential
+  df = pd.DataFrame({'n_sessions': [1, 3, 5, 7, 9, 2, 6, 4, 0, 8, 11]})
 
   bins = binsify(df, 'n_sessions')
-  bin_assignments = np.searchsorted(bins, df['n_sessions'].values)
+  bin_assignments = np.searchsorted(
+      bins, df['n_sessions'].values, side='right') - 1
 
   # Each value should be in a different bin (with our test data)
-  assert len(set(bin_assignments)) == 2
-
-  # # Bins should be sequential
-  # df = pd.DataFrame({
-  #     'n_sessions': [1, 3, 5, 7, 9, 2, 6, 4, 0, 8, 11]  # Values chosen for easy bin verification
-  # })
-
-  # bins = binsify(df, 'n_sessions')
-  # bin_assignments = np.searchsorted(bins, df['n_sessions'].values)
-
-  # # Each value should be in a different bin (with our test data)
-  # assert len(set(bin_assignments)) == 5
-  # assert list(sorted(bin_assignments)) == list(range(1, 6))
+  assert len(set(bin_assignments)) == 5
+  assert list(sorted(set(bin_assignments))) == list(range(0, 5))
 
 
 def test_binsify_small_dataset():
-  """Test binsify with a small dataset similar to our stratification test case."""
+  """Test binsify with a small dataset."""
   df = pd.DataFrame({
       'n_sessions': [10, 12, 15, 16]  # 4 values close to each other
   })
@@ -112,14 +101,9 @@ def test_binsify_small_dataset():
   bins = binsify(df, 'n_sessions')
   bin_assignments = np.searchsorted(bins, df['n_sessions'].values)
 
-  # Print debug info
-  print(f"Bins: {bins}")
-  print(f"Original values: {df['n_sessions'].values}")
-  print(f"Bin assignments: {bin_assignments}")
-
   # Check that we don't get unique bin for each value
-  assert len(set(bin_assignments)) < len(df), \
-      "Small datasets shouldn't have unique bin for each value"
+  assert len(set(bin_assignments)) < len(
+      df), 'Small datasets shouldn\'t have unique bin for each value'
 
   # Check that we get reasonable grouping
   assert len(set(bin_assignments)) <= 3, \

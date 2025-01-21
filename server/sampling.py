@@ -63,8 +63,8 @@ def make_encoding(df: pd.DataFrame,
         na_count = df[col].isna().sum()
         total_count = len(df[col])
         msg = (
-            f'Column {col} has nullable Int64 dtype with {na_count}/{total_count} '
-            f'({na_count/total_count:.1%}) NA values')
+            f'Column {col} has nullable Int64 dtype with '
+            f'{na_count}/{total_count} ({na_count/total_count:.1%}) NA values')
         logger.debug(msg)
       # Convert to float64 and fill NA values with a sentinel value
       df[col] = df[col].astype('float64').fillna(-999)
@@ -211,14 +211,16 @@ def stratify(data: list[list[str]], classes: list[str],
       if test_needs_label != control_needs_label:
         subset = 0 if test_needs_label > control_needs_label else 1
         diagnostics_logger.debug(
-            'User %s assigned to %s based on label needs (test: %.1f, control: %.1f)',
+            'User %s assigned to %s based on label needs '
+            '(test: %.1f, control: %.1f)',
             current_id, 'test' if subset == 0 else 'control', test_needs_label,
             control_needs_label)
       else:
         if subset_sizes[0] != subset_sizes[1]:
           subset = 0 if subset_sizes[0] > subset_sizes[1] else 1
           diagnostics_logger.debug(
-              'User %s assigned to %s based on group sizes (test: %s, control: %s)',
+              'User %s assigned to %s based on group sizes '
+              '(test: %s, control: %s)',
               current_id, 'test' if subset == 0 else 'control', subset_sizes[0],
               subset_sizes[1])
         else:
@@ -297,7 +299,7 @@ def offset_features(df: pd.DataFrame, cat_features: list[str],
   # Offset each categorical feature
   for f in cat_features:
     delta = len(df[f].unique())
-    df[f] = df[f].apply(lambda x: x + offset)
+    df[f] = df[f] + offset
     offset += delta
   return df
 
@@ -362,7 +364,7 @@ def split_via_stratification(df: pd.DataFrame,
   # do binning
   for col in binning_cols:
     bins = binsify(df, col)
-    df[f'{col}_bins'] = np.searchsorted(bins, df[col].values)
+    df[f'{col}_bins'] = np.searchsorted(bins, df[col].values, side='right') - 1
     numeric_features.append(f'{col}_bins')
 
   diagnostics_logger.debug('Detected numeric features: %s', numeric_features)
@@ -471,8 +473,8 @@ def get_split_metrics(
         test_std / control_std if pd.notnull(test_std) and
         pd.notnull(control_std) and control_std != 0 else None)
     if std_ratio and abs(std_ratio - 1) > 0.2:
-      warnings[
-          'std_ratio'] = f'Standard deviation differs by {abs(std_ratio-1)*100:.1f}%'
+      warnings['std_ratio'] = (
+          f'Standard deviation differs by {abs(std_ratio-1)*100:.1f}%')
 
     # KS test: The Kolmogorov-Smirnov (KS) test is comparing two distributions
     # by looking at their cumulative distribution functions (CDFs).
@@ -483,12 +485,13 @@ def get_split_metrics(
 
       # p-values < 0.05 means we got statistically significant difference
       if p_neq < 0.05:
-        warnings[
-            'ks_test'] = f'Distributions are significantly different (p={p_neq:.3f})'
+        warnings['ks_test'] = (
+            f'Distributions are significantly different (p={p_neq:.3f})')
         # ks_stat shows how big the difference is
         if ks_stat > 0.1:
-          warnings[
-              'ks_statistic'] = f'Large difference in distributions: {ks_stat:.1%}'
+          warnings['ks_statistic'] = (
+              f'Large difference in distributions: {ks_stat:.1%}')
+    # pylint: disable=bare-except
     except:
       ks_stat = p_neq = None
 
@@ -550,8 +553,9 @@ def get_split_metrics(
     try:
       chi2, p_value = stats.chisquare(test_aligned, control_aligned)
       if p_value < 0.05:
-        warnings[
-            'p_value'] = f'Significantly different distributions (p={p_value:.3f})'
+        warnings['p_value'] = (
+            f'Significantly different distributions (p={p_value:.3f})')
+    # pylint: disable=bare-except
     except:
       p_value = None
 
@@ -566,6 +570,7 @@ def get_split_metrics(
       js_div = stats.entropy(test_prop, control_prop)
       if js_div > 0.1:
         warnings['js_divergence'] = f'High JS divergence: {js_div:.3f}'
+    # pylint: disable=bare-except
     except:
       js_div = None
 
@@ -604,10 +609,6 @@ def prepare_distribution_data(
     test_dist = test_df[feat].value_counts(normalize=True)
     control_dist = control_df[feat].value_counts(normalize=True)
 
-    # Debug
-    original_col = feat.replace('_bins', '')
-    bins = binsify(df, original_col)
-
     # Get all actual bin numbers that exist in data
     all_bins = sorted(set(test_dist.index) | set(control_dist.index))
 
@@ -620,15 +621,14 @@ def prepare_distribution_data(
     # Get bin labels for these bin numbers
     original_col = feat.replace('_bins', '')
     bins = binsify(df, original_col)
-    #bin_labels = [f"{bins[i]:.0f}-{bins[i+1]:.0f}" for i in all_bins]
     bin_labels = []
     for i in all_bins:
       if i == 1:  # First bin
-        label = f"0-{bins[1]:.0f}"
+        label = f'0-{bins[1]:.0f}'
       elif i == len(bins):  # Last bin
-        label = f"≥{bins[-1]:.0f}"
+        label = f'≥{bins[-1]:.0f}'
       else:  # Middle bins
-        label = f"{bins[i-1]:.0f}-{bins[i]:.0f}"
+        label = f'{bins[i-1]:.0f}-{bins[i]:.0f}'
       bin_labels.append(label)
 
     distributions.append(
