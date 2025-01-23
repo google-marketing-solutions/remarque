@@ -73,6 +73,32 @@
         </q-card-actions>
 
         <q-card-section>
+          <div class="row q-col-gutter-md q-mb-md">
+            <div class="col-12 col-md-6">
+              <q-input
+                v-model="data.audienceNameFilter"
+                label="Filter by audience name"
+                dense
+                clearable
+                debounce="300"
+              >
+                <template v-slot:append>
+                  <q-icon name="search" />
+                </template>
+              </q-input>
+            </div>
+            <div class="col-12 col-md-6">
+              <q-select
+                v-model="data.countryFilter"
+                :options="uniqueCountries"
+                label="Filter by country"
+                dense
+                clearable
+                multiple
+                use-chips
+              />
+            </div>
+          </div>
           <div class="">
             <q-table
               title="Audiences"
@@ -80,7 +106,7 @@
               style="height: 400px"
               flat
               bordered
-              :rows="audiences"
+              :rows="filteredAudiences"
               row-key="name"
               :columns="data.audiencesColumns"
               virtual-scroll
@@ -919,6 +945,8 @@ export default defineComponent({
         { name: 'actions', label: 'Actions', field: '' },
       ],
       audiencesTableTextWrap: true,
+      audienceNameFilter: '',
+      countryFilter: [] as string[],
       includeLogDuplicates: false,
       skipLoadAds: false,
       currentAudienceLogColumns: [
@@ -1142,6 +1170,56 @@ export default defineComponent({
         showExecutionResultDialog(res.data.result);
       }
     };
+
+    // Add computed property for unique countries
+    const uniqueCountries = computed(() => {
+      const allCountries = new Set<string>();
+      audiences.value.forEach((audience) => {
+        audience.countries.forEach((country) => {
+          allCountries.add(country);
+        });
+      });
+      return Array.from(allCountries).sort();
+    });
+
+    // Add computed property for filtered audiences
+    const filteredAudiences = computed(() => {
+      return audiences.value.filter((audience) => {
+        // Filter by name
+        const nameMatch =
+          data.value.audienceNameFilter === '' ||
+          audience.name
+            .toLowerCase()
+            .includes(data.value.audienceNameFilter.toLowerCase());
+
+        // Filter by country
+        const countryMatch =
+          data.value.countryFilter.length === 0 ||
+          data.value.countryFilter.some((country) =>
+            audience.countries.includes(country),
+          );
+
+        return nameMatch && countryMatch;
+      });
+    });
+    // watchers for filters
+    watch(
+      () => data.value.audienceNameFilter,
+      (newValue) => {
+        if (newValue === null) {
+          data.value.audienceNameFilter = '';
+        }
+      },
+    );
+
+    watch(
+      () => data.value.countryFilter,
+      (newValue) => {
+        if (newValue === null) {
+          data.value.countryFilter = [];
+        }
+      },
+    );
 
     // on selected audience change we update conversions graph
     watch(
@@ -1825,6 +1903,8 @@ export default defineComponent({
       store,
       data,
       audiences,
+      uniqueCountries,
+      filteredAudiences,
       onExecute,
       onProcessAudience,
       onFetchAudiencesStatus,
