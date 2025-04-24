@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Method for splitting users."""
-
+import os
 import numpy as np
 import pandas as pd
 import warnings
@@ -26,7 +26,12 @@ from models import FeatureMetrics, DistributionData, SplittingResult
 warnings.filterwarnings('ignore')
 
 logger = logger.getChild('sampling')
-diagnostics_logger = logger.getChild('sampling.diagnostics')
+diagnostics_logger = logger.getChild('diagnostics')
+enable_diagnostics = os.environ.get('ENABLE_DIAGNOSTIC_LOGGING',
+                                    '').lower() == 'true'
+if not enable_diagnostics:
+  # Only critical errors will be logged
+  diagnostics_logger.setLevel(logging.CRITICAL)
 
 
 def make_encoding(df: pd.DataFrame,
@@ -212,16 +217,16 @@ def stratify(data: list[list[str]], classes: list[str],
         subset = 0 if test_needs_label > control_needs_label else 1
         diagnostics_logger.debug(
             'User %s assigned to %s based on label needs '
-            '(test: %.1f, control: %.1f)',
-            current_id, 'test' if subset == 0 else 'control', test_needs_label,
+            '(test: %.1f, control: %.1f)', current_id,
+            'test' if subset == 0 else 'control', test_needs_label,
             control_needs_label)
       else:
         if subset_sizes[0] != subset_sizes[1]:
           subset = 0 if subset_sizes[0] > subset_sizes[1] else 1
           diagnostics_logger.debug(
               'User %s assigned to %s based on group sizes '
-              '(test: %s, control: %s)',
-              current_id, 'test' if subset == 0 else 'control', subset_sizes[0],
+              '(test: %s, control: %s)', current_id,
+              'test' if subset == 0 else 'control', subset_sizes[0],
               subset_sizes[1])
         else:
           subset = np.random.choice([0, 1])
