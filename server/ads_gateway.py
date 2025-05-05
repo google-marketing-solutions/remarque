@@ -27,7 +27,9 @@ from queries import OfflineJobQuery, UserListCampaignMetrics, UserListCampaigns
 
 #from google.ads.googleads.client import GoogleAdsClient  # type: ignore
 
-_MEMBERSHIP_LIFESPAN = 10000
+# Used to be 10000, but beginning on April 7, 2025, using a value of 10000
+# to indicate no expiration will no longer be supported.
+_MEMBERSHIP_LIFESPAN = 540
 _MAX_OPERATIONS_PER_JOB = 100000
 
 
@@ -80,11 +82,11 @@ class AdsGateway:
                                                [self.customer_id]).to_list()
     logger.debug('Existing user lists:\n %s', existing_lists)
 
-    lists_to_add = []
-    result = {}
+    lists_to_add: list[Audience] = []
+    result: dict[str, str] = {}
     for audience in audiences:
       # we can't skip audiences with mode=off here (though it looks logical)
-      # because audiences in mode=off still can be process on-demand from UI
+      # because audiences in mode=off still can be processed on-demand from UI
 
       # Check if the list name is already in existing_lists
       existing_list = next((existing_list for existing_list in existing_lists
@@ -130,8 +132,10 @@ class AdsGateway:
           list_name = user_list_operations[i].create.name
           result[list_name] = response.results[i].resource_name
       except GoogleAdsException as e:
+        logger.error(e.failure)
         logger.error('Failed to add new user lists %s: %s', lists_to_add,
                      e.error)
+        raise
 
     return result
 
