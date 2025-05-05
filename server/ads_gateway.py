@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2023-2005 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,9 +13,9 @@
 # limitations under the License.
 """Methods to work with Google Ads API."""
 
+# pylint: disable=C0330, g-bad-import-order, g-multiple-import, g-importing-member, wrong-import-position
 from enum import Enum
 from typing import Union
-
 from config import Config, ConfigTarget
 from gaarf.api_clients import GoogleAdsApiClient
 from gaarf.base_query import BaseQuery

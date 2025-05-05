@@ -9,12 +9,13 @@
     "format": "prettier --write \"**/*.{js,ts,vue,scss,html,md,json}\" --ignore-path .gitignore",
     "pre-commit": "npx pretty-quick --staged",
     "test": "echo \"No test specified\" && exit 0",
+    "tsc": "tsc",
     "dev": "quasar dev",
     "build": "quasar build"
   },
   "dependencies": {
     "@quasar/extras": "^1.16.12",
-    "apexcharts": "^3.53.0",
+    "apexcharts": "^3.54.0",
     "axios": "^1.7.7",
     "date-fns": "^2.30.0",
     "lodash": "^4.17.21",

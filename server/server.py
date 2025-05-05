@@ -1,4 +1,4 @@
-# Copyright 2023 Google LLC
+# Copyright 2023-2005 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
 # limitations under the License.
 """Application server."""
 
+# pylint: disable=C0330, g-bad-import-order, g-multiple-import, g-importing-member, wrong-import-position
 from typing import Any, Callable
 import json
 import os
@@ -1012,8 +1013,7 @@ def get_user_conversions():
               exposure1=exposure_test,
               count2=int(last_day_result['cum_control_events']),
               exposure2=exposure_control,
-              method='score'
-          )
+              method='score')
         except Exception as e:  # pylint: disable=broad-except
           logger.warning('Failed to calculate event rate p-value: %s', str(e))
           z_statistic = None

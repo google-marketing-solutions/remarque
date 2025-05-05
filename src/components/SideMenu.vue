@@ -1,5 +1,5 @@
 <!--
- Copyright 2023 Google LLC
+ Copyright 2023-2005 Google LLC
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -20,7 +20,10 @@
       <q-item clickable v-ripple to="/configuration">
         <q-item-section>
           <q-item-label>Configuration</q-item-label>
-          <q-item-label caption lines="2">Application setup, manage configurations, define GA4 source</q-item-label>
+          <q-item-label caption lines="2"
+            >Application setup, manage configurations, define GA4
+            source</q-item-label
+          >
         </q-item-section>
         <q-item-section side>
           <q-icon name="cog" />
@@ -30,15 +33,19 @@
       <q-item clickable v-ripple to="/audiences">
         <q-item-section>
           <q-item-label>Audiences</q-item-label>
-          <q-item-label caption lines="2">Define audiences for apps and countries, change period, define
-            funnel</q-item-label>
+          <q-item-label caption lines="2"
+            >Define audiences for apps and countries, change period, define
+            funnel</q-item-label
+          >
         </q-item-section>
       </q-item>
 
       <q-item clickable v-ripple to="/google-ads">
         <q-item-section>
           <q-item-label>Sampling & Google Ads</q-item-label>
-          <q-item-label caption lines="2">Manage audiences in Google Ads</q-item-label>
+          <q-item-label caption lines="2"
+            >Manage audiences in Google Ads</q-item-label
+          >
         </q-item-section>
       </q-item>
 
@@ -53,7 +60,6 @@
 </template>
 
 <script lang="ts">
-
 import { defineComponent } from 'vue';
 
 export default defineComponent({

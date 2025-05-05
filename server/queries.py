@@ -1,23 +1,25 @@
-"""
- Copyright 2023 Google LLC
+# Copyright 2023-2005 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Gaarf query classes."""
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
-
-      https://www.apache.org/licenses/LICENSE-2.0
-
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
- """
-
+# pylint: disable=C0330, g-bad-import-order, g-multiple-import, g-importing-member, wrong-import-position
 from typing import Union
 from gaarf.base_query import BaseQuery
 
+
 class UserListQuery(BaseQuery):
+
   def __init__(self, list_name: str) -> None:
     self.list_name = list_name
     self.query_text = f"""
@@ -29,6 +31,7 @@ class UserListQuery(BaseQuery):
       WHERE user_list.name = '{self.list_name}'
     """
 
+
 class OfflineJobQuery(BaseQuery):
   """Query offline jobs of uploading customer match user lists.
     Returns a list of dicts::
@@ -37,7 +40,8 @@ class OfflineJobQuery(BaseQuery):
     * failure_reason
     * user_list
   """
-  def __init__(self, list_name: Union[str,list]):
+
+  def __init__(self, list_name: Union[str, list]):
     self.query_text = """
 SELECT
   offline_user_data_job.resource_name AS resource_name,

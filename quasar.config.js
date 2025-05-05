@@ -1,6 +1,6 @@
 /* eslint-env node */
 /*
- Copyright 2024 Google LLC
+ Copyright 2023-2005 Google LLC
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -87,15 +87,15 @@ module.exports = configure(function (/* ctx */) {
       // extendViteConf (viteConf) {},
       // viteVuePluginOptions: {},
 
-      // vitePlugins: [
-      //   [ 'package-name', { ..options.. } ]
-      // ]
+      //vitePlugins: [
+      //  ['vite-tsconfig-paths', {}]
+      //]
     },
 
     // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-js#devServer
     devServer: {
       // https: true
-      open: true, // opens browser window automatically
+      //open: true, // opens browser window automatically
       proxy: {
         // proxy all requests starting with /api to Flask local server
         '/api': {

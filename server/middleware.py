@@ -1,4 +1,4 @@
-#  Copyright 2024 Google LLC
+#  Copyright 2023-2005 Google LLC
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
 #  limitations under the License.
 """Middleware methods."""
 
+# pylint: disable=C0330, g-bad-import-order, g-multiple-import, g-importing-member, wrong-import-position
 from datetime import datetime
 import pandas as pd
 import pandas_gbq
@@ -112,6 +113,18 @@ def run_sampling_for_audience(
 
 
 def update_customer_match_mappings(context: Context, audiences: list[Audience]):
+  """Creates Customer Match user lists in Google Ads and updates audience objects.
+
+  This function iterates through the provided audiences, checks if they have
+  an associated user list in Google Ads, creates one if it doesn't exist,
+  and updates the audience's `user_list` attribute with the resource name.
+  If any audience's `user_list` needs updating, it saves the changes back
+  to the data store.
+
+  Args:
+    context: The application context.
+    audiences: A list of Audience objects to process.
+  """
   user_lists = context.ads_gateway.create_customer_match_user_lists(audiences)
   logger.debug(user_lists)
   # update user list resource names for audiences
@@ -136,6 +149,23 @@ def upload_customer_match_audience(context: Context,
                                    audience: Audience,
                                    audience_log: list[AudienceLog],
                                    users: list[str] = None):
+  """Uploads users to a Google Ads Customer Match audience list.
+
+  Loads the users for the specified audience (either provided or loaded from
+  the data store), uploads them to the corresponding Google Ads user list,
+  updates the audience status, calculates statistics, and logs the operation.
+
+  Args:
+    context: The application context.
+    audience: The Audience object representing the target audience.
+    audience_log: A list of previous AudienceLog entries for this audience.
+    users: An optional list of user IDs to upload. If None, users are loaded
+           from the data store for the current day's 'test' segment.
+
+  Returns:
+    An AudienceLog object containing details and statistics about the upload
+    operation. Returns None if the audience mode is 'off'.
+  """
   if audience.mode == 'off':
     return
 
@@ -176,7 +206,7 @@ def upload_customer_match_audience(context: Context,
     new_test_user_count = 0
     new_control_user_count = 0
 
-  # for debug reason save uplaoded users
+  # for debug reason save uploaded users
   # TODO: add some flag to control the behavior
   if len(uploaded_users):
     uploaded_users_mapped = [[id] for id in uploaded_users]
