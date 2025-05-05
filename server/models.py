@@ -135,6 +135,18 @@ class FeatureMetrics:
   max_diff: float | None = None
   warnings: dict[str, str] | None = None
 
+  def __post_init__(self):
+    self.mean_ratio = float(
+        self.mean_ratio) if self.mean_ratio is not None else None
+    self.std_ratio = float(
+        self.std_ratio) if self.std_ratio is not None else None
+    self.ks_statistic = float(
+        self.ks_statistic) if self.ks_statistic is not None else None
+    self.p_value = float(self.p_value) if self.p_value is not None else None
+    self.js_divergence = float(
+        self.js_divergence) if self.js_divergence is not None else None
+    self.max_diff = float(self.max_diff) if self.max_diff is not None else None
+
 
 @dataclass
 class DistributionData:

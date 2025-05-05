@@ -501,12 +501,10 @@ def get_split_metrics(
       ks_stat = p_neq = None
 
     metrics[feat] = FeatureMetrics(
-        mean_ratio=float(mean_ratio) if mean_ratio is not None else None,
-        std_ratio=float(std_ratio) if std_ratio is not None else None,
-        ks_statistic=float(ks_stat) if ks_stat is not None else
-        None,  # the maximum absolute difference between CDFs
-        p_value=float(p_neq) if p_neq is not None else
-        None,  # Tests if distributions are different in any way
+        mean_ratio=mean_ratio,
+        std_ratio=std_ratio,
+        ks_statistic=ks_stat,  # the maximum absolute difference between CDFs
+        p_value=p_neq,  # Tests if distributions are different in any way
         warnings=warnings if warnings else None)
 
   # Categorical features
@@ -583,9 +581,9 @@ def get_split_metrics(
 
     metrics[feat] = FeatureMetrics(
         proportion_diffs=proportion_diffs,
-        max_diff=float(max_diff) if max_diff is not None else None,
-        p_value=float(p_value) if p_value is not None else None,
-        js_divergence=float(js_div) if js_div is not None else None,
+        max_diff=max_diff,
+        p_value=p_value,
+        js_divergence=js_div,
         warnings=warnings if warnings else None)
 
   return metrics
