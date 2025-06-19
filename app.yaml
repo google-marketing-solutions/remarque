@@ -1,4 +1,4 @@
-# Copyright 2023-2005 Google LLC
+# Copyright 2023-2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -41,8 +41,9 @@ app_engine_apis: true
 
 env_variables:
   CONFIG: gs://$PROJECT_ID/remarque/config.json
-  GIT_COMMIT: cc3220bb185d821d2deba14235ad099a3a11a294
+  GIT_COMMIT: babcf0b99dc401d1472598d1b31840129ba8cb74
   LOG_LEVEL: DEBUG
   PYTHONPATH: server
+  #ENABLE_DIAGNOSTIC_LOGGING: true # to enable diagnostics logging
 
 entrypoint: gunicorn -b :$PORT server:app --timeout 0 --workers 2
