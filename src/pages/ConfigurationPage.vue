@@ -35,20 +35,20 @@
         hint="Configuration name can be empty if it's only one"
         :hide-bottom-space="true"
       />
-      <q-btn
-        label="New"
-        @click="onNewTarget"
-        :fab="true"
-        class="q-ml-md"
-        v-if="!store.is_new"
-      />
-      <q-btn
-        label="Delete"
-        @click="onDeleteTarget"
-        :fab="true"
-        class="q-ml-md"
-        v-if="!store.is_new"
-      />
+      <div>
+        <q-btn
+          label="New"
+          @click="onNewTarget"
+          class="q-ml-md"
+          v-if="!store.is_new"
+        />
+        <q-btn
+          label="Delete"
+          @click="onDeleteTarget"
+          class="q-ml-md"
+          v-if="!store.is_new"
+        />
+      </div>
 
       <q-card class="col-7 card" flat bordered>
         <q-card-section>

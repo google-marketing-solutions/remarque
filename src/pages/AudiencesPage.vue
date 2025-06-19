@@ -29,7 +29,7 @@
           <q-card-section>
             <!-- <div class="text-h6">GA4 statistics</div> -->
             <div>
-              <q-banner class="bg-grey-3">
+              <q-banner class="bg-grey-4">
                 <template v-slot:avatar>
                   <q-icon name="info" color="primary" />
                 </template>
@@ -835,7 +835,7 @@ import {
   useAudiencesStore,
 } from 'stores/audiences';
 import { getApi, postApiUi, getApiUi, executeWithWaiting } from 'boot/axios';
-import { useQuasar, QForm } from 'quasar';
+import { useQuasar, QForm, QTableColumn } from 'quasar';
 import { formatArray, formatDate, isFinite } from '../helpers/utils';
 
 interface CountriesTableRow {
@@ -936,7 +936,7 @@ export default defineComponent({
           sortable: true,
           format: (v: number) => v && v.toLocaleString(),
         },
-      ],
+      ] as QTableColumn[],
       countriesTableData: [] as CountriesTableRow[],
       selectedCountries: [] as CountriesTableRow[],
       countriesTableColumns: [
@@ -954,7 +954,7 @@ export default defineComponent({
           sortable: true,
           format: (v: number) => v && v.toLocaleString(),
         },
-      ],
+      ] as QTableColumn[],
       audiences: storeAudiences.audiences,
       audiences_columns: [
         { name: 'name', label: 'Name', field: 'name', sortable: true },
@@ -993,7 +993,7 @@ export default defineComponent({
           format: formatDate,
         },
         { name: 'actions', label: 'Actions', field: '' },
-      ],
+      ] as QTableColumn[],
       audiences_wrap: true,
       ga_stat_loading: false,
       isSplitRatioChecked: false,

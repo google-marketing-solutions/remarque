@@ -17,61 +17,70 @@
   <router-view />
 </template>
 
-<script lang="ts">
-import { defineComponent } from 'vue';
+<script setup lang="ts">
+import { onMounted, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useConfigurationStore } from 'stores/configuration';
 import { useAudiencesStore } from 'stores/audiences';
 import { useRouter } from 'vue-router';
 import { assertIsError } from 'src/helpers/utils';
 
-export default defineComponent({
-  name: 'App',
-  async created() {
-    const router = useRouter();
+const router = useRouter();
+const $q = useQuasar();
+const store = useConfigurationStore();
+const storeAudiences = useAudiencesStore();
 
-    router.beforeEach((to, from) => {
-      if (!Object.keys(to.query).length && Object.keys(from.query).length > 0) {
-        return Object.assign({}, to, { query: from.query });
-      }
-    });
-    this.initialize();
-  },
-  methods: {
-    async initialize() {
-      const $q = useQuasar();
-      const store = useConfigurationStore();
-      const storeAudiences = useAudiencesStore();
-      const router = useRouter();
-
-      const progress = $q.dialog({
-        message: 'Initializing. Loading configuration...',
-        progress: true, // we enable default settings
-        persistent: true, // we want the user to not be able to close it
-        ok: false, // we want the user to not be able to close it
-      });
-
-      try {
-        await store.loadConfiguration();
-        progress.update({
-          message: 'Initializing. Fetching audiences...',
-        });
-        await storeAudiences.loadAudiences();
-        progress.hide();
-        console.log('App.created completed');
-      } catch (e: unknown) {
-        console.log('App failed to initialize');
-        console.log(e);
-        progress.hide();
-        assertIsError(e);
-        $q.dialog({
-          title: 'Error',
-          message: e.message,
-        }).onDismiss(() => {
-          router.push({ path: '/configuration' });
-        });
-      }
-    },
-  },
+router.beforeEach((to, from) => {
+  if (!Object.keys(to.query).length && Object.keys(from.query).length > 0) {
+    return Object.assign({}, to, { query: from.query });
+  }
 });
+
+async function initialize() {
+  const progress = $q.dialog({
+    message: 'Initializing. Loading configuration...',
+    progress: true, // we enable default settings
+    persistent: true, // we want the user to not be able to close it
+    ok: false, // we want the user to not be able to close it
+  });
+
+  try {
+    await store.loadConfiguration();
+    progress.update({
+      message: 'Initializing. Fetching audiences...',
+    });
+    await storeAudiences.loadAudiences();
+    progress.hide();
+    console.log('App.setup completed');
+  } catch (e: unknown) {
+    console.log('App failed to initialize');
+    console.log(e);
+    progress.hide();
+    assertIsError(e);
+    $q.dialog({
+      title: 'Error',
+      message: e.message,
+    }).onDismiss(() => {
+      router.push({ path: '/configuration' });
+    });
+  }
+}
+
+// Load preference on component mount
+onMounted(() => {
+  const darkModePreference = localStorage.getItem('darkMode');
+  if (darkModePreference !== null) {
+    $q.dark.set(darkModePreference === 'true');
+  }
+});
+
+// Save preference whenever it changes
+watch(
+  () => $q.dark.isActive,
+  (isDark) => {
+    localStorage.setItem('darkMode', isDark.toString());
+  },
+);
+
+initialize();
 </script>

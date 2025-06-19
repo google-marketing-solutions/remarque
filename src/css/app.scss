@@ -16,11 +16,19 @@
 
 .qtable-sticky-header {
   thead > tr:first-child > th {
-    /* bg color is important for th; just specify one */
-    background-color: #ffffff;
     z-index: 1000;
     position: sticky;
     top: 0;
+  }
+}
+.body--dark {
+  .qtable-sticky-header thead > tr:first-child > th {
+    background-color: var(--q-dark);
+  }
+}
+.body--light {
+  .qtable-sticky-header thead > tr:first-child > th {
+    background-color: #ffffff;
   }
 }
 
@@ -29,4 +37,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Dark theme banner styling */
+.body--dark .q-banner {
+  background-color: #2d2b55 !important; /* Dark purple for dark theme */
 }

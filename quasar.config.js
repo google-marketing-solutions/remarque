@@ -78,7 +78,10 @@ export default defineConfig((/* ctx */) => {
 
       // publicPath: '/',
       // analyze: true,
-      // env: {},
+      env: {
+        BUILD_TIMESTAMP: new Date().toISOString(),
+        GIT_HASH: execSync('git rev-parse --short HEAD').toString().trim(),
+      },
       // rawDefine: {}
       // ignorePublicFolder: true,
       // minify: false,
