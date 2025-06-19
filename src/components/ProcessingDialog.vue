@@ -30,10 +30,51 @@
             { label: 'Only Uploading', value: ProcessMode.OnlyUploading },
           ]"
         />
+        <!-- Change mode for all audiences -->
+        <div class="row items-center q-mt-md">
+          <div class="text-subtitle2 q-mr-sm">Set all to:</div>
+          <q-btn-toggle
+            v-model="applyAllMode"
+            no-wrap
+            outline
+            dense
+            :disable="isProcessing"
+            :toggle-color="
+              applyAllMode === 'off'
+                ? 'red'
+                : applyAllMode === 'test'
+                  ? 'blue'
+                  : 'green'
+            "
+            :options="[
+              { label: 'Off', value: 'off' },
+              { label: 'Test', value: 'test' },
+              { label: 'Prod', value: 'prod' },
+            ]"
+          />
+          <q-btn
+            label="Apply to All"
+            color="primary"
+            dense
+            flat
+            class="q-ml-sm"
+            :disable="isProcessing"
+            @click="applyModeToAllAudiences"
+          />
+        </div>
       </q-card-section>
       <q-card-section style="max-height: 60vh" class="scroll">
+        <q-input
+          v-model="audienceNameFilter"
+          dense
+          outlined
+          label="Filter by audience name"
+          class="q-mb-md"
+          clearable
+          :disable="isProcessing"
+        />
         <q-list separator>
-          <q-item v-for="audience in audiences" :key="audience.name">
+          <q-item v-for="audience in filteredAudiences" :key="audience.name">
             <q-item-section avatar style="width: 150px">
               <div class="row no-wrap items-start">
                 <q-icon
@@ -319,6 +360,8 @@ const showMetricsDialog = ref(false);
 const showDistributionsDialog = ref(false);
 const selectedMetrics = ref<Map<string, Record<string, string>> | null>(null);
 const selectedDistributions = ref<DistributionData[]>([]);
+const applyAllMode = ref<AudienceMode>(AudienceMode.OFF);
+const audienceNameFilter = ref('');
 
 const metricsColumns: QTableColumn[] = [
   {
@@ -550,8 +593,26 @@ const hasEnabledAudiences = computed(() => {
   return Object.values(audienceModes.value).some((mode) => mode !== 'off');
 });
 
+const filteredAudiences = computed(() => {
+  if (!props.audiences) return [];
+  if (!audienceNameFilter.value) {
+    return props.audiences;
+  }
+  const filter = audienceNameFilter.value.toLowerCase();
+  return props.audiences.filter((audience) =>
+    audience.name.toLowerCase().includes(filter),
+  );
+});
+
 const updateAudienceMode = (audienceName: string, mode: AudienceMode) => {
   audienceModes.value[audienceName] = mode;
+};
+
+const applyModeToAllAudiences = () => {
+  if (!props.audiences) return;
+  for (const audience of props.audiences) {
+    audienceModes.value[audience.name] = applyAllMode.value;
+  }
 };
 
 const startProcessing = () => {
