@@ -20,6 +20,7 @@ import os
 import math
 import yaml
 import datetime
+import argparse
 from pprint import pprint
 import traceback
 from flask import Flask, request, jsonify, abort, send_from_directory, send_file, Response
@@ -362,7 +363,7 @@ def setup_download_ads_cred():
 
 @app.route('/api/setup/validate_ads_cred', methods=['POST'])
 def setup_validate_ads_cred():
-  context = create_context()
+  create_context()
   params: dict = request.get_json(force=True)
   cfg = {
       'developer_token': params.get('ads_developer_token'),
@@ -1142,4 +1143,15 @@ if __name__ == '__main__':
   # This is used when running locally only. When deploying to Google App
   # Engine, a webserver process such as Gunicorn will serve the app. This
   # can be configured by adding an `entrypoint` to app.yaml.
-  app.run(host='127.0.0.1', port=8080, debug=True)
+  parser = argparse.ArgumentParser()
+  parser.add_argument('--port', default=8080)
+  parser.add_argument('--debug', action='store_true', default=True)
+  parser.add_argument(
+      '--log-level',
+      dest='log_level',
+      help='Logging level: DEBUG, INFO, WARN, ERROR')
+  srv_args = parser.parse_known_args()[0]
+  if srv_args.log_level:
+    logger.setLevel(srv_args.log_level)
+
+  app.run(host='127.0.0.1', port=srv_args.port, debug=srv_args.debug)
