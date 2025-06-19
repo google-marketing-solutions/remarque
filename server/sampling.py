@@ -1,4 +1,4 @@
-# Copyright 2023-2005 Google LLC
+# Copyright 2023-2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,7 +31,9 @@ logger = logger.getChild('sampling')
 diagnostics_logger = logger.getChild('diagnostics')
 enable_diagnostics = os.environ.get('ENABLE_DIAGNOSTIC_LOGGING',
                                     '').lower() == 'true'
-if not enable_diagnostics:
+if enable_diagnostics:
+  diagnostics_logger.setLevel(logging.DEBUG)
+else:
   # Only critical errors will be logged
   diagnostics_logger.setLevel(logging.CRITICAL)
 
@@ -586,7 +588,7 @@ def get_split_metrics(
         max_diff=max_diff,
         p_value=p_value,
         js_divergence=js_div,
-        warnings=warnings if warnings else None)
+        warnings=warnings)
 
   return metrics
 

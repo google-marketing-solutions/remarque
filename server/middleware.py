@@ -72,8 +72,14 @@ def run_sampling_for_audience(
           "Splitting users of audience '%s' has completed: "
           'test count = %s, control count = %s', audience.name,
           len(users_new_test), len(users_new_control))
-      context.data_gateway.save_split_statistics(context.target, audience,
-                                                 split_result, suffix)
+      try:
+        context.data_gateway.save_split_statistics(context.target, audience,
+                                                   split_result, suffix)
+      except BaseException as e:
+        logger.warning(
+            'Saving splitstat for audience "%s" failed, see the following error',
+            audience.name)
+        logger.error(e)
     else:
       logger.warning("User segment of audience '%s' contains no users",
                      audience.name)

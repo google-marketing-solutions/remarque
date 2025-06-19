@@ -1,4 +1,4 @@
-# Copyright 2023-2005 Google LLC
+# Copyright 2023-2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,8 +16,10 @@
 # pylint: disable=C0330, g-bad-import-order, g-multiple-import, g-importing-member, wrong-import-position
 from dataclasses import dataclass
 from datetime import date
-from typing import Literal
+from typing import Literal, Any
 import pandas as pd
+import math
+import numpy as np
 
 
 class Audience:
@@ -124,6 +126,11 @@ class AudienceLog:
     }
 
 
+def to_float(v: Any) -> float | None:
+  return float(v) if v is not None and (math.isfinite(v) or
+                                        np.isfinite(v)) else None
+
+
 @dataclass
 class FeatureMetrics:
   """Stat metrics of a split for one feature."""
@@ -137,16 +144,12 @@ class FeatureMetrics:
   warnings: dict[str, str] | None = None
 
   def __post_init__(self):
-    self.mean_ratio = float(
-        self.mean_ratio) if self.mean_ratio is not None else None
-    self.std_ratio = float(
-        self.std_ratio) if self.std_ratio is not None else None
-    self.ks_statistic = float(
-        self.ks_statistic) if self.ks_statistic is not None else None
-    self.p_value = float(self.p_value) if self.p_value is not None else None
-    self.js_divergence = float(
-        self.js_divergence) if self.js_divergence is not None else None
-    self.max_diff = float(self.max_diff) if self.max_diff is not None else None
+    self.mean_ratio = to_float(self.mean_ratio)
+    self.std_ratio = to_float(self.std_ratio)
+    self.ks_statistic = to_float(self.ks_statistic)
+    self.p_value = to_float(self.p_value)
+    self.js_divergence = to_float(self.js_divergence)
+    self.max_diff = to_float(self.max_diff)
 
 
 @dataclass
