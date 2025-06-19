@@ -23,9 +23,10 @@
 // Configuration for your app
 // https://v2.quasar.dev/quasar-cli-vite/quasar-config-js
 
-const { configure } = require('quasar/wrappers');
+import { defineConfig } from '#q-app/wrappers';
+import { execSync } from 'child_process';
 
-module.exports = configure(function (/* ctx */) {
+export default defineConfig((/* ctx */) => {
   return {
     eslint: {
       // fix: true,
@@ -99,7 +100,7 @@ module.exports = configure(function (/* ctx */) {
       proxy: {
         // proxy all requests starting with /api to Flask local server
         '/api': {
-          target: 'http://127.0.0.1:8080',
+          target: 'http://127.0.0.1:8081',
           changeOrigin: true,
         },
       },
