@@ -702,8 +702,9 @@ ORDER BY created
           bigquery.ScalarQueryParameter('query' + str(idx), 'STRING', i.query))
       selects.append(f"""SELECT '{i.name}' name, '{i.app_id}' app_id,
   {"'" + i.table_name + "'"} table_name,
-  {i.countries} countries,
-  {i.events_include} events_include, {i.events_exclude} events_exclude,
+  {str(i.countries) if i.countries else 'CAST([] AS ARRAY<STRING>)'} countries,
+  {str(i.events_include) if i.events_include else 'CAST([] AS ARRAY<STRING>)'} events_include,
+  {str(i.events_exclude) if i.events_exclude else 'CAST([] AS ARRAY<STRING>)'} events_exclude,
   {i.days_ago_start} days_ago_start, {i.days_ago_end} days_ago_end,
   {"'" + i.user_list + "'" if i.user_list is not None else "CAST(NULL as STRING)"} user_list,
   {"'" + i.mode + "'"} mode,
@@ -711,8 +712,9 @@ ORDER BY created
   {i.ttl} ttl,
   {"NULL" if not i.split_ratio else i.split_ratio} split_ratio
 """)
-    sql_selects = '\nUNION ALL\n'.join(selects)
-    query = f"""
+    if selects:
+      sql_selects = '\nUNION ALL\n'.join(selects)
+      query = f"""
 MERGE `{table_name}` t
 USING (
 {sql_selects}
@@ -835,7 +837,7 @@ WHEN NOT MATCHED THEN
               'app_id':
                   audience.app_id,
               'countries_clause':
-                  f'f.country IN ({countries}) ' if audience
+                  f'F.country IN ({countries}) ' if audience
                   .countries else 'TRUE',
               'countries':
                   countries,
