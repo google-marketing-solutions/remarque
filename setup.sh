@@ -64,6 +64,7 @@ enable_apis() {
   gcloud services enable iap.googleapis.com
   gcloud services enable cloudresourcemanager.googleapis.com
 
+  gcloud services enable artifactregistry.googleapis.com # required for Gen2 GCF
 #  gcloud services enable cloudbuild.googleapis.com
 }
 
@@ -79,14 +80,26 @@ create_gae() {
 }
 
 set_iam_permissions() {
+  SERVICE_ACCOUNT=$(gcloud app describe --format="value(serviceAccount)")
   echo -e "${COLOR}Setting up IAM permissions...${NC}"
-  gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$SERVICE_ACCOUNT --role=roles/appengine.appAdmin --condition=None
-  gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$SERVICE_ACCOUNT --role=roles/bigquery.admin --condition=None
-  gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$SERVICE_ACCOUNT --role=roles/cloudscheduler.admin --condition=None
-  gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$SERVICE_ACCOUNT --role=roles/storage.admin --condition=None
-  gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$SERVICE_ACCOUNT --role=roles/logging.logWriter --condition=None
-  gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$SERVICE_ACCOUNT --role=roles/logging.admin --condition=None
-  gcloud projects add-iam-policy-binding $PROJECT_ID --member=serviceAccount:$SERVICE_ACCOUNT --role=roles/iap.admin --condition=None
+  declare -ar ROLES=(
+    roles/appengine.appAdmin
+    roles/bigquery.admin
+    roles/cloudscheduler.admin
+    roles/storage.admin
+    roles/logging.logWriter
+    roles/logging.admin
+    roles/iap.admin
+    roles/artifactregistry.admin
+    roles/iam.serviceAccountUser
+  )
+  for role in "${ROLES[@]}"
+  do
+    gcloud projects add-iam-policy-binding $PROJECT_ID \
+      --member=serviceAccount:$SERVICE_ACCOUNT \
+      --role=$role \
+      --condition=None
+  done
 }
 
 update_git_commit() {
@@ -120,9 +133,22 @@ build_app() {
   npm run build
 }
 
+clean_dispatch_rules() {
+  echo -e "${COLOR}Cleaning dispatch rules...${NC}"
+
+  # Create empty dispatch file
+  echo "dispatch:" > dispatch.yaml
+
+  # Deploy it
+  gcloud app deploy dispatch.yaml --quiet
+
+  # Clean up
+  rm dispatch.yaml
+}
 
 deploy_app() {
   build_app
+  clean_dispatch_rules
   echo -e "${COLOR}Deploying app to GAE...${NC}"
   gcloud app deploy --quiet
 }
@@ -193,10 +219,12 @@ create_iap() {
   #   https://cloud.google.com/iap/docs/managing-access#managing_access_with_the_api
   #   https://cloud.google.com/iap/docs/reference/app-engine-apis)
   echo -e "${COLOR}Enabling IAP for App Engine...${NC}"
-  curl -X PATCH -H "Content-Type: application/json" \
-   -H "Authorization: Bearer $TOKEN" \
-   --data "{\"iap\": {\"enabled\": true, \"oauth2ClientId\": \"$IAP_CLIENT_ID\", \"oauth2ClientSecret\": \"$IAP_CLIENT_SECRET\"} }" \
-   "https://appengine.googleapis.com/v1/apps/$PROJECT_ID?alt=json&update_mask=iap"
+#  curl -X PATCH -H "Content-Type: application/json" \
+#   -H "Authorization: Bearer $TOKEN" \
+#   --data "{\"iap\": {\"enabled\": true, \"oauth2ClientId\": \"$IAP_CLIENT_ID\", \"oauth2ClientSecret\": \"$IAP_CLIENT_SECRET\"} }" \
+#   "https://appengine.googleapis.com/v1/apps/$PROJECT_ID?alt=json&update_mask=iap"
+
+  gcloud iap web enable --resource-type=app-engine --oauth2-client-id=$IAP_CLIENT_ID --oauth2-client-secret=$IAP_CLIENT_SECRET
 
   # Grant the current user access to the IAP
   echo -e "${COLOR}Granting user $USER_EMAIL access to the app through IAP...${NC}"
