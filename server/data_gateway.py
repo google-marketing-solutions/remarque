@@ -2,14 +2,14 @@
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+#  You may obtain a copy of the License at
 #
-#     https://www.apache.org/licenses/LICENSE-2.0
+#       https://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
 #  limitations under the License.
 """DataGateway to work with data."""
 
@@ -42,7 +42,7 @@ country_name_to_code_cache = {}
 
 class QueryExecutionError(Exception):
 
-  def __init__(self, msg: str = None, query: str = None) -> None:
+  def __init__(self, msg: str | None = None, query: str | None = None) -> None:
     super().__init__(msg)
     self.query = query
 
@@ -301,14 +301,6 @@ class DataGateway:
         logger.warning(
             'users_normalized renamed to %s, view users_normalized created',
             suffixed_table_name)
-      else:
-        # we changed the view schema on 06.12.2024 (added QUALIFY), recreate it
-        query = (
-            f'CREATE OR REPLACE VIEW `{table_name}`'
-            f'AS SELECT * FROM `{table_name}_*`'
-            'QUALIFY ROW_NUMBER() OVER '
-            '(PARTITION BY user, app_id ORDER BY event_timestamp DESC) = 1')
-        self.execute_query(query)
       # TODO: there's a problem: if the user has changed loopback_window,
       # it won't go into effect as we're not recreating the table and
       # don't know for what period it was created originally.
@@ -739,10 +731,10 @@ WHEN NOT MATCHED THEN
   INSERT (name, app_id, table_name, countries, events_include, events_exclude, days_ago_start, days_ago_end, created, mode, query, ttl, split_ratio)
   VALUES (s.name, s.app_id, s.table_name, s.countries, s.events_include, s.events_exclude, s.days_ago_start, s.days_ago_end, CURRENT_TIMESTAMP(), s.mode, s.query, s.ttl, s.split_ratio)
 """
-    logger.debug(query)
-    job_config = bigquery.QueryJobConfig()
-    job_config.query_parameters = query_params
-    self.bq_client.query(query, job_config=job_config).result()
+      logger.debug(query)
+      job_config = bigquery.QueryJobConfig()
+      job_config.query_parameters = query_params
+      self.bq_client.query(query, job_config=job_config).result()
 
     # delete removed audiences
     sql_names_to_delete = ','.join(
@@ -1066,7 +1058,8 @@ WHEN NOT MATCHED THEN
 
     Actual structure depends on `ga4_loopback_recreate` setting. If it's enabled
     we recreate users_normalized every day. Otherwise we create incremental
-    tables, e.g. users_normalized_yyyymmdd join together via a view.
+    tables, e.g. users_normalized_yyyymmdd. All of them are joined together
+    via a view.
     An important moment: though we are checking/updating the tables for today,
     actually we can only include GA4 data from yesterday (and even then,
     it's not guaranteed).
@@ -1099,25 +1092,6 @@ WHEN NOT MATCHED THEN
       # and then join them via a view users_normalized
       logger.debug('Checking users_normalized table is up to date')
 
-      # Fix: previously we were creating tables for 'today' and
-      # often they were empty.
-      # We'll check all existing incremental tables have rows,
-      # and delete tables without rows, which effectively should lead
-      # to recreation of a table with data for missing days
-      query = f"""SELECT T.table_name, COUNT(U.user)
-FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES AS T
-LEFT JOIN `{target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}_*` AS U
-  ON U._TABLE_SUFFIX = RIGHT(T.table_name, 8)
-WHERE table_name LIKE '{TABLE_USERS_NORMALIZED}_%'
-GROUP BY 1
-HAVING COUNT(U.user) = 0
-"""
-      response = self.execute_query(query)
-      tables = [r['table_name'] for r in response]
-      for table_name in tables:
-        query = f'DROP TABLE {target.bq_dataset_id}.{table_name}'
-        self.execute_query(query)
-
       # detect the last day till which we have data in users_normalized table
       query = f"""SELECT table_name
   FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES
@@ -1129,6 +1103,25 @@ HAVING COUNT(U.user) = 0
         logger.info('Creating users_normalized table for the first time')
         self._create_users_normalized_table_backfill(target)
       else:
+        # Fix: previously we were creating tables for 'today' and
+        # often they were empty.
+        # We'll check all existing incremental tables have rows,
+        # and delete tables without rows, which effectively should lead
+        # to recreation of a table with data for missing days
+        query = f"""SELECT T.table_name, COUNT(U.user)
+  FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES AS T
+  LEFT JOIN `{target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}_*` AS U
+    ON U._TABLE_SUFFIX = RIGHT(T.table_name, 8)
+  WHERE table_name LIKE '{TABLE_USERS_NORMALIZED}_%'
+  GROUP BY 1
+  HAVING COUNT(U.user) = 0
+  """
+        response = self.execute_query(query)
+        tables = [r['table_name'] for r in response]
+        for table_name in tables:
+          query = f'DROP TABLE {target.bq_dataset_id}.{table_name}'
+          self.execute_query(query)
+
         last_day = [t.split('_')[-1] for t in tables][0]
         # now we need to create a table users_normalized_{today} that includes
         # events starting the day after last_day till today
