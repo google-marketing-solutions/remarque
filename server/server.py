@@ -330,6 +330,8 @@ def setup_upload_ads_cred():
   logger.debug('Updating Ads API credentials from google-ads.yam file:\n %s',
                cfg)
   cfg['use_proto_plus'] = True
+  if 'customer_id' not in cfg:
+    cfg['customer_id'] = cfg['login_customer_id']
   _validate_googleads_config(cfg, throw=True)
 
   context.target.ads_client_id = cfg['client_id']
@@ -563,8 +565,8 @@ def process():
   if not context.target:
     # pylint: disable=broad-exception-raised
     raise Exception('Target was not set, target uri argument: ' +
-                    _get_req_arg_str('target') +
-                    'available targets in the configuration: ' +
+                    (_get_req_arg_str('target') or '<empty>') +
+                    ', available targets in the configuration: ' +
                     context.config.get_targets_names())
 
   ts_start = datetime.now()

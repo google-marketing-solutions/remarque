@@ -1053,6 +1053,37 @@ WHEN NOT MATCHED THEN
                query)
       self.execute_query(query)
 
+  def _get_users_normalized_tables(self, target: ConfigTarget):
+    query = f"""SELECT table_name
+  FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES
+  WHERE table_name like '{TABLE_USERS_NORMALIZED}_%' ORDER BY 1 DESC
+      """
+    response = self.execute_query(query)
+    tables = [r['table_name'] for r in response]
+    return tables
+
+  def _drop_empty_users_normalized_tables(self, target: ConfigTarget):
+    query = f"""SELECT T.table_name, COUNT(U.user)
+  FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES AS T
+  LEFT JOIN `{target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}_*` AS U
+    ON U._TABLE_SUFFIX = RIGHT(T.table_name, 8)
+  WHERE table_name LIKE '{TABLE_USERS_NORMALIZED}_%'
+  GROUP BY 1
+  HAVING COUNT(U.user) = 0
+  """
+    try:
+      response = self.execute_query(query)
+      tables = [r['table_name'] for r in response]
+      logger.info('Removing %s empty wildcard tables users_normalized_*',
+                  len(tables))
+      for table_name in tables:
+        query = f'DROP TABLE {target.bq_dataset_id}.{table_name}'
+        self.execute_query(query)
+    except Exception as e:
+      logger.error(
+          'Failed to fetch and delete empty users_normalized_* wildcard tables: %s',
+          e)
+
   def ensure_users_normalized(self, target: ConfigTarget):
     """Make sure users_normalized exist or include data for today.
 
@@ -1093,53 +1124,50 @@ WHEN NOT MATCHED THEN
       logger.debug('Checking users_normalized table is up to date')
 
       # detect the last day till which we have data in users_normalized table
-      query = f"""SELECT table_name
-  FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES
-  WHERE table_name like '{TABLE_USERS_NORMALIZED}_%' ORDER BY 1 DESC
-      """
-      response = self.execute_query(query)
-      tables = [r['table_name'] for r in response]
+      tables = self._get_users_normalized_tables(target)
       if not tables:
         logger.info('Creating users_normalized table for the first time')
         self._create_users_normalized_table_backfill(target)
       else:
+        logger.debug(
+            'Found %s wildcard tables users_normalized_*. Checking for empty ones (fix)',
+            len(tables))
         # Fix: previously we were creating tables for 'today' and
         # often they were empty.
         # We'll check all existing incremental tables have rows,
         # and delete tables without rows, which effectively should lead
         # to recreation of a table with data for missing days
-        query = f"""SELECT T.table_name, COUNT(U.user)
-  FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES AS T
-  LEFT JOIN `{target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}_*` AS U
-    ON U._TABLE_SUFFIX = RIGHT(T.table_name, 8)
-  WHERE table_name LIKE '{TABLE_USERS_NORMALIZED}_%'
-  GROUP BY 1
-  HAVING COUNT(U.user) = 0
-  """
-        response = self.execute_query(query)
-        tables = [r['table_name'] for r in response]
-        for table_name in tables:
-          query = f'DROP TABLE {target.bq_dataset_id}.{table_name}'
-          self.execute_query(query)
+        self._drop_empty_users_normalized_tables(target)
 
-        last_day = [t.split('_')[-1] for t in tables][0]
-        # now we need to create a table users_normalized_{today} that includes
-        # events starting the day after last_day till today
-        last_day = datetime.strptime(last_day, '%Y%m%d').date()
-        # we're not sure when GA4 data arrive
-        events_last_table = self._get_ga4_last_table(target)
-        if not events_last_table:
-          # it's hardly possible
-          logger.warning(
-              'ensure_users_normalized: skipping creating an incremental '
-              'users_normalized table as could not get last GA4 events table')
-          return
-        events_last_day = events_last_table[-8:]
-        events_last_day = datetime.strptime(events_last_day, '%Y%m%d').date()
-        if events_last_day > last_day:
-          start_day = (last_day + timedelta(days=1)).strftime('%Y%m%d')
-          end_day = events_last_day.strftime('%Y%m%d')
-          self._create_users_normalized_table(target, start_day, end_day)
+        # now refetch tables because there might no ant
+        tables = self._get_users_normalized_tables(target)
+        if not tables:
+          logger.info(
+              'Creating users_normalized table for the first time (after removing empty ones)'
+          )
+          self._create_users_normalized_table_backfill(target)
+        else:
+          last_day = [t.split('_')[-1] for t in tables][0]
+          # now we need to create a table users_normalized_{today} that includes
+          # events starting the day after last_day till today
+          last_day = datetime.strptime(last_day, '%Y%m%d').date()
+          # we're not sure when GA4 data arrive
+          events_last_table = self._get_ga4_last_table(target)
+          if not events_last_table:
+            # it's hardly possible
+            logger.warning(
+                'ensure_users_normalized: skipping creating an incremental '
+                'users_normalized table as could not get last GA4 events table')
+            return
+          events_last_day = events_last_table[-8:]
+          events_last_day = datetime.strptime(events_last_day, '%Y%m%d').date()
+          logger.info(
+              'Last segment of users_normalized_*: %s, last events date: %s',
+              last_day, events_last_day)
+          if events_last_day > last_day:
+            start_day = (last_day + timedelta(days=1)).strftime('%Y%m%d')
+            end_day = events_last_day.strftime('%Y%m%d')
+            self._create_users_normalized_table(target, start_day, end_day)
 
   def sample_audience_users(self,
                             target: ConfigTarget,
