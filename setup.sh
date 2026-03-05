@@ -116,13 +116,13 @@ update_git_commit() {
 
 deploy_files() {
   echo -e "${COLOR}Deploying files to GCS...${NC}"
-  if ! gsutil ls gs://${PROJECT_ID} > /dev/null 2> /dev/null; then
-    gsutil mb -b on gs://${PROJECT_ID}
+  if ! gcloud storage ls gs://${PROJECT_ID} > /dev/null 2> /dev/null; then
+    gcloud storage buckets create gs://${PROJECT_ID} --uniform-bucket-level-access
   fi
 
   GCS_BUCKET=gs://${PROJECT_ID}/remarque
-  gsutil cp app.yaml $GCS_BUCKET/
-  #gsutil cp config.json $GCS_BUCKET/
+  gcloud storage cp app.yaml $GCS_BUCKET/
+  #gcloud storage cp config.json $GCS_BUCKET/
   echo -e "${COLOR}Files were deployed to ${GCS_BUCKET}${NC}"
 }
 
