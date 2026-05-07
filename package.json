@@ -16,7 +16,7 @@
   "dependencies": {
     "@quasar/extras": "^1.17.0",
     "apexcharts": "^4.7.0",
-    "axios": "^1.7.7",
+    "axios": "^1.15.2",
     "date-fns": "^2.30.0",
     "lodash": "^4.17.21",
     "pinia": "^3.0.3",
