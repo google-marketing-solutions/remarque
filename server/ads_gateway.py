@@ -20,7 +20,7 @@ from config import Config, ConfigTarget
 from gaarf.api_clients import GoogleAdsApiClient
 from gaarf.base_query import BaseQuery
 from gaarf.report_fetcher import AdsReportFetcher
-from gaarf.query_executor import AdsQueryExecutor
+from gaarf.executors.ads_executor import AdsQueryExecutor
 from google.ads.googleads.errors import GoogleAdsException
 from logger import logger
 from models import Audience
