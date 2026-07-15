@@ -700,7 +700,7 @@ def update_schedule():
 
 def _validate_googleads_config(ads_config, *, throw=False):
   client = gaarf.api_clients.GoogleAdsApiClient(config_dict=ads_config)
-  report_fetcher = gaarf.query_executor.AdsReportFetcher(client)
+  report_fetcher = gaarf.report_fetcher.AdsReportFetcher(client)
   try:
     report_fetcher.fetch(
         'SELECT customer.id FROM customer',
