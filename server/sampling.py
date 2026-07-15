@@ -85,7 +85,8 @@ def make_encoding(df: pd.DataFrame,
   transformers = [
       ('cat',
        OrdinalEncoder(handle_unknown='use_encoded_value',
-                      unknown_value=-99), cat_ix)
+                      unknown_value=-99,
+                      encoded_missing_value=-99), cat_ix)
   ]
   # Apply the specified transformations (OrdinalEncoder to categorical columns)
   # ('passthrough' means keep other columns unchanged)
@@ -489,26 +490,28 @@ def get_split_metrics(
     # by looking at their cumulative distribution functions (CDFs).
     # The test calculates maximum distance between these CDFs.
     try:
-      ks_stat, p_neq = stats.ks_2samp(
+      statistic, pvalue = stats.ks_2samp(
           test_df[feat], control_df[feat], alternative='two-sided')
 
+      ks_stat = float(statistic)  # type: ignore
+      pvalue = float(pvalue)      # type: ignore
       # p-values < 0.05 means we got statistically significant difference
-      if p_neq < 0.05:
+      if pvalue < 0.05:
         warnings['ks_test'] = (
-            f'Distributions are significantly different (p={p_neq:.3f})')
+            f'Distributions are significantly different (p={pvalue:.3f})')
         # ks_stat shows how big the difference is
         if ks_stat > 0.1:
           warnings['ks_statistic'] = (
               f'Large difference in distributions: {ks_stat:.1%}')
     # pylint: disable=bare-except
     except:
-      ks_stat = p_neq = None
+      ks_stat = pvalue = None
 
     metrics[feat] = FeatureMetrics(
         mean_ratio=mean_ratio,
         std_ratio=std_ratio,
         ks_statistic=ks_stat,  # the maximum absolute difference between CDFs
-        p_value=p_neq,  # Tests if distributions are different in any way
+        p_value=pvalue,  # Tests if distributions are different in any way
         warnings=warnings if warnings else None)
 
   # Categorical features
@@ -548,8 +551,8 @@ def get_split_metrics(
           f'control={control_dist.get(max_diff_val, 0)*100:.1f}%')
 
     # Align distributions for statistical tests
-    test_aligned = pd.Series(0, index=all_values)
-    control_aligned = pd.Series(0, index=all_values)
+    test_aligned = pd.Series(0.0, index=all_values)
+    control_aligned = pd.Series(0.0, index=all_values)
     test_aligned[test_dist.index] = test_dist
     control_aligned[control_dist.index] = control_dist
 
@@ -622,8 +625,8 @@ def prepare_distribution_data(
     all_bins = sorted(set(test_dist.index) | set(control_dist.index))
 
     # Create aligned distributions using actual bin numbers
-    test_aligned = pd.Series(0, index=all_bins)
-    control_aligned = pd.Series(0, index=all_bins)
+    test_aligned = pd.Series(0.0, index=all_bins)
+    control_aligned = pd.Series(0.0, index=all_bins)
     test_aligned[test_dist.index] = test_dist
     control_aligned[control_dist.index] = control_dist
 
@@ -654,8 +657,8 @@ def prepare_distribution_data(
 
     # Get all values and align distributions
     all_values = sorted(set(test_dist.index) | set(control_dist.index))
-    test_aligned = pd.Series(0, index=all_values)
-    control_aligned = pd.Series(0, index=all_values)
+    test_aligned = pd.Series(0.0, index=all_values)
+    control_aligned = pd.Series(0.0, index=all_values)
     test_aligned[test_dist.index] = test_dist
     control_aligned[control_dist.index] = control_dist
 

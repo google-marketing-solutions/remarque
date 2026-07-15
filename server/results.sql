@@ -27,6 +27,25 @@
 --  `TotalCounts` subquery, which contains its own params
 
 WITH
+  UserCountry AS (
+    SELECT
+      device.advertising_id AS user,
+      ARRAY_AGG(
+        IF(geo.country IS NOT NULL AND geo.country != '', geo.country, NULL)
+        IGNORE NULLS
+        ORDER BY event_timestamp DESC
+        LIMIT 1
+      )[SAFE_OFFSET(0)] AS country
+    FROM `{source_table}`
+    WHERE
+      _TABLE_SUFFIX BETWEEN '{day_start}' AND '{day_end}'
+      AND app_info.id = '{app_id}'
+      AND device.operating_system = 'Android'
+      AND device.advertising_id IS NOT NULL
+      AND device.advertising_id NOT IN ('', '00000000-0000-0000-0000-000000000000', '0000-0000')
+    GROUP BY
+      1
+  ),
   AllConversions AS (
     SELECT
       device.advertising_id AS user,
@@ -52,10 +71,10 @@ WITH
   Conversions AS (
     SELECT *
     FROM AllConversions
-    INNER JOIN `{all_users_table}` AS UN
+    INNER JOIN UserCountry AS UN
       USING (user)
     WHERE
-      UN.app_id = '{app_id}'
+      TRUE
       {SEARCH_CONDITIONS}
   ),
   TestConverted AS (

@@ -23,7 +23,7 @@ import pytest
 
 @pytest.fixture
 def app() -> FlaskClient:
-  import server
+  import server.server as server
 
   server.app.testing = True
   return server.app.test_client()

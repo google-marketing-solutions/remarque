@@ -4,7 +4,7 @@
         'test' as group_type,
         COUNT(DISTINCT user) as user_count
       FROM `{test_users_table}`
-      INNER JOIN `{all_users_table}`
+      INNER JOIN UserCountry
         USING (user)
       WHERE
         _TABLE_SUFFIX IN (
@@ -12,7 +12,6 @@
           FROM `{audiences_log}`
           WHERE name = '{audience_name}'
         )
-        AND app_id = '{app_id}'
         {SEARCH_CONDITIONS}
       GROUP BY _TABLE_SUFFIX
 
@@ -23,7 +22,7 @@
         'control' as group_type,
         COUNT(DISTINCT user) as user_count
       FROM `{control_users_table}`
-      INNER JOIN `{all_users_table}`
+      INNER JOIN UserCountry
         USING (user)
       WHERE
         _TABLE_SUFFIX IN (
@@ -31,7 +30,6 @@
           FROM `{audiences_log}`
           WHERE name = '{audience_name}'
         )
-        AND app_id = '{app_id}'
         {SEARCH_CONDITIONS}
       GROUP BY _TABLE_SUFFIX
     )

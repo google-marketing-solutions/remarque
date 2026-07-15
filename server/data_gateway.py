@@ -256,54 +256,23 @@ class DataGateway:
     #           TableSchemas.daily_control_users,
     #           strict=False)
 
-    # => 3.0
-    # Update for v3 (user_normalized with incrementality)
-    if target.ga4_loopback_recreate:
-      # in case if the user is switching back from ga4_loopback_recreate=False,
-      # drop all incremental tables and view
-      query = f"""SELECT table_name
-  FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES
-  WHERE table_name like '{TABLE_USERS_NORMALIZED}_%' ORDER BY 1 DESC
-      """
+    # Drop legacy users_normalized tables and view
+    query = f"""SELECT table_name
+FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES
+WHERE table_name LIKE '{TABLE_USERS_NORMALIZED}_%' ORDER BY 1 DESC"""
+    try:
       response = self.execute_query(query)
       tables = [r['table_name'] for r in response]
-      # first drop all existing tables users_normalized_*
       for table in tables:
-        query = f'DROP TABLE IF EXISTS `{target.bq_dataset_id}.{table}`'
-        self.execute_query(query)
-      # drop the view users_normalized if it exists
-      query = (
-          f'DROP VIEW IF EXISTS {target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}'
-      )
-      self.execute_query(query)
-    else:
-      # initialization in default mode from old schema (pre v3)
-      # when users_normalized was a single table
-      creation_time = self.bq_utils.get_table_creation_time(
-          target.bq_dataset_id, TABLE_USERS_NORMALIZED, table_only=True)
-      table_name = f'{target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}'
-      if creation_time:
-        # the table exists (not view), so we're migrating from the old schema
-        # first we need to rename existing users_normalized to suffixed table
-        # with date of its creation date
-        last_day = creation_time - timedelta(days=1)
-        suffixed_table_name = (
-            f"{TABLE_USERS_NORMALIZED}_{last_day.strftime('%Y%m%d')}")
-        query = (
-            f'ALTER TABLE `{table_name}` RENAME TO `{suffixed_table_name}`')
-        self.execute_query(query)
-        query = (
-            f'CREATE OR REPLACE VIEW `{table_name}`'
-            f'AS SELECT * FROM `{table_name}_*`'
-            'QUALIFY ROW_NUMBER() OVER '
-            '(PARTITION BY user, app_id ORDER BY event_timestamp DESC) = 1')
-        self.execute_query(query)
-        logger.warning(
-            'users_normalized renamed to %s, view users_normalized created',
-            suffixed_table_name)
-      # TODO: there's a problem: if the user has changed loopback_window,
-      # it won't go into effect as we're not recreating the table and
-      # don't know for what period it was created originally.
+        self.execute_query(f'DROP TABLE IF EXISTS `{target.bq_dataset_id}.{table}`')
+    except Exception as e:
+      logger.warning('Could not clean up legacy incremental users_normalized tables: %s', e)
+
+    try:
+      self.execute_query(f'DROP VIEW IF EXISTS `{target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}`')
+      self.execute_query(f'DROP TABLE IF EXISTS `{target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}`')
+    except Exception as e:
+      logger.warning('Could not clean up legacy users_normalized table/view: %s', e)
 
   def _ensure_table(self, table_name,
                     expected_schema: list[bigquery.SchemaField]):
@@ -757,6 +726,7 @@ WHEN NOT MATCHED THEN
     self.bq_client.delete_table(table_name, not_found_ok=True)
     for suffix in ['all', 'test', 'control', 'uploaded']:
       self._delete_audience_tables(target, audience.table_name, suffix)
+    # TODO: delete audience logs
 
   def _delete_audience_tables(self, target: ConfigTarget, table_name: str,
                               suffix: str):
@@ -829,12 +799,10 @@ WHEN NOT MATCHED THEN
               'app_id':
                   audience.app_id,
               'countries_clause':
-                  f'F.country IN ({countries}) ' if audience
+                  f'country IN ({countries}) ' if audience
                   .countries else 'TRUE',
               'countries':
                   countries,
-              'all_users_table':
-                  target.bq_dataset_id + '.' + TABLE_USERS_NORMALIZED,
               'all_events_list':
                   all_events_list,
               'SEARCH_CONDITIONS':
@@ -903,8 +871,6 @@ WHEN NOT MATCHED THEN
           **{
               'source_table':
                   self.get_ga4_table_name(target, True),
-              'all_users_table':
-                  target.bq_dataset_id + '.' + TABLE_USERS_NORMALIZED,
               'date_start':
                   date_start.strftime('%Y%m%d'),
               'date_end':
@@ -960,214 +926,6 @@ WHEN NOT MATCHED THEN
         'date_end': date_end.strftime('%Y%m%d'),
     }
 
-  def _parse_duration(self, duration: str) -> tuple[int, int, int]:
-    years = months = days = 0
-    matches = re.findall(r'(\d+[YMD])', duration.upper())
-    if not matches:
-      raise ValueError(f'Unknown duration format: {duration}')
-    for match in matches:
-      if 'Y' in match:
-        years = int(match.replace('Y', ''))
-      elif 'M' in match:
-        months = int(match.replace('M', ''))
-      elif 'D' in match:
-        days = int(match.replace('D', ''))
-      else:
-        raise ValueError(f'Unknown duration format: {duration}')
-    return years, months, days
-
-  def _create_users_normalized_table_backfill(self,
-                                              target: ConfigTarget,
-                                              incremental: bool = True):
-    if target.ga4_loopback_window:
-      years, months, days = self._parse_duration(target.ga4_loopback_window)
-      start_date = date.today()
-      if years > 0:
-        start_date = start_date - relativedelta(years=years)
-      if months > 0:
-        start_date = start_date - relativedelta(months=months)
-      if days > 0:
-        start_date = start_date - timedelta(days=days)
-      if start_date == date.today():
-        raise ValueError(
-            'ga4_loopback_window does not define any time range: ' +
-            target.ga4_loopback_window)
-    else:
-      start_date = date.today() - relativedelta(years=1)
-    start_day = start_date.strftime('%Y%m%d')
-    events_last_table = self._get_ga4_last_table(target)
-    if not events_last_table:
-      logger.warning('Could not get last GA4 events table name, skipping')
-      return
-    end_day = events_last_table[-8:]
-    self._create_users_normalized_table(target, start_day, end_day, incremental)
-
-  def _create_users_normalized_table(self,
-                                     target: ConfigTarget,
-                                     start_day: str,
-                                     end_day: str,
-                                     incremental: bool = True):
-    query = self._read_file('prepare_users.sql')
-    if not start_day or not end_day:
-      raise ValueError(
-          'Creating users_normalized: start_date and end_date must be specified'
-      )
-    if start_day == end_day:
-      range_condition = f"AND _TABLE_SUFFIX = '{start_day}'"
-    else:
-      range_condition = (
-          f"AND _TABLE_SUFFIX BETWEEN '{start_day}' AND '{end_day}'")
-    query = query.format(
-        **{
-            'source_table': self.get_ga4_table_name(target, True),
-            'SEARCH_CONDITIONS': range_condition
-        })
-    destination_table_base = (
-        f'{target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}')
-    if incremental:
-      logger.debug('Creating users_normalized segment for %s - %s', start_day,
-                   end_day)
-      destination_table = f'{destination_table_base}_{end_day}'
-      query = f'CREATE OR REPLACE TABLE `{destination_table}` AS\n' + query
-      self.execute_query(query)
-      # it can happen that the new table captures no users.
-      # that's because a GA4 export for yesterday hasn't arrived yet
-      # if we leave an empty table then tomorrow it happens again
-      query = f'SELECT COUNT(*) AS row_count FROM `{destination_table}`'
-      row_count = self.execute_query(query)[0]['row_count']
-      if row_count == 0:
-        logger.warning('Created segment %s is empty, dropping',
-                       destination_table)
-        query = f'DROP TABLE `{destination_table}`'
-        self.execute_query(query)
-      query = (f'CREATE OR REPLACE VIEW `{destination_table_base}`'
-               f'AS SELECT * FROM `{destination_table_base}_*`'
-               'QUALIFY ROW_NUMBER() OVER '
-               '(PARTITION BY user, app_id ORDER BY event_timestamp DESC) = 1')
-      self.execute_query(query)
-    else:
-      # we drop the view if it exists
-      self.bq_client.delete_table(destination_table_base, not_found_ok=True)
-      # just one table 'users_normalized' with all data
-      query = (f'CREATE OR REPLACE TABLE `{destination_table_base}` AS\n' +
-               query)
-      self.execute_query(query)
-
-  def _get_users_normalized_tables(self, target: ConfigTarget):
-    query = f"""SELECT table_name
-  FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES
-  WHERE table_name like '{TABLE_USERS_NORMALIZED}_%' ORDER BY 1 DESC
-      """
-    response = self.execute_query(query)
-    tables = [r['table_name'] for r in response]
-    return tables
-
-  def _drop_empty_users_normalized_tables(self, target: ConfigTarget):
-    query = f"""SELECT T.table_name, COUNT(U.user)
-  FROM {target.bq_dataset_id}.INFORMATION_SCHEMA.TABLES AS T
-  LEFT JOIN `{target.bq_dataset_id}.{TABLE_USERS_NORMALIZED}_*` AS U
-    ON U._TABLE_SUFFIX = RIGHT(T.table_name, 8)
-  WHERE table_name LIKE '{TABLE_USERS_NORMALIZED}_%'
-  GROUP BY 1
-  HAVING COUNT(U.user) = 0
-  """
-    try:
-      response = self.execute_query(query)
-      tables = [r['table_name'] for r in response]
-      logger.info('Removing %s empty wildcard tables users_normalized_*',
-                  len(tables))
-      for table_name in tables:
-        query = f'DROP TABLE {target.bq_dataset_id}.{table_name}'
-        self.execute_query(query)
-    except Exception as e:
-      logger.error(
-          'Failed to fetch and delete empty users_normalized_* wildcard tables: %s',
-          e)
-
-  def ensure_users_normalized(self, target: ConfigTarget):
-    """Make sure users_normalized exist or include data for today.
-
-    Actual structure depends on `ga4_loopback_recreate` setting. If it's enabled
-    we recreate users_normalized every day. Otherwise we create incremental
-    tables, e.g. users_normalized_yyyymmdd. All of them are joined together
-    via a view.
-    An important moment: though we are checking/updating the tables for today,
-    actually we can only include GA4 data from yesterday (and even then,
-    it's not guaranteed).
-
-    Args:
-      target: A target.
-    """
-    if target.ga4_loopback_recreate:
-      # users_normalized is non-incremental
-      # check its creation date and if it's not today
-      # recreate it for loopback_window time range
-      creation_time = self.bq_utils.get_table_creation_time(
-          target.bq_dataset_id, TABLE_USERS_NORMALIZED, table_only=True)
-      if creation_time:
-        logger.info('user_normalized table exists, creation time: %s',
-                    creation_time)
-        if creation_time.date() != datetime.now(timezone.utc).date():
-          # table was created not today
-          logger.debug('Table user_normalized needs to be recreated')
-          self._create_users_normalized_table_backfill(
-              target, incremental=False)
-      else:
-        # table doesn't exist, but there could be a view
-        logger.info(
-            'user_normalized table does not exist, creating for the first time')
-        self._create_users_normalized_table_backfill(target, incremental=False)
-    else:
-      # users_normalized is incremental:
-      # we create an incremental table per day users_normalized_yyyymmdd
-      # and then join them via a view users_normalized
-      logger.debug('Checking users_normalized table is up to date')
-
-      # detect the last day till which we have data in users_normalized table
-      tables = self._get_users_normalized_tables(target)
-      if not tables:
-        logger.info('Creating users_normalized table for the first time')
-        self._create_users_normalized_table_backfill(target)
-      else:
-        logger.debug(
-            'Found %s wildcard tables users_normalized_*. Checking for empty ones (fix)',
-            len(tables))
-        # Fix: previously we were creating tables for 'today' and
-        # often they were empty.
-        # We'll check all existing incremental tables have rows,
-        # and delete tables without rows, which effectively should lead
-        # to recreation of a table with data for missing days
-        self._drop_empty_users_normalized_tables(target)
-
-        # now refetch tables because there might no ant
-        tables = self._get_users_normalized_tables(target)
-        if not tables:
-          logger.info(
-              'Creating users_normalized table for the first time (after removing empty ones)'
-          )
-          self._create_users_normalized_table_backfill(target)
-        else:
-          last_day = [t.split('_')[-1] for t in tables][0]
-          # now we need to create a table users_normalized_{today} that includes
-          # events starting the day after last_day till today
-          last_day = datetime.strptime(last_day, '%Y%m%d').date()
-          # we're not sure when GA4 data arrive
-          events_last_table = self._get_ga4_last_table(target)
-          if not events_last_table:
-            # it's hardly possible
-            logger.warning(
-                'ensure_users_normalized: skipping creating an incremental '
-                'users_normalized table as could not get last GA4 events table')
-            return
-          events_last_day = events_last_table[-8:]
-          events_last_day = datetime.strptime(events_last_day, '%Y%m%d').date()
-          logger.info(
-              'Last segment of users_normalized_*: %s, last events date: %s',
-              last_day, events_last_day)
-          if events_last_day > last_day:
-            start_day = (last_day + timedelta(days=1)).strftime('%Y%m%d')
-            end_day = events_last_day.strftime('%Y%m%d')
-            self._create_users_normalized_table(target, start_day, end_day)
 
   def sample_audience_users(self,
                             target: ConfigTarget,
@@ -1271,8 +1029,8 @@ FROM `{audience_table_name}` a
   )"""
 
     logger.debug('Executing SQL query: %s', query)
-    df = pd.read_gbq(
-        query=query,
+    df = pandas_gbq.read_gbq(
+        query,
         project_id=self.config.project_id,
         credentials=self.credentials)
     return df
@@ -1297,7 +1055,8 @@ WHERE table_name LIKE '{audience_table_name}_{group_name}_%' ORDER BY 1 DESC"""
                                        audience_table_name: str,
                                        group_name: Literal['test', 'control',
                                                            'testfailed',
-                                                           'uploaded'],
+                                                           'uploaded', 'all',
+                                                           'splitstat'],
                                        suffix: str | None = None):
     """Return a fully-qualified name for an audience group table.
 
@@ -1866,8 +1625,6 @@ ORDER BY name, date
                 date_start.strftime('%Y%m%d'),
             'day_end':
                 date_end.strftime('%Y%m%d'),
-            'all_users_table':
-                target.bq_dataset_id + '.' + TABLE_USERS_NORMALIZED,
             'SEARCH_CONDITIONS':
                 conversions_conditions,
             'app_id':

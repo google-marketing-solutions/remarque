@@ -239,8 +239,6 @@ def setup():
   target.ga4_project = ga4_project or context.config.project_id
   target.ga4_dataset = ga4_dataset
   target.ga4_table = ga4_table or 'events'
-  target.ga4_loopback_window = params.get('ga4_loopback_window')
-  target.ga4_loopback_recreate = params.get('ga4_loopback_recreate')
 
   try:
     ds = context.data_gateway.bq_client.get_dataset(target.ga4_project + '.' +
@@ -265,7 +263,7 @@ def setup():
         # pylint: disable=broad-exception-raised
         raise Exception(
             f'Configuration "{name}" uses the same dataset '
-            '"{target.bq_dataset_id}" as configuration "{other.name}", '
+            f'"{target.bq_dataset_id}" as configuration "{other.name}", '
             'please choose a different one')
 
   context.data_gateway.initialize(target)
@@ -281,7 +279,7 @@ def setup():
     ads_cfg = _get_ads_config(target)
     _validate_googleads_config(ads_cfg, throw=True)
 
-  context.data_gateway.ensure_users_normalized(target)
+
 
   # save config to the same location where it was read from
   logger.info('Saving new configuration:\n%s', context.config.to_dict())
@@ -444,8 +442,6 @@ def calculate_users_for_audience():
   params = request.get_json(force=True)
   audience_raw = params['audience']
   logger.info('Previewing audience:')
-  logger.info(audience_raw)
-  context.data_gateway.ensure_users_normalized(context.target)
   audience = models.Audience.from_dict(audience_raw)
   audience.ensure_table_name()
   query = context.data_gateway.get_audience_sampling_query(
@@ -579,7 +575,6 @@ def process():
                 context.target.name)
 
   # TODO: wrap in try--catch to send any error to email
-  context.data_gateway.ensure_users_normalized(context.target)
   audiences = context.data_gateway.get_audiences(context.target)
   audiences_log = context.data_gateway.get_audiences_log(context.target)
   update_customer_match_mappings(context, audiences)

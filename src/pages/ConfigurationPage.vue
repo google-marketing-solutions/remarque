@@ -138,47 +138,6 @@
             placeholder="BigQuery dataset location (us or eu)"
             hint=""
           />
-
-          <!-- <q-input
-            outlined
-            v-model="store.ga4_loopback_window"
-            label="GA4 loopback window"
-            hint="Loopback window for GA4 users data used for users_normalized table, by default 1 year (1Y). Format: nYmMoD where n = number of years, m - number of months, o - number of days"
-          ></q-input> -->
-          <q-item class="q-pa-none">
-            <q-item-section>
-              <q-input
-                outlined
-                v-model="store.ga4_loopback_window"
-                label="GA4 loopback window"
-                stack-label
-              />
-              <q-item-label caption class="q-pt-sm">
-                Loopback window for GA4 users data used for users_normalized
-                table, by default 1 year (1Y). Format: nYmMoD where n = number
-                of years, m - number of months, o - number of days
-              </q-item-label>
-            </q-item-section>
-          </q-item>
-
-          <!-- <q-toggle v-model="store.ga4_loopback_recreate" label="Recreate users_normalized table" /> -->
-          <q-item tag="label" v-ripple class="q-pa-none">
-            <q-item-section>
-              <q-item-label>Recreate users_normalized table</q-item-label>
-              <q-item-label caption
-                ><code>users_normalized</code> table contains user ids with
-                attributes for "loopback window" period (1 year by default).
-                When the option is enabled the table will be recreated every
-                day. This might incur significant costs in BigQuery. By default
-                (when disabled) every day a wildcard table
-                users_normalized_yyyymmdd will be created and all such tables
-                are unioned via a view <code>users_normalized</code>.
-              </q-item-label>
-            </q-item-section>
-            <q-item-section side>
-              <q-toggle v-model="store.ga4_loopback_recreate" />
-            </q-item-section>
-          </q-item>
         </q-form>
       </q-card>
     </div>
@@ -414,8 +373,6 @@ export default defineComponent({
           ga4_project: store.ga4_project,
           ga4_dataset: store.ga4_dataset,
           ga4_table: store.ga4_table,
-          ga4_loopback_window: store.ga4_loopback_window,
-          ga4_loopback_recreate: store.ga4_loopback_recreate,
           bq_dataset_id: store.bq_dataset_id,
           ads_client_id: store.ads_client_id,
           ads_client_secret: store.ads_client_secret,

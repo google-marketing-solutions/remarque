@@ -13,6 +13,25 @@
 # limitations under the License.
 
 WITH
+  UserCountry AS (
+    SELECT
+      device.advertising_id AS user,
+      ARRAY_AGG(
+        IF(geo.country IS NOT NULL AND geo.country != '', geo.country, NULL)
+        IGNORE NULLS
+        ORDER BY event_timestamp DESC
+        LIMIT 1
+      )[SAFE_OFFSET(0)] AS country
+    FROM `{source_table}`
+    WHERE
+      _TABLE_SUFFIX BETWEEN '{date_start}' AND '{date_end}'
+      AND app_info.id = '{app_id}'
+      AND device.operating_system = 'Android'
+      AND device.advertising_id IS NOT NULL
+      AND device.advertising_id NOT IN ('', '00000000-0000-0000-0000-000000000000', '0000-0000')
+    GROUP BY
+      1
+  ),
   EventTable AS (
     SELECT
       device.advertising_id AS user,
@@ -29,10 +48,9 @@ WITH
   ),
   AudienceUsers AS (
     SELECT DISTINCT F.user
-    FROM `{all_users_table}` AS F
+    FROM UserCountry AS F
     WHERE
       {countries_clause}
-      AND app_id = '{app_id}'
       AND EXISTS (
         SELECT user
         FROM EventTable
@@ -48,10 +66,9 @@ WITH
   ),
   ConvertedUsers AS (
     SELECT DISTINCT F.user
-    FROM `{all_users_table}` AS F
+    FROM UserCountry AS F
     WHERE
       {countries_clause}
-      AND app_id = '{app_id}'
       AND EXISTS (
         SELECT user
         FROM EventTable

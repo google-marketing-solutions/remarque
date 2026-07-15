@@ -76,10 +76,6 @@ class ConfigTarget(ConfigItemBase):
   """GA4 dataset id."""
   ga4_table = ''
   """GA4 table id."""
-  ga4_loopback_window: str = ''
-  """Loopback window for GA4 users data used for users_normalized table."""
-  ga4_loopback_recreate: bool = False
-  """True to recreate users_normalized every day."""
   bq_dataset_id: str = 'remarque'
   """Dataset id for all Remarque tables."""
   bq_dataset_location: str = ''
@@ -122,8 +118,6 @@ class Config(ConfigItemBase):
           'ga4_project': t.ga4_project,
           'ga4_dataset': t.ga4_dataset,
           'ga4_table': t.ga4_table,
-          'ga4_loopback_window': t.ga4_loopback_window,
-          'ga4_loopback_recreate': t.ga4_loopback_recreate,
           'bq_dataset_id': t.bq_dataset_id,
           'bq_dataset_location': t.bq_dataset_location,
           'notification_email': t.notification_email,

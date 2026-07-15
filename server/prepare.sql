@@ -17,6 +17,18 @@ WITH
     SELECT
       device.advertising_id AS user,
       ARRAY_AGG(event_name) AS events,
+      ARRAY_AGG(STRUCT(
+        device.mobile_brand_name AS brand,
+        device.operating_system_version AS osv,
+        traffic_source.source AS acquisition_source,
+        traffic_source.medium AS acquisition_medium
+      ) ORDER BY event_timestamp DESC LIMIT 1)[SAFE_OFFSET(0)] AS attr,
+      ARRAY_AGG(
+        IF(geo.country IS NOT NULL AND geo.country != '', geo.country, NULL)
+        IGNORE NULLS
+        ORDER BY event_timestamp DESC
+        LIMIT 1
+      )[SAFE_OFFSET(0)] AS country,
       ANY_VALUE(user_first_touch_timestamp) AS user_first_touch_timestamp,
       SUM(IF(event_name = 'session_start', 1, 0)) AS n_sessions
     FROM `{source_table}`
@@ -33,20 +45,17 @@ WITH
   ),
   FilteredUsers AS (
     SELECT
-      F.user,
-      F.mobile_brand_name AS brand,
-      F.operating_system_version AS osv,
-      F.acquisition_source,
-      F.acquisition_medium,
-      UserEvents.user_first_touch_timestamp,
-      UserEvents.n_sessions,
-      F.country
+      user,
+      attr.brand AS brand,
+      attr.osv AS osv,
+      attr.acquisition_source AS acquisition_source,
+      attr.acquisition_medium AS acquisition_medium,
+      user_first_touch_timestamp,
+      n_sessions,
+      country
     FROM UserEvents
-    INNER JOIN `{all_users_table}` AS F
-      USING (user)
     WHERE
       {countries_clause}
-      AND F.app_id = '{app_id}'
       AND {SEARCH_CONDITIONS}
   )
 SELECT DISTINCT
