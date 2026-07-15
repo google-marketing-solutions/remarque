@@ -550,16 +550,20 @@ def get_split_metrics(
           f'test={test_dist.get(max_diff_val, 0)*100:.1f}%, '
           f'control={control_dist.get(max_diff_val, 0)*100:.1f}%')
 
-    # Align distributions for statistical tests
+    # Align distributions for statistical tests using counts (not normalized frequencies)
+    test_counts = test_df[feat].value_counts()
+    control_counts = control_df[feat].value_counts()
+
     test_aligned = pd.Series(0.0, index=all_values)
     control_aligned = pd.Series(0.0, index=all_values)
-    test_aligned[test_dist.index] = test_dist
-    control_aligned[control_dist.index] = control_dist
+    test_aligned[test_counts.index] = test_counts.astype(float)
+    control_aligned[control_counts.index] = control_counts.astype(float)
 
     # Scale control distribution to match test total
     test_total = test_aligned.sum()
     control_total = control_aligned.sum()
-    control_aligned = control_aligned * (test_total / control_total)
+    if control_total > 0:
+      control_aligned = control_aligned * (test_total / control_total)
 
     # Chi-square test
     try:
