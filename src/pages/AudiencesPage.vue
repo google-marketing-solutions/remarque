@@ -429,6 +429,8 @@
             :pagination="{ rowsPerPage: 0 }"
             :rows-per-page-options="[0]"
             :wrap-cells="data.audiences_wrap"
+            selection="multiple"
+            v-model:selected="data.selectedAudiences"
           >
             <template v-slot:top="props">
               <div class="q-table__title">Audiences</div>
@@ -528,6 +530,22 @@
           icon="sync"
           size="md"
           @click="onAudiencesDownload"
+          color="primary"
+          style="width: 130px"
+        />
+        <q-btn
+          label="Export"
+          icon="download"
+          size="md"
+          @click="onAudiencesExport"
+          color="primary"
+          style="width: 130px"
+        />
+        <q-btn
+          label="Import"
+          icon="file_upload"
+          size="md"
+          @click="onAudiencesImportClick"
           color="primary"
           style="width: 130px"
         />
@@ -813,6 +831,14 @@
       </q-card-actions>
     </q-card>
   </q-dialog>
+
+  <input
+    type="file"
+    ref="importFileInput"
+    style="display: none"
+    accept=".json"
+    @change="onAudiencesImportFile"
+  />
 </template>
 
 <style>
@@ -897,6 +923,7 @@ export default defineComponent({
     const store = useConfigurationStore();
     const storeAudiences = useAudiencesStore();
     const $q = useQuasar();
+    const importFileInput = ref<HTMLInputElement | null>(null);
     const audiences = computed((): AudienceInfo[] => storeAudiences.audiences);
     const data = ref({
       showEditQueryDialog: false,
@@ -999,6 +1026,7 @@ export default defineComponent({
       isSplitRatioChecked: false,
       eventsSearch: '',
       countriesSearch: '',
+      selectedAudiences: [] as AudienceInfo[],
     });
     const audience = ref({
       name: '',
@@ -1458,6 +1486,194 @@ export default defineComponent({
       });
     };
 
+    const onAudiencesExport = () => {
+      const targets =
+        data.value.selectedAudiences.length > 0
+          ? data.value.selectedAudiences
+          : storeAudiences.audiences;
+
+      if (targets.length === 0) {
+        $q.notify({
+          message: 'No audiences to export',
+          color: 'negative',
+          timeout: 2000,
+        });
+        return;
+      }
+
+      const exportData = targets.map((row) => {
+        return {
+          name: row.name,
+          app_id: row.app_id,
+          countries: row.countries,
+          events_include: row.events_include,
+          events_exclude: row.events_exclude,
+          days_ago_start: row.days_ago_start,
+          days_ago_end: row.days_ago_end,
+          mode: row.mode,
+          query: row.query,
+          ttl: row.ttl,
+          split_ratio: row.split_ratio,
+        };
+      });
+
+      const jsonStr = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `audiences_export_${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+
+      $q.notify({
+        message: `Successfully exported ${targets.length} audiences`,
+        color: 'positive',
+        timeout: 1000,
+      });
+    };
+
+    const onAudiencesImportClick = () => {
+      if (importFileInput.value) {
+        importFileInput.value.click();
+      }
+    };
+
+    const onAudiencesImportFile = (event: Event) => {
+      const fileInput = event.target as HTMLInputElement;
+      if (!fileInput.files || fileInput.files.length === 0) {
+        return;
+      }
+      const file = fileInput.files[0];
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const content = e.target?.result as string;
+          const imported = JSON.parse(content);
+          if (!Array.isArray(imported)) {
+            throw new Error('Imported data must be a JSON array of audiences');
+          }
+
+          let importedCount = 0;
+          for (const item of imported) {
+            if (!item.name || !item.app_id) {
+              $q.notify({
+                message:
+                  'Invalid audience format in import file: name and app_id are required',
+                color: 'negative',
+                timeout: 3000,
+              });
+              continue;
+            }
+
+            const newAudience: AudienceInfo = {
+              name: String(item.name).trim().replaceAll(' ', '_'),
+              app_id: String(item.app_id),
+              countries: Array.isArray(item.countries) ? item.countries : [],
+              events_include: Array.isArray(item.events_include)
+                ? item.events_include
+                : [],
+              events_exclude: Array.isArray(item.events_exclude)
+                ? item.events_exclude
+                : [],
+              days_ago_start:
+                typeof item.days_ago_start === 'number'
+                  ? item.days_ago_start
+                  : undefined,
+              days_ago_end:
+                typeof item.days_ago_end === 'number'
+                  ? item.days_ago_end
+                  : undefined,
+              mode: Object.values(AudienceMode).includes(item.mode)
+                ? item.mode
+                : AudienceMode.OFF,
+              query: typeof item.query === 'string' ? item.query : '',
+              ttl: typeof item.ttl === 'number' ? item.ttl : 1,
+              split_ratio:
+                typeof item.split_ratio === 'number'
+                  ? item.split_ratio
+                  : undefined,
+            };
+
+            const idx = storeAudiences.audiences.findIndex(
+              (val) => val.name === newAudience.name,
+            );
+
+            if (idx >= 0) {
+              await new Promise<void>((resolve) => {
+                $q.dialog({
+                  title: 'Conflict Detected',
+                  message: `Audience with name "${newAudience.name}" already exists. How would you like to resolve this?`,
+                  options: {
+                    type: 'radio',
+                    model: 'rename',
+                    items: [
+                      {
+                        label: 'Rename imported (add suffix)',
+                        value: 'rename',
+                      },
+                      { label: 'Overwrite existing', value: 'overwrite' },
+                      { label: 'Skip this audience', value: 'skip' },
+                    ],
+                  },
+                  cancel: true,
+                  persistent: true,
+                })
+                  .onOk((action) => {
+                    if (action === 'overwrite') {
+                      Object.assign(storeAudiences.audiences[idx], newAudience);
+                      storeAudiences.audiences[idx].isChanged = true;
+                      importedCount++;
+                    } else if (action === 'rename') {
+                      let suffix = 1;
+                      let candidateName = `${newAudience.name}_${suffix}`;
+                      while (
+                        storeAudiences.audiences.some(
+                          (a) => a.name === candidateName,
+                        )
+                      ) {
+                        suffix++;
+                        candidateName = `${newAudience.name}_${suffix}`;
+                      }
+                      newAudience.name = candidateName;
+                      storeAudiences.audiences.push(newAudience);
+                      newAudience.isNew = true;
+                      importedCount++;
+                    }
+                    resolve();
+                  })
+                  .onCancel(() => {
+                    resolve();
+                  });
+              });
+            } else {
+              storeAudiences.audiences.push(newAudience);
+              newAudience.isNew = true;
+              importedCount++;
+            }
+          }
+
+          if (importedCount > 0) {
+            $q.notify({
+              message: `Successfully imported ${importedCount} audiences. Remember to click "Save" to persist changes to the server.`,
+              color: 'positive',
+              timeout: 4000,
+            });
+          }
+        } catch (err: unknown) {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          $q.notify({
+            message: `Failed to import audiences: ${errorMsg}`,
+            color: 'negative',
+            timeout: 3000,
+          });
+        } finally {
+          fileInput.value = '';
+        }
+      };
+      reader.readAsText(file);
+    };
+
     const getAudiencesChangeStatus = () => {
       const deleted = storeAudiences.deletedAudiences.length;
       let changed = 0;
@@ -1507,6 +1723,10 @@ export default defineComponent({
       onAudiencesDownload,
       formatArray,
       getAudiencesChangeStatus,
+      onAudiencesExport,
+      onAudiencesImportClick,
+      onAudiencesImportFile,
+      importFileInput,
     };
   },
 });
